@@ -5,7 +5,9 @@
 # under apps/dokploy/.docker/core-services/{dns,mail}/... — these host paths are mounted below
 # so zone files and mail flat files appear inside containers immediately after Apply / Provision.
 #
-# Network default matches packages/server/src/constants/server-paths.ts mailNetworkName (dokploy-network).
+# Network: same name as server-paths mailNetworkName (default dokploy-network). Declared external
+# because `pnpm dokploy:setup` (or Swarm/bootstrap) may already create that bridge; Compose must not
+# try to own it or you get label conflicts.
 
 services:
   core-services-bind:
@@ -81,4 +83,4 @@ services:
 networks:
   core-services:
     name: ${PANEL_CORE_SERVICES_NETWORK:-dokploy-network}
-    driver: bridge
+    external: true

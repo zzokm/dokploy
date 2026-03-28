@@ -58,7 +58,7 @@ Add to `apps/dokploy/.env` if you change mounts:
 | `PANEL_BIND_ZONE_FILE_ROOT` | Path inside BIND for zone `file` directives (default `/etc/bind`). Must match the compose mount. |
 | `PANEL_SKIP_RNDC_RELOAD` | Set to `true` to write zones only (debug). |
 | `PANEL_INFRA_BIND_DNS_PORT` | Host port mapped to BIND **53** (default `5353`). |
-| `PANEL_CORE_SERVICES_NETWORK` | Docker network name for the stack (default `dokploy-network`, aligned with `mailNetworkName` in server-paths). |
+| `PANEL_CORE_SERVICES_NETWORK` | Docker network name for the stack (default `dokploy-network`, aligned with `mailNetworkName` in server-paths). The compose file uses this network as **external** (it is created by `pnpm dokploy:setup` or by `scripts/core-services-init.mjs` before `compose up`). |
 
 Default **host → container** ports (avoid clashing with system DNS on 53 and local mail daemons): **5353→53**, **3025→25**, **3587→25** (second host port maps to the same Exim SMTP listener — the reference image has no separate submission port), **3143→143**, **3993→993**, **3080→80**. Roundcube talks to Exim on **container port 25** on the Docker network.
 

@@ -1,0 +1,91 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Dokploy: Install dependencies",
+			"type": "shell",
+			"command": "pnpm install",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"showReuseMessage": false
+			},
+			"group": "none",
+			"problemMatcher": []
+		},
+		{
+			"label": "Dokploy: Setup (Docker — Postgres, Redis, Traefik, Swarm)",
+			"type": "shell",
+			"command": "pnpm run dokploy:setup",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"showReuseMessage": false
+			},
+			"group": "build",
+			"problemMatcher": []
+		},
+		{
+			"label": "Dokploy: Switch @dokploy/server to dev sources",
+			"type": "shell",
+			"command": "pnpm run server:script",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"showReuseMessage": false
+			},
+			"group": "build",
+			"problemMatcher": []
+		},
+		{
+			"label": "Dokploy: Dev server",
+			"type": "shell",
+			"command": "pnpm run dokploy:dev",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"isBackground": true,
+			"presentation": {
+				"reveal": "always",
+				"panel": "dedicated",
+				"focus": true,
+				"showReuseMessage": false
+			},
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"problemMatcher": {
+				"owner": "dokploy-dev",
+				"pattern": {
+					"regexp": "^$"
+				},
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": ".",
+					"endsPattern": "Server Started on:"
+				}
+			}
+		},
+		{
+			"label": "Dokploy: Full stack (setup → switch → dev)",
+			"dependsOn": [
+				"Dokploy: Setup (Docker — Postgres, Redis, Traefik, Swarm)",
+				"Dokploy: Switch @dokploy/server to dev sources",
+				"Dokploy: Dev server"
+			],
+			"dependsOrder": "sequence",
+			"group": "build",
+			"problemMatcher": []
+		}
+	]
+}

@@ -12,6 +12,8 @@ import { destinationRouter } from "./routers/destination";
 import { dockerRouter } from "./routers/docker";
 import { domainRouter } from "./routers/domain";
 import { environmentRouter } from "./routers/environment";
+import { dnsRouter } from "./routers/dns";
+import { mailRouter } from "./routers/mail";
 import { gitProviderRouter } from "./routers/git-provider";
 import { giteaRouter } from "./routers/gitea";
 import { githubRouter } from "./routers/github";
@@ -65,6 +67,8 @@ export const appRouter = createTRPCRouter({
 	destination: destinationRouter,
 	docker: dockerRouter,
 	domain: domainRouter,
+	dns: dnsRouter,
+	mail: mailRouter,
 	gitea: giteaRouter,
 	gitProvider: gitProviderRouter,
 	github: githubRouter,

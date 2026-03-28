@@ -1086,6 +1086,20 @@
       "when": 1774337356154,
       "tag": "0154_careful_eternals",
       "breakpoints": true
+    },
+    {
+      "idx": 155,
+      "version": "7",
+      "when": 1774676128593,
+      "tag": "0155_infra_panel_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 156,
+      "version": "7",
+      "when": 1774680000000,
+      "tag": "0156_rename_hosted_domain_tables",
+      "breakpoints": true
     }
   ]
 }

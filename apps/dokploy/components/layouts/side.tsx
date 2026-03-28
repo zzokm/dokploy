@@ -18,11 +18,14 @@ import {
 	Folder,
 	Forward,
 	GalleryVerticalEnd,
+	Globe,
 	GitBranch,
 	Key,
 	KeyRound,
 	Loader2,
 	LogIn,
+	Mail,
+	Network,
 	type LucideIcon,
 	Package,
 	Palette,
@@ -196,6 +199,30 @@ const MENU: Menu = {
 			// Only enabled for users with access to Docker in non-cloud environments
 			isEnabled: ({ permissions, isCloud }) =>
 				!!(permissions?.docker.read && !isCloud),
+		},
+		{
+			isSingle: true,
+			title: "Domains",
+			url: "/dashboard/domains",
+			icon: Globe,
+			isEnabled: ({ permissions, isCloud }) =>
+				!!(permissions?.organization.update && !isCloud),
+		},
+		{
+			isSingle: true,
+			title: "DNS",
+			url: "/dashboard/dns",
+			icon: Network,
+			isEnabled: ({ permissions, isCloud }) =>
+				!!(permissions?.organization.update && !isCloud),
+		},
+		{
+			isSingle: true,
+			title: "Emails",
+			url: "/dashboard/emails",
+			icon: Mail,
+			isEnabled: ({ permissions, isCloud }) =>
+				!!(permissions?.organization.update && !isCloud),
 		},
 		{
 			isSingle: true,

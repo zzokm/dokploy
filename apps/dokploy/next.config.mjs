@@ -10,6 +10,25 @@ const nextConfig = {
 		ignoreBuildErrors: true,
 	},
 	transpilePackages: ["@dokploy/server"],
+	async redirects() {
+		return [
+			{
+				source: "/dashboard/settings/infra-domains",
+				destination: "/dashboard/domains",
+				permanent: false,
+			},
+			{
+				source: "/dashboard/settings/infra-emails",
+				destination: "/dashboard/emails",
+				permanent: false,
+			},
+			{
+				source: "/dashboard/settings/infra-panel",
+				destination: "/dashboard/domains",
+				permanent: false,
+			},
+		];
+	},
 	async headers() {
 		return [
 			{

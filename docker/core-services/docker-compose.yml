@@ -41,14 +41,15 @@ services:
 
   core-services-exim:
     profiles: [mail]
-    image: exim/exim4:latest
+    # tianon/exim4: public image; listens on SMTP 25 only (no separate submission listener).
+    image: tianon/exim4:latest
     container_name: core-services-exim
     restart: unless-stopped
     depends_on:
       - core-services-bind
     ports:
       - "${PANEL_INFRA_EXIM_SMTP:-3025}:25"
-      - "${PANEL_INFRA_EXIM_SUBMISSION:-3587}:587"
+      - "${PANEL_INFRA_EXIM_SUBMISSION:-3587}:25"
     volumes:
       - ../../apps/dokploy/.docker/core-services/mail/auth:/etc/mail-auth:ro
       - ../../apps/dokploy/.docker/core-services/mail/data:/var/mail:rw
@@ -70,7 +71,7 @@ services:
       ROUNDCUBEMAIL_DEFAULT_HOST: core-services-dovecot
       ROUNDCUBEMAIL_DEFAULT_PORT: "143"
       ROUNDCUBEMAIL_SMTP_SERVER: core-services-exim
-      ROUNDCUBEMAIL_SMTP_PORT: "587"
+      ROUNDCUBEMAIL_SMTP_PORT: "25"
       ROUNDCUBEMAIL_DB_TYPE: sqlite
     volumes:
       - ../../apps/dokploy/.docker/core-services/mail/roundcube:/var/roundcube/db

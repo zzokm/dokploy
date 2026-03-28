@@ -13,7 +13,7 @@ import { getRemoteDocker } from "../../utils/servers/remote-docker";
 
 /**
  * Programmatic core-services deployment: pulls official BIND9, Exim, Dovecot, Roundcube images,
- * creates containers with `serverPaths()` host bind mounts, publishes DNS (53/tcp+udp), SMTP (25, 587),
+ * creates containers with `serverPaths()` host bind mounts, publishes DNS (53/tcp+udp), SMTP (25; reference image has no 587 listener),
  * IMAP (143, 993), Roundcube HTTP, attaches all to `mailNetworkName`, and uses `unless-stopped` restart policy.
  */
 const NAMED_CONF_TEMPLATE = `// Core services — BIND 9 authoritative (generated bootstrap; zones from control plane).
@@ -235,12 +235,18 @@ export const deployCoreServices = async (
 		},
 	};
 
+	const exim25HostPorts: Array<{ HostPort: string }> = [
+		{ HostPort: eximSmtpHost },
+	];
+	if (eximSubmitHost !== eximSmtpHost) {
+		exim25HostPorts.push({ HostPort: eximSubmitHost });
+	}
+
 	const eximOpts: ContainerCreateOptions = {
 		name: p.eximContainerName,
 		Image: CORE_EXIM_IMAGE,
 		ExposedPorts: {
 			"25/tcp": {},
-			"587/tcp": {},
 		},
 		HostConfig: {
 			Binds: [
@@ -249,8 +255,7 @@ export const deployCoreServices = async (
 				bindMount(p.mailTlsDir, "/etc/exim4/tls"),
 			],
 			PortBindings: {
-				"25/tcp": [{ HostPort: eximSmtpHost }],
-				"587/tcp": [{ HostPort: eximSubmitHost }],
+				"25/tcp": exim25HostPorts,
 			},
 			RestartPolicy: { Name: "unless-stopped" },
 		},
@@ -283,7 +288,7 @@ export const deployCoreServices = async (
 			`ROUNDCUBEMAIL_DEFAULT_HOST=${p.dovecotContainerName}`,
 			"ROUNDCUBEMAIL_DEFAULT_PORT=143",
 			`ROUNDCUBEMAIL_SMTP_SERVER=${p.eximContainerName}`,
-			"ROUNDCUBEMAIL_SMTP_PORT=587",
+			"ROUNDCUBEMAIL_SMTP_PORT=25",
 			"ROUNDCUBEMAIL_DB_TYPE=sqlite",
 		],
 		HostConfig: {

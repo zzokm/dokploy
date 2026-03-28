@@ -1,6 +1,6 @@
 # Core services (BIND + optional mail stack)
 
-This compose file brings up the **data-plane** containers referenced by the Domains / Emails settings (`internetsystemsconsortium/bind9`, `dovecot/dovecot`, `exim/exim4`, `roundcube/roundcubemail`). The control plane only **writes files** and calls **Docker** (e.g. `rndc reload`); it does not vendor GPL upstream sources.
+This compose file brings up the **data-plane** containers referenced by the Domains / Emails settings (`internetsystemsconsortium/bind9`, `dovecot/dovecot`, `tianon/exim4`, `roundcube/roundcubemail`). The control plane only **writes files** and calls **Docker** (e.g. `rndc reload`); it does not vendor GPL upstream sources.
 
 ## Prerequisites
 
@@ -60,7 +60,7 @@ Add to `apps/dokploy/.env` if you change mounts:
 | `PANEL_INFRA_BIND_DNS_PORT` | Host port mapped to BIND **53** (default `5353`). |
 | `PANEL_CORE_SERVICES_NETWORK` | Docker network name for the stack (default `dokploy-network`, aligned with `mailNetworkName` in server-paths). |
 
-Default **host → container** ports (avoid clashing with system DNS on 53 and local mail daemons): **5353→53**, **3025→25**, **3587→587**, **3143→143**, **3993→993**, **3080→80**.
+Default **host → container** ports (avoid clashing with system DNS on 53 and local mail daemons): **5353→53**, **3025→25**, **3587→25** (second host port maps to the same Exim SMTP listener — the reference image has no separate submission port), **3143→143**, **3993→993**, **3080→80**. Roundcube talks to Exim on **container port 25** on the Docker network.
 
 ## Mail profile (Dovecot + Exim + Roundcube)
 

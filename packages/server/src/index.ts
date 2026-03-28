@@ -1,4 +1,9 @@
 export * from "./auth/random-password";
+export * from "./validations/hosted-fqdn";
+export * from "./services/dns";
+export * from "./services/mail";
+export { deployCoreServices } from "./services/docker/bootstrap-core-services";
+export { computeSoaSerial, generateZoneFile } from "./utils/dns/zone-file";
 export * from "./constants/index";
 export * from "./db/constants";
 export * from "./db/validations/domain";

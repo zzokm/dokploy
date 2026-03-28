@@ -88,6 +88,11 @@ export const docker = getDockerConfig();
 export const BETTER_AUTH_SECRET =
 	process.env.BETTER_AUTH_SECRET || "better-auth-secret-123456789";
 
+export {
+	bindZoneFilePathForNamedConf,
+	serverPaths,
+} from "./server-paths"
+
 export const paths = (isServer = false) => {
 	const BASE_PATH =
 		isServer || process.env.NODE_ENV === "production"

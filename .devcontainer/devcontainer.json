@@ -32,7 +32,17 @@
 			]
 		}
 	},
-	"forwardPorts": [3000, 5432, 6379, 5353, 3080, 3143],
+	"forwardPorts": [
+		3000,
+		5432,
+		6379,
+		5353,
+		3025,
+		3587,
+		3143,
+		3993,
+		3080
+	],
 	"portsAttributes": {
 		"3000": {
 			"label": "Dokploy App",
@@ -54,11 +64,24 @@
 			"label": "Panel Roundcube (mail profile)",
 			"onAutoForward": "silent"
 		},
+		"3025": {
+			"label": "Panel Exim SMTP (mail profile)",
+			"onAutoForward": "silent"
+		},
+		"3587": {
+			"label": "Panel Exim submission 587 (mail profile)",
+			"onAutoForward": "silent"
+		},
 		"3143": {
 			"label": "Panel Dovecot IMAP (mail profile)",
 			"onAutoForward": "silent"
+		},
+		"3993": {
+			"label": "Panel Dovecot IMAPS (mail profile)",
+			"onAutoForward": "silent"
 		}
 	},
+	"postStartCommand": "pnpm core-services:up:mail",
 	"remoteUser": "node",
 	"workspaceFolder": "/workspaces/dokploy",
 	"runArgs": ["--name", "dokploy-devcontainer"]

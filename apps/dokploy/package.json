@@ -15,6 +15,7 @@
 		"reset-password": "node -r dotenv/config dist/reset-password.mjs",
 		"reset-2fa": "node -r dotenv/config dist/reset-2fa.mjs",
 		"dev": "tsx -r dotenv/config ./server/server.ts  --project tsconfig.server.json ",
+		"dev:data-plane": "pnpm core-services:up:mail && pnpm dev",
 		"studio": "drizzle-kit studio --config ./server/db/drizzle.config.ts",
 		"migration:generate": "drizzle-kit generate --config ./server/db/drizzle.config.ts",
 		"migration:run": "tsx -r dotenv/config migration.ts",

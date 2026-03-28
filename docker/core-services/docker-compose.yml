@@ -1,8 +1,11 @@
 # Core services data plane (local dev / optional staging).
-# Run from repo root: pnpm core-services:up
+# Run from repo root: pnpm core-services:up  (DNS only) or pnpm core-services:up:mail
 #
-# BIND mounts apps/dokploy/.docker/core-services/dns/config at /etc/bind so paths match
-# PANEL_BIND_ZONE_FILE_ROOT=/etc/bind (default in server-paths).
+# Volume alignment with serverPaths() (dev): the panel runs with cwd apps/dokploy and writes
+# under apps/dokploy/.docker/core-services/{dns,mail}/... — these host paths are mounted below
+# so zone files and mail flat files appear inside containers immediately after Apply / Provision.
+#
+# Network default matches packages/server/src/constants/server-paths.ts mailNetworkName (dokploy-network).
 
 services:
   core-services-bind:
@@ -76,5 +79,5 @@ services:
 
 networks:
   core-services:
-    name: ${PANEL_CORE_SERVICES_NETWORK:-panel-infra-net}
+    name: ${PANEL_CORE_SERVICES_NETWORK:-dokploy-network}
     driver: bridge

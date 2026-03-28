@@ -47,6 +47,21 @@
 			"problemMatcher": []
 		},
 		{
+			"label": "Dokploy: Core services (data plane — BIND + mail)",
+			"type": "shell",
+			"command": "pnpm run core-services:up:mail",
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"showReuseMessage": false
+			},
+			"group": "build",
+			"problemMatcher": []
+		},
+		{
 			"label": "Dokploy: Dev server",
 			"type": "shell",
 			"command": "pnpm run dokploy:dev",
@@ -77,10 +92,11 @@
 			}
 		},
 		{
-			"label": "Dokploy: Full stack (setup → switch → dev)",
+			"label": "Dokploy: Full stack (setup → switch → data plane → dev)",
 			"dependsOn": [
 				"Dokploy: Setup (Docker — Postgres, Redis, Traefik, Swarm)",
 				"Dokploy: Switch @dokploy/server to dev sources",
+				"Dokploy: Core services (data plane — BIND + mail)",
 				"Dokploy: Dev server"
 			],
 			"dependsOrder": "sequence",

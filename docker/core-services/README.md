@@ -7,6 +7,22 @@ This compose file brings up the **data-plane** containers referenced by the Doma
 - Docker Engine / Docker Desktop with Compose v2
 - Repo root: run scripts so paths resolve (`docker/core-services/docker-compose.yml` uses paths relative to this file)
 
+## Local development (recommended)
+
+Bring up the data plane **before** or **with** the Next.js dev server so the panel’s Docker health checks find `core-services-bind`, `core-services-exim`, `core-services-dovecot`, and `core-services-roundcube` (same names as `serverPaths()` / deploy).
+
+| Goal | Command (repo root) |
+| ---- | --------------------- |
+| Full app + BIND + mail stack | `pnpm dokploy:dev:data-plane` |
+| One-shot DB/redis setup + mail stack | `pnpm dokploy:setup:with-data-plane` |
+| Data plane only | `pnpm core-services:up:mail` (or `pnpm core-services:up` for DNS only) |
+
+From `apps/dokploy`, use `pnpm dev:data-plane` for the same “stack then dev” flow.
+
+**Dev Container:** `.devcontainer/devcontainer.json` runs `pnpm core-services:up:mail` on **postStart** (Docker-in-Docker), and forwards host ports **5353** (DNS), **3025/3587** (SMTP/submission), **3143/3993** (IMAP/IMAPS), **3080** (Roundcube HTTP) so the UI and CLI tests match the compose mappings below.
+
+**VS Code:** Run task **Dokploy: Core services (data plane — BIND + mail)** or **Dokploy: Full stack** (includes setup → switch server → data plane → dev).
+
 ## Quick start (DNS only — fixes “no such container: core-services-bind”)
 
 From the **repository root**:
@@ -42,6 +58,9 @@ Add to `apps/dokploy/.env` if you change mounts:
 | `PANEL_BIND_ZONE_FILE_ROOT` | Path inside BIND for zone `file` directives (default `/etc/bind`). Must match the compose mount. |
 | `PANEL_SKIP_RNDC_RELOAD` | Set to `true` to write zones only (debug). |
 | `PANEL_INFRA_BIND_DNS_PORT` | Host port mapped to BIND **53** (default `5353`). |
+| `PANEL_CORE_SERVICES_NETWORK` | Docker network name for the stack (default `dokploy-network`, aligned with `mailNetworkName` in server-paths). |
+
+Default **host → container** ports (avoid clashing with system DNS on 53 and local mail daemons): **5353→53**, **3025→25**, **3587→587**, **3143→143**, **3993→993**, **3080→80**.
 
 ## Mail profile (Dovecot + Exim + Roundcube)
 

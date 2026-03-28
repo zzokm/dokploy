@@ -19,7 +19,7 @@ Bring up the data plane **before** or **with** the Next.js dev server so the pan
 
 From `apps/dokploy`, use `pnpm dev:data-plane` for the same “stack then dev” flow.
 
-**Dev Container:** `.devcontainer/devcontainer.json` runs `pnpm core-services:up:mail` on **postStart** (Docker-in-Docker), and forwards host ports **5353** (DNS), **3025/3587** (SMTP/submission), **3143/3993** (IMAP/IMAPS), **3080** (Roundcube HTTP) so the UI and CLI tests match the compose mappings below.
+**Dev Container:** `.devcontainer/devcontainer.json` runs `pnpm core-services:up:mail` on **postStart** (Docker-in-Docker), and forwards host ports **1053** (DNS), **3025/3587** (SMTP/submission), **3143/3993** (IMAP/IMAPS), **3080** (Roundcube HTTP) so the UI and CLI tests match the compose mappings below.
 
 **VS Code:** Run task **Dokploy: Core services (data plane — BIND + mail)** or **Dokploy: Full stack** (includes setup → switch server → data plane → dev).
 
@@ -37,14 +37,14 @@ Or from `apps/dokploy`:
 pnpm core-services:up
 ```
 
-This runs `scripts/core-services-init.mjs` (creates `apps/dokploy/.docker/core-services/...`, copies `named.conf` template) and starts **`core-services-bind`** on host port **5353** → container **53** (avoids conflicting with host DNS on port 53).
+This runs `scripts/core-services-init.mjs` (creates `apps/dokploy/.docker/core-services/...`, copies `named.conf` template) and starts **`core-services-bind`** on host port **1053** → container **53** (avoids privileged 53 and mDNS **5353**, which is often busy on Windows/macOS).
 
 ### Apply DNS from the UI
 
 After **Apply DNS**, test with:
 
 ```bash
-dig @127.0.0.1 -p 5353 +short NS example.com
+dig @127.0.0.1 -p 1053 +short NS example.com
 ```
 
 (Replace `example.com` with your zone.)
@@ -57,10 +57,10 @@ Add to `apps/dokploy/.env` if you change mounts:
 | -------- | ------- |
 | `PANEL_BIND_ZONE_FILE_ROOT` | Path inside BIND for zone `file` directives (default `/etc/bind`). Must match the compose mount. |
 | `PANEL_SKIP_RNDC_RELOAD` | Set to `true` to write zones only (debug). |
-| `PANEL_INFRA_BIND_DNS_PORT` | Host port mapped to BIND **53** (default `5353`). |
+| `PANEL_INFRA_BIND_DNS_PORT` | Host port mapped to BIND **53** (default `1053`; avoid **5353** — mDNS). |
 | `PANEL_CORE_SERVICES_NETWORK` | Docker network name for the stack (default `dokploy-network`, aligned with `mailNetworkName` in server-paths). The compose file uses this network as **external** (it is created by `pnpm dokploy:setup` or by `scripts/core-services-init.mjs` before `compose up`). |
 
-Default **host → container** ports (avoid clashing with system DNS on 53 and local mail daemons): **5353→53**, **3025→25**, **3587→25** (second host port maps to the same Exim SMTP listener — the reference image has no separate submission port), **3143→143**, **3993→993**, **3080→80**. Roundcube talks to Exim on **container port 25** on the Docker network.
+Default **host → container** ports (avoid clashing with system DNS on 53, mDNS on 5353, and local mail daemons): **1053→53**, **3025→25**, **3587→25** (second host port maps to the same Exim SMTP listener — the reference image has no separate submission port), **3143→143**, **3993→993**, **3080→80**. Roundcube talks to Exim on **container port 25** on the Docker network.
 
 ## Mail profile (Dovecot + Exim + Roundcube)
 

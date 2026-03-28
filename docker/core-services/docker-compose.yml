@@ -15,8 +15,9 @@ services:
     container_name: core-services-bind
     restart: unless-stopped
     ports:
-      - "${PANEL_INFRA_BIND_DNS_PORT:-5353}:53/udp"
-      - "${PANEL_INFRA_BIND_DNS_PORT:-5353}:53/tcp"
+      # Default 1053: port 53 is privileged; 5353 is mDNS and often in use on Windows/macOS.
+      - "${PANEL_INFRA_BIND_DNS_PORT:-1053}:53/udp"
+      - "${PANEL_INFRA_BIND_DNS_PORT:-1053}:53/tcp"
     volumes:
       - ../../apps/dokploy/.docker/core-services/dns/config:/etc/bind:rw
       - ../../apps/dokploy/.docker/core-services/dns/cache:/var/cache/bind:rw

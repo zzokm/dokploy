@@ -32,7 +32,7 @@
 			]
 		}
 	},
-	"forwardPorts": [3000, 5432, 6379],
+	"forwardPorts": [3000, 5432, 6379, 5353, 3080, 3143],
 	"portsAttributes": {
 		"3000": {
 			"label": "Dokploy App",
@@ -44,6 +44,18 @@
 		},
 		"6379": {
 			"label": "Redis",
+			"onAutoForward": "silent"
+		},
+		"5353": {
+			"label": "Panel BIND (DNS)",
+			"onAutoForward": "silent"
+		},
+		"3080": {
+			"label": "Panel Roundcube (mail profile)",
+			"onAutoForward": "silent"
+		},
+		"3143": {
+			"label": "Panel Dovecot IMAP (mail profile)",
 			"onAutoForward": "silent"
 		}
 	},

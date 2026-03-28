@@ -36,7 +36,12 @@
 		"docker:push:canary": "./docker/push.sh canary",
 		"version": "echo $(node -p \"require('./package.json').version\")",
 		"test": "vitest --config __test__/vitest.config.ts",
-		"generate:openapi": "tsx -r dotenv/config scripts/generate-openapi.ts"
+		"generate:openapi": "tsx -r dotenv/config scripts/generate-openapi.ts",
+		"core-services:init": "node ../../scripts/core-services-init.mjs",
+		"core-services:up": "node ../../scripts/core-services-init.mjs && docker compose -f ../../docker/core-services/docker-compose.yml up -d",
+		"core-services:up:mail": "node ../../scripts/core-services-init.mjs && docker compose -f ../../docker/core-services/docker-compose.yml --profile mail up -d",
+		"core-services:down": "docker compose -f ../../docker/core-services/docker-compose.yml --profile mail down",
+		"core-services:logs:bind": "docker compose -f ../../docker/core-services/docker-compose.yml logs -f core-services-bind"
 	},
 	"dependencies": {
 		"@ai-sdk/anthropic": "^3.0.44",

@@ -48,6 +48,7 @@
     "@react-email/components": "^0.0.21",
     "@trpc/server": "11.10.0",
     "adm-zip": "^0.5.16",
+    "argon2": "^0.41.0",
     "ai": "^6.0.86",
     "ai-sdk-ollama": "^3.7.0",
     "bcrypt": "5.1.1",

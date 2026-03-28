@@ -20,7 +20,12 @@
 		"format-and-lint": "biome check .",
 		"check": "biome check --write --no-errors-on-unmatched --files-ignore-unknown=true",
 		"format-and-lint:fix": "biome check . --write",
-		"generate:openapi": "pnpm --filter=dokploy run generate:openapi"
+		"generate:openapi": "pnpm --filter=dokploy run generate:openapi",
+		"core-services:init": "node scripts/core-services-init.mjs",
+		"core-services:up": "node scripts/core-services-init.mjs && docker compose -f docker/core-services/docker-compose.yml up -d",
+		"core-services:up:mail": "node scripts/core-services-init.mjs && docker compose -f docker/core-services/docker-compose.yml --profile mail up -d",
+		"core-services:down": "docker compose -f docker/core-services/docker-compose.yml --profile mail down",
+		"core-services:logs:bind": "docker compose -f docker/core-services/docker-compose.yml logs -f core-services-bind"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.1.1",

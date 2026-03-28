@@ -38,6 +38,10 @@ yarn-error.log*
 # Editor
 .idea
 
+# Cursor
+/.cursor/
+.cursorignore
+
 # Misc
 .DS_Store
 *.pem

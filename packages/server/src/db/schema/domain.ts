@@ -32,6 +32,12 @@ export const cloudflareDnsRecordType = pgEnum("cloudflareDnsRecordType", [
 	"CNAME",
 ]);
 
+export const cloudflareDomainStatus = pgEnum("cloudflareDomainStatus", [
+	"synced",
+	"pending",
+	"error",
+]);
+
 export const domains = pgTable("domain", {
 	domainId: text("domainId")
 		.notNull()
@@ -72,6 +78,12 @@ export const domains = pgTable("domain", {
 	cloudflareRecordId: text("cloudflare_record_id"),
 	cloudflareProxied: boolean("cloudflare_proxied").notNull().default(true),
 	cloudflareRecordType: cloudflareDnsRecordType("cloudflare_record_type"),
+
+	cfZoneId: text("cf_zone_id"),
+	cfZoneName: text("cf_zone_name"),
+	cfDnsRecordId: text("cf_dns_record_id"),
+	cfProxied: boolean("cf_proxied").notNull().default(true),
+	cfStatus: cloudflareDomainStatus("cf_status").notNull().default("pending"),
 });
 
 export const domainsRelations = relations(domains, ({ one }) => ({
@@ -113,6 +125,9 @@ export const apiCreateDomain = createSchema.pick({
 	previewDeploymentId: true,
 	internalPath: true,
 	stripPath: true,
+	dnsProvider: true,
+	cfProxied: true,
+	cloudflareProxied: true,
 });
 
 export const apiFindDomain = z.object({

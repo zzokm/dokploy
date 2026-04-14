@@ -1,5 +1,6 @@
 "use client"
 
+import { Inbox } from "lucide-react"
 import type { FormEvent } from "react"
 import type { UseFormReturn } from "react-hook-form"
 import { Button } from "@/components/ui/button"
@@ -37,19 +38,22 @@ export const MailCatchAllCard = ({
 	onSubmit,
 	savePending,
 }: MailCatchAllCardProps) => (
-	<Card className="h-full p-2.5 rounded-xl max-w-5xl mx-auto w-full">
+	<Card className="h-full w-full bg-sidebar p-2.5 rounded-xl">
 		<div className="rounded-xl bg-background shadow-md">
 			<CardHeader>
-				<CardTitle className="text-xl">Mail settings: {domainName}</CardTitle>
+				<CardTitle className="text-xl flex flex-row gap-2 items-center flex-wrap">
+					<Inbox className="size-6 text-muted-foreground shrink-0" aria-hidden />
+					<span>Catch-all · {domainName}</span>
+				</CardTitle>
 				<CardDescription>
-					Catch-all routes unknown addresses to a mailbox local part.
+					Routes unknown addresses to a mailbox local part (e.g. <span className="font-mono">admin</span>).
 				</CardDescription>
 			</CardHeader>
-			<CardContent className="space-y-4 py-8 border-t">
+			<CardContent className="space-y-4 py-6 sm:py-8 border-t">
 				<Form {...form}>
 					<form
 						onSubmit={onSubmit}
-						className="flex flex-wrap gap-2 items-end max-w-xl"
+						className="flex flex-col sm:flex-row flex-wrap gap-4 sm:gap-3 sm:items-end max-w-xl"
 					>
 						<FormField
 							control={form.control}
@@ -69,7 +73,7 @@ export const MailCatchAllCard = ({
 								</FormItem>
 							)}
 						/>
-						<Button type="submit" isLoading={savePending}>
+						<Button type="submit" className="w-full sm:w-auto" isLoading={savePending}>
 							Save catch-all
 						</Button>
 					</form>

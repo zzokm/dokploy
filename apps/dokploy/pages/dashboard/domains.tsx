@@ -3,14 +3,14 @@ import { createServerSideHelpers } from "@trpc/react-query/server"
 import type { GetServerSidePropsContext } from "next"
 import type { ReactElement } from "react"
 import superjson from "superjson"
-import { ManageDomains } from "@/components/dashboard/domains/manage-domains"
+import { CloudflareZonesGrid } from "@/components/dashboard/domains/cloudflare-zones-grid"
 import { DashboardLayout } from "@/components/layouts/dashboard-layout"
 import { appRouter } from "@/server/api/root"
 
 const Page = () => {
 	return (
-		<div className="flex flex-col gap-4 w-full">
-			<ManageDomains />
+		<div className="w-full max-w-5xl mx-auto flex flex-col gap-6">
+			<CloudflareZonesGrid />
 		</div>
 	)
 }

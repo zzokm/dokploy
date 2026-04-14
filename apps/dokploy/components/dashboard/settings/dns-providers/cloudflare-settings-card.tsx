@@ -1,5 +1,6 @@
 "use client"
 
+import { Cloud } from "lucide-react"
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -61,113 +62,127 @@ export const CloudflareSettingsCard = () => {
 	}
 
 	return (
-		<Card>
-			<CardHeader>
-				<CardTitle>Cloudflare</CardTitle>
-				<CardDescription>
-					Connect Cloudflare to automatically manage DNS records and enable Let’s Encrypt DNS-01 for proxied domains.
-				</CardDescription>
-			</CardHeader>
-			<CardContent className="space-y-4">
-				<div className="space-y-2 text-sm text-muted-foreground">
-					<div className="font-medium text-foreground">Required API Token permissions</div>
-					<ul className="list-disc pl-5 space-y-1">
-						<li>
-							<span className="font-medium text-foreground">Zone.Zone</span> — Read
-						</li>
-						<li>
-							<span className="font-medium text-foreground">Zone.DNS</span> — Edit
-						</li>
-					</ul>
-					<p>
-						Use a scoped API Token (not the Global API Key). The token is stored encrypted and never shown again after saving.
-					</p>
-				</div>
+		<Card className="h-full w-full overflow-hidden rounded-xl border border-border bg-sidebar p-2.5 shadow-none">
+			<div className="rounded-xl bg-background shadow-md">
+				<CardHeader className="space-y-1">
+					<CardTitle className="text-lg sm:text-xl flex flex-row gap-2 items-center">
+						<Cloud className="size-6 text-muted-foreground shrink-0" aria-hidden />
+						Cloudflare
+					</CardTitle>
+					<CardDescription>
+						Connect Cloudflare to manage DNS records and Let&apos;s Encrypt DNS-01 for proxied domains (Traefik).
+					</CardDescription>
+				</CardHeader>
+				<CardContent className="space-y-6 border-t py-6">
+					<div className="space-y-2 text-sm text-muted-foreground">
+						<p className="font-medium text-foreground">Required API token permissions</p>
+						<ul className="list-disc pl-5 space-y-1">
+							<li>
+								<span className="font-medium text-foreground">Zone.Zone</span> — Read
+							</li>
+							<li>
+								<span className="font-medium text-foreground">Zone.DNS</span> — Edit
+							</li>
+						</ul>
+						<p className="leading-relaxed">
+							Use a scoped API token (not the global API key). The token is stored encrypted and is not shown again after saving.
+						</p>
+					</div>
 
-				<div className="flex items-center justify-between gap-3 flex-wrap">
-					<Dialog open={isOpen} onOpenChange={setIsOpen}>
-						<DialogTrigger asChild>
-							<Button type="button" variant="secondary">
-								Connect Cloudflare
-							</Button>
-						</DialogTrigger>
-						<DialogContent className="sm:max-w-lg">
-							<DialogHeader>
-								<DialogTitle>Connect Cloudflare</DialogTitle>
-								<DialogDescription>
-									Paste a Cloudflare API Token with Zone read and DNS edit permissions.
-								</DialogDescription>
-							</DialogHeader>
-
-							<div className="space-y-3">
-								<div className="space-y-1.5">
-									<Label htmlFor="cf-name">Name</Label>
-									<Input
-										id="cf-name"
-										value={name}
-										onChange={(e) => setName(e.target.value)}
-										placeholder="Cloudflare"
-									/>
-								</div>
-								<div className="space-y-1.5">
-									<Label htmlFor="cf-token">API Token</Label>
-									<Input
-										id="cf-token"
-										value={token}
-										onChange={(e) => setToken(e.target.value)}
-										placeholder="••••••••••••••••••••"
-									/>
-									<p className="text-xs text-muted-foreground">
-										This enables DNS automation and Traefik’s DNS-01 challenge (via `CF_DNS_API_TOKEN`).
-									</p>
-								</div>
-							</div>
-
-							<DialogFooter>
-								<Button
-									type="button"
-									onClick={handleConnect}
-									disabled={!canSubmit || createIntegration.isPending}
-									isLoading={createIntegration.isPending}
-								>
-									Connect
+					<div className="flex flex-col sm:flex-row sm:items-center gap-3">
+						<Dialog open={isOpen} onOpenChange={setIsOpen}>
+							<DialogTrigger asChild>
+								<Button type="button" variant="default" className="w-full sm:w-auto">
+									Connect Cloudflare
 								</Button>
-							</DialogFooter>
-						</DialogContent>
-					</Dialog>
-				</div>
+							</DialogTrigger>
+							<DialogContent className="sm:max-w-lg">
+								<DialogHeader>
+									<DialogTitle>Connect Cloudflare</DialogTitle>
+									<DialogDescription>
+										Paste a Cloudflare API token with Zone read and DNS edit permissions.
+									</DialogDescription>
+								</DialogHeader>
 
-				{integrations.isPending ? (
-					<p className="text-sm text-muted-foreground">Loading integrations…</p>
-				) : integrations.data?.length ? (
-					<div className="rounded-md border divide-y">
-						{integrations.data.map((i) => (
-							<div key={i.id} className="flex items-center justify-between gap-3 p-3">
-								<div className="min-w-0">
-									<div className="text-sm font-medium truncate">{i.name}</div>
-									<div className="text-xs text-muted-foreground">
-										Token ending in ••••{i.apiTokenLast4}
+								<div className="space-y-4">
+									<div className="space-y-2">
+										<Label htmlFor="cf-name">Name</Label>
+										<Input
+											id="cf-name"
+											value={name}
+											onChange={(e) => setName(e.target.value)}
+											placeholder="Cloudflare"
+										/>
+									</div>
+									<div className="space-y-2">
+										<Label htmlFor="cf-token-dialog">API token</Label>
+										<Input
+											id="cf-token-dialog"
+											value={token}
+											onChange={(e) => setToken(e.target.value)}
+											placeholder="••••••••••••••••••••"
+											className="font-mono text-sm"
+										/>
+										<p className="text-xs text-muted-foreground leading-relaxed">
+											Enables DNS automation and Traefik DNS-01 via <span className="font-mono">CF_DNS_API_TOKEN</span>.
+										</p>
 									</div>
 								</div>
-								<Button
-									type="button"
-									variant="destructive"
-									size="sm"
-									isLoading={deleteIntegration.isPending}
-									onClick={() => deleteIntegration.mutate({ id: i.id })}
-								>
-									Remove
-								</Button>
-							</div>
-						))}
+
+								<DialogFooter className="gap-2 sm:gap-0">
+									<Button
+										type="button"
+										variant="outline"
+										onClick={() => setIsOpen(false)}
+									>
+										Cancel
+									</Button>
+									<Button
+										type="button"
+										onClick={handleConnect}
+										disabled={!canSubmit || createIntegration.isPending}
+										isLoading={createIntegration.isPending}
+									>
+										Connect
+									</Button>
+								</DialogFooter>
+							</DialogContent>
+						</Dialog>
 					</div>
-				) : (
-					<p className="text-sm text-muted-foreground">
-						No Cloudflare integrations yet.
-					</p>
-				)}
-			</CardContent>
+
+					{integrations.isPending ? (
+						<p className="text-sm text-muted-foreground">Loading integrations…</p>
+					) : integrations.data?.length ? (
+						<div className="rounded-lg border border-border divide-y bg-muted/20">
+							{integrations.data.map((i) => (
+								<div
+									key={i.id}
+									className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4"
+								>
+									<div className="min-w-0 space-y-0.5">
+										<div className="text-sm font-medium truncate">{i.name}</div>
+										<div className="text-xs text-muted-foreground font-mono">
+											Token ••••{i.apiTokenLast4}
+										</div>
+									</div>
+									<Button
+										type="button"
+										variant="destructive"
+										size="sm"
+										className="w-full sm:w-auto shrink-0"
+										isLoading={deleteIntegration.isPending}
+										onClick={() => deleteIntegration.mutate({ id: i.id })}
+									>
+										Remove
+									</Button>
+								</div>
+							))}
+						</div>
+					) : (
+						<p className="text-sm text-muted-foreground">No Cloudflare integrations yet.</p>
+					)}
+				</CardContent>
+			</div>
 		</Card>
 	)
 }
-

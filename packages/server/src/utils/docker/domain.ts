@@ -311,15 +311,15 @@ export const createDomainLabels = (
 		);
 	}
 
-	// Add TLS configuration for websecure
+	// Add TLS configuration for websecure (custom resolver e.g. letsencrypt-cloudflare wins)
 	if (entrypoint === "websecure") {
-		if (certificateType === "letsencrypt") {
-			labels.push(
-				`traefik.http.routers.${routerName}.tls.certresolver=letsencrypt`,
-			);
-		} else if (certificateType === "custom" && customCertResolver) {
+		if (customCertResolver) {
 			labels.push(
 				`traefik.http.routers.${routerName}.tls.certresolver=${customCertResolver}`,
+			);
+		} else if (certificateType === "letsencrypt") {
+			labels.push(
+				`traefik.http.routers.${routerName}.tls.certresolver=letsencrypt`,
 			);
 		}
 	}

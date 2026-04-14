@@ -281,13 +281,15 @@ export const createMailbox = async (
 		throw new Error("Mail not enabled for this domain");
 	}
 	const hash = await hashMailboxPassword(input.password);
+	const quotaBytes =
+		input.quotaBytes === undefined ? 5_368_709_120 : input.quotaBytes;
 	const [row] = await db
 		.insert(mailbox)
 		.values({
 			domainId: input.domainId,
 			localPart: input.localPart,
 			passwordHash: hash,
-			quotaBytes: input.quotaBytes ?? 5_368_709_120,
+			quotaBytes,
 		})
 		.returning();
 	await applyMailConfigurations(db, {

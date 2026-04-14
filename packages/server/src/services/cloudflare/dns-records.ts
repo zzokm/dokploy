@@ -13,6 +13,7 @@ export type CloudflareDnsRecord = {
 	content: string
 	ttl: number
 	proxied?: boolean
+	priority?: number
 }
 
 export const listCloudflareDnsRecordsByName = async (input: {
@@ -35,11 +36,12 @@ export const listCloudflareDnsRecordsByName = async (input: {
 export const createCloudflareDnsRecord = async (input: {
 	token: string
 	zoneId: string
-	type: "A" | "AAAA" | "CNAME"
+	type: CloudflareDnsRecordType
 	name: string
 	content: string
 	ttl: 1 | number
 	proxied?: boolean
+	priority?: number
 }) => {
 	return await cloudflareFetch<CloudflareDnsRecord>({
 		token: input.token,
@@ -50,6 +52,7 @@ export const createCloudflareDnsRecord = async (input: {
 			name: input.name,
 			content: input.content,
 			ttl: input.ttl,
+			...(input.priority !== undefined ? { priority: input.priority } : {}),
 			...(input.proxied !== undefined ? { proxied: input.proxied } : {}),
 		},
 	})
@@ -59,11 +62,12 @@ export const updateCloudflareDnsRecord = async (input: {
 	token: string
 	zoneId: string
 	recordId: string
-	type: "A" | "AAAA" | "CNAME"
+	type: CloudflareDnsRecordType
 	name: string
 	content: string
 	ttl: 1 | number
 	proxied?: boolean
+	priority?: number
 }) => {
 	return await cloudflareFetch<CloudflareDnsRecord>({
 		token: input.token,
@@ -74,19 +78,33 @@ export const updateCloudflareDnsRecord = async (input: {
 			name: input.name,
 			content: input.content,
 			ttl: input.ttl,
+			...(input.priority !== undefined ? { priority: input.priority } : {}),
 			...(input.proxied !== undefined ? { proxied: input.proxied } : {}),
 		},
+	})
+}
+
+export const deleteCloudflareDnsRecord = async (input: {
+	token: string
+	zoneId: string
+	recordId: string
+}) => {
+	return await cloudflareFetch<{ id: string }>({
+		token: input.token,
+		method: "DELETE",
+		path: `/zones/${input.zoneId}/dns_records/${input.recordId}`,
 	})
 }
 
 export const upsertCloudflareDnsRecord = async (input: {
 	token: string
 	zoneId: string
-	type: "A" | "AAAA" | "CNAME"
+	type: CloudflareDnsRecordType
 	name: string
 	content: string
 	ttl: 1 | number
 	proxied?: boolean
+	priority?: number
 }) => {
 	const existing = await listCloudflareDnsRecordsByName({
 		token: input.token,
@@ -103,6 +121,8 @@ export const upsertCloudflareDnsRecord = async (input: {
 	const needsUpdate =
 		first.content !== input.content ||
 		first.ttl !== input.ttl ||
+		(input.priority !== undefined &&
+			(first as { priority?: number }).priority !== input.priority) ||
 		(input.proxied !== undefined && first.proxied !== input.proxied)
 
 	if (!needsUpdate) {

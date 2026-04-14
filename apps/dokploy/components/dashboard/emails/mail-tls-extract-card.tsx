@@ -1,5 +1,6 @@
 "use client"
 
+import { Shield } from "lucide-react"
 import type { FormEvent } from "react"
 import type { UseFormReturn } from "react-hook-form"
 import { Button } from "@/components/ui/button"
@@ -35,20 +36,23 @@ export const MailTlsExtractCard = ({
 	onSubmitTls,
 	extractPending,
 }: MailTlsExtractCardProps) => (
-	<Card className="h-full p-2.5 rounded-xl max-w-5xl mx-auto w-full">
+	<Card className="h-full w-full bg-sidebar p-2.5 rounded-xl">
 		<div className="rounded-xl bg-background shadow-md">
 			<CardHeader>
-				<CardTitle className="text-xl">Mail TLS (from Traefik ACME)</CardTitle>
+				<CardTitle className="text-xl flex flex-row gap-2 items-center">
+					<Shield className="size-6 text-muted-foreground shrink-0" aria-hidden />
+					Mail TLS (Traefik ACME)
+				</CardTitle>
 				<CardDescription>
 					Extracts certificate and key from Traefik&apos;s acme.json for this
 					hostname (mount into Exim/Dovecot on the host).
 				</CardDescription>
 			</CardHeader>
-			<CardContent className="space-y-4 py-8 border-t">
+			<CardContent className="space-y-4 py-6 sm:py-8 border-t">
 				<Form {...form}>
 					<form
 						onSubmit={onSubmitTls}
-						className="flex flex-wrap gap-2 items-end max-w-xl"
+						className="flex flex-col sm:flex-row flex-wrap gap-4 sm:gap-3 sm:items-end max-w-xl"
 					>
 						<FormField
 							control={form.control}
@@ -63,7 +67,7 @@ export const MailTlsExtractCard = ({
 								</FormItem>
 							)}
 						/>
-						<Button type="submit" isLoading={extractPending}>
+						<Button type="submit" className="w-full sm:w-auto" isLoading={extractPending}>
 							Extract mail TLS
 						</Button>
 					</form>

@@ -4,7 +4,6 @@ import {
 	aliasFormSchema,
 	catchAllFormSchema,
 	extractTlsFormSchema,
-	mailboxFormSchema,
 } from "@dokploy/server/validations/dns-mail-schemas"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useEffect, useMemo, useState } from "react"
@@ -12,6 +11,7 @@ import { useForm } from "react-hook-form"
 import { toast } from "sonner"
 import type { z } from "zod"
 import { EmailsStackCard } from "@/components/dashboard/emails/emails-stack-card"
+import { CloudflareMailDnsCard } from "@/components/dashboard/emails/cloudflare-mail-dns-card"
 import { MailAliasesCard } from "@/components/dashboard/emails/mail-aliases-card"
 import { MailCatchAllCard } from "@/components/dashboard/emails/mail-catch-all-card"
 import { MailDomainsListCard } from "@/components/dashboard/emails/mail-domains-list-card"
@@ -21,7 +21,6 @@ import { useEmailsPageSelection } from "@/components/dashboard/emails/use-emails
 import { api } from "@/utils/api"
 
 type CatchAllForm = z.infer<typeof catchAllFormSchema>
-type MailboxForm = z.infer<typeof mailboxFormSchema>
 type AliasForm = z.infer<typeof aliasFormSchema>
 type TlsForm = z.infer<typeof extractTlsFormSchema>
 
@@ -60,11 +59,6 @@ export const ManageEmails = () => {
 		defaultValues: { catchAllLocalPart: "" },
 	})
 
-	const mailboxForm = useForm<MailboxForm>({
-		resolver: zodResolver(mailboxFormSchema),
-		defaultValues: { localPart: "", password: "" },
-	})
-
 	const aliasForm = useForm<AliasForm>({
 		resolver: zodResolver(aliasFormSchema),
 		defaultValues: { sourceLocalPart: "", destination: "" },
@@ -97,15 +91,6 @@ export const ManageEmails = () => {
 				void refetchMailboxes()
 				void refetchAliases()
 			}
-		},
-		onError: (e) => toast.error(e.message),
-	})
-
-	const createMailbox = api.mail.createMailbox.useMutation({
-		onSuccess: () => {
-			toast.success("Mailbox created")
-			mailboxForm.reset({ localPart: "", password: "" })
-			void refetchMailboxes()
 		},
 		onError: (e) => toast.error(e.message),
 	})
@@ -145,17 +130,6 @@ export const ManageEmails = () => {
 		})
 	})
 
-	const handleMailbox = mailboxForm.handleSubmit((values) => {
-		if (!selected) {
-			return
-		}
-		createMailbox.mutate({
-			domainId: selected.id,
-			localPart: values.localPart,
-			password: values.password,
-		})
-	})
-
 	const handleAlias = aliasForm.handleSubmit((values) => {
 		if (!selected) {
 			return
@@ -174,8 +148,9 @@ export const ManageEmails = () => {
 	})
 
 	return (
-		<div className="w-full flex flex-col gap-4">
+		<div className="w-full flex flex-col gap-6">
 			<EmailsStackCard stackRef={stackRef} />
+			<CloudflareMailDnsCard />
 
 			<MailDomainsListCard
 				allDomains={allDomains}
@@ -203,11 +178,13 @@ export const ManageEmails = () => {
 					/>
 
 					<MailMailboxesCard
+						domainId={selected.id}
 						domainName={selected.name}
-						form={mailboxForm}
-						onSubmitMailbox={handleMailbox}
-						createPending={createMailbox.isPending}
 						mailboxes={mailboxes}
+						onMailboxesChanged={() => {
+							void refetchMailboxes()
+							void refetchAliases()
+						}}
 						connectionOpen={connectionOpen}
 						connectionLocalPart={connectionLocalPart}
 						onConnectionOpenChange={(open) => {

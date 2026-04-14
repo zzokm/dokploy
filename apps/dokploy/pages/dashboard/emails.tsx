@@ -9,7 +9,7 @@ import { appRouter } from "@/server/api/root"
 
 const Page = () => {
 	return (
-		<div className="flex flex-col gap-4 w-full">
+		<div className="w-full max-w-5xl mx-auto flex flex-col gap-6">
 			<ManageEmails />
 		</div>
 	)

@@ -39,24 +39,6 @@ export const ShowDomains = ({ id, type }: Props) => {
 	const { data: permissions } = api.user.getPermissions.useQuery();
 	const canCreateDomain = permissions?.domain.create ?? false;
 	const canDeleteDomain = permissions?.domain.delete ?? false;
-	const { data: application } =
-		type === "application"
-			? api.application.one.useQuery(
-					{
-						applicationId: id,
-					},
-					{
-						enabled: !!id,
-					},
-				)
-			: api.compose.one.useQuery(
-					{
-						composeId: id,
-					},
-					{
-						enabled: !!id,
-					},
-				);
 	const {
 		data,
 		refetch,
@@ -83,60 +65,61 @@ export const ShowDomains = ({ id, type }: Props) => {
 		api.domain.delete.useMutation();
 
 	return (
-		<div className="flex w-full flex-col gap-5 ">
-			<Card className="bg-background">
-				<CardHeader className="flex flex-row items-center flex-wrap gap-4 justify-between">
-					<div className="flex flex-col gap-1">
-						<CardTitle className="text-xl">Domains</CardTitle>
-						<CardDescription>
-							Domains are used to access to the application
-						</CardDescription>
-					</div>
+		<div className="flex w-full max-w-5xl mx-auto flex-col gap-6">
+			<Card className="h-full w-full bg-sidebar p-2.5 rounded-xl">
+				<div className="rounded-xl bg-background shadow-md">
+					<CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:flex-wrap">
+						<div className="flex flex-col gap-1 min-w-0">
+							<CardTitle className="text-xl flex flex-row gap-2 items-center">
+								<GlobeIcon className="size-6 text-muted-foreground shrink-0" aria-hidden />
+								Domains
+							</CardTitle>
+							<CardDescription>
+								Hostnames and paths that route traffic to this deployment through Traefik.
+							</CardDescription>
+						</div>
 
-					<div className="flex flex-row gap-4 flex-wrap">
-						{canCreateDomain && data && data?.length > 0 && (
-							<AddDomain id={id} type={type}>
-								<Button>
-									<GlobeIcon className="size-4" /> Add Domain
-								</Button>
-							</AddDomain>
-						)}
-					</div>
-				</CardHeader>
-				<CardContent className="flex w-full flex-row gap-4">
+						<div className="flex flex-row gap-2 flex-wrap shrink-0">
+							{canCreateDomain && data && data?.length > 0 && (
+								<AddDomain id={id} type={type}>
+									<Button type="button" className="gap-2">
+										<GlobeIcon className="size-4 shrink-0" aria-hidden />
+										Add domain
+									</Button>
+								</AddDomain>
+							)}
+						</div>
+					</CardHeader>
+					<CardContent className="flex w-full flex-col gap-4 border-t py-6">
 					{isLoadingDomains ? (
-						<div className="flex w-full flex-row gap-4 min-h-[40vh] justify-center items-center">
-							<Loader2 className="size-5 animate-spin text-muted-foreground" />
-							<span className="text-base text-muted-foreground">
-								Loading domains...
-							</span>
+						<div className="flex w-full flex-col sm:flex-row gap-3 min-h-[40vh] justify-center items-center text-muted-foreground">
+							<Loader2 className="size-5 animate-spin shrink-0" aria-hidden />
+							<span className="text-sm sm:text-base">Loading domains…</span>
 						</div>
 					) : data?.length === 0 ? (
-						<div className="flex w-full flex-col items-center justify-center gap-3 min-h-[40vh]">
-							<GlobeIcon className="size-8 text-muted-foreground" />
-							<span className="text-base text-muted-foreground">
-								To access the application it is required to set at least 1
-								domain
-							</span>
+						<div className="flex w-full flex-col items-center justify-center gap-4 min-h-[40vh] px-4 text-center">
+							<GlobeIcon className="size-10 text-muted-foreground" aria-hidden />
+							<p className="text-sm sm:text-base text-muted-foreground max-w-md">
+								Add at least one domain so Traefik can route HTTP traffic to your service.
+							</p>
 							{canCreateDomain && (
-								<div className="flex flex-row gap-4 flex-wrap">
-									<AddDomain id={id} type={type}>
-										<Button>
-											<GlobeIcon className="size-4" /> Add Domain
-										</Button>
-									</AddDomain>
-								</div>
+								<AddDomain id={id} type={type}>
+									<Button type="button" className="gap-2">
+										<GlobeIcon className="size-4 shrink-0" aria-hidden />
+										Add domain
+									</Button>
+								</AddDomain>
 							)}
 						</div>
 					) : (
-						<div className="grid grid-cols-1 gap-4 xl:grid-cols-2 w-full min-h-[40vh] ">
+						<div className="grid grid-cols-1 gap-4 xl:grid-cols-2 w-full min-h-[40vh]">
 							{data?.map((item) => {
 								return (
 									<Card
 										key={item.domainId}
-										className="relative overflow-hidden w-full border transition-all hover:shadow-md bg-transparent h-fit"
+										className="relative overflow-hidden w-full border border-border bg-card transition-shadow hover:shadow-md rounded-xl h-fit"
 									>
-										<CardContent className="p-6">
+										<CardContent className="p-5 sm:p-6">
 											<div className="flex flex-col gap-4">
 												{/* Service & Domain Info */}
 												<div className="flex items-center justify-between flex-wrap gap-y-2">
@@ -156,9 +139,11 @@ export const ShowDomains = ({ id, type }: Props) => {
 																<Button
 																	variant="ghost"
 																	size="icon"
-																	className="group hover:bg-blue-500/10"
+																	type="button"
+																	className="text-muted-foreground hover:text-foreground hover:bg-accent"
+																	aria-label="Edit domain"
 																>
-																	<PenBoxIcon className="size-3.5 text-primary group-hover:text-blue-500" />
+																	<PenBoxIcon className="size-4" aria-hidden />
 																</Button>
 															</AddDomain>
 														)}
@@ -185,10 +170,12 @@ export const ShowDomains = ({ id, type }: Props) => {
 																<Button
 																	variant="ghost"
 																	size="icon"
-																	className="group hover:bg-red-500/10"
+																	type="button"
+																	className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
 																	isLoading={isRemoving}
+																	aria-label="Delete domain"
 																>
-																	<Trash2 className="size-4 text-primary group-hover:text-red-500" />
+																	<Trash2 className="size-4" aria-hidden />
 																</Button>
 															</DialogAction>
 														)}
@@ -196,12 +183,13 @@ export const ShowDomains = ({ id, type }: Props) => {
 												</div>
 												<div className="w-full break-all">
 													<Link
-														className="flex items-center gap-2 text-base font-medium hover:underline"
+														className="inline-flex items-center gap-2 text-base font-semibold text-foreground hover:underline underline-offset-4"
 														target="_blank"
+														rel="noopener noreferrer"
 														href={`${item.https ? "https" : "http"}://${item.host}${item.path}`}
 													>
 														{item.host}
-														<ExternalLink className="size-4 min-w-4" />
+														<ExternalLink className="size-4 shrink-0 text-muted-foreground" aria-hidden />
 													</Link>
 												</div>
 
@@ -270,19 +258,28 @@ export const ShowDomains = ({ id, type }: Props) => {
 													)}
 												</div>
 
-												{!item.host.includes("traefik.me") ? (
+												{!item.host.includes("traefik.me") &&
+												item.dnsProvider !== "cloudflare" ? (
 													<div className="pt-1">
 														<DomainConnectionPanel domainId={item.domainId} />
 													</div>
+												) : null}
+
+												{item.dnsProvider === "cloudflare" &&
+												!item.host.includes("traefik.me") ? (
+													<p className="text-sm text-muted-foreground pt-1">
+														DNS records are created automatically in Cloudflare. Use
+														the controls below to adjust proxying and sync.
+													</p>
 												) : null}
 
 												{!item.host.includes("traefik.me") ? (
 													<CloudflareDomainControls
 														domainId={item.domainId}
 														currentDnsProvider={item.dnsProvider}
-														currentIntegrationId={item.cloudflareIntegrationId}
-														currentZoneId={item.cloudflareZoneId}
-														currentProxied={item.cloudflareProxied}
+														currentProxied={
+															item.cfProxied ?? item.cloudflareProxied ?? true
+														}
 													/>
 												) : null}
 											</div>
@@ -292,7 +289,8 @@ export const ShowDomains = ({ id, type }: Props) => {
 							})}
 						</div>
 					)}
-				</CardContent>
+					</CardContent>
+				</div>
 			</Card>
 		</div>
 	);

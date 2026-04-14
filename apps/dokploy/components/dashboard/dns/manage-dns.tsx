@@ -27,6 +27,7 @@ import {
 	FormMessage,
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
 	Select,
 	SelectContent,
@@ -45,6 +46,8 @@ import {
 import { api } from "@/utils/api"
 
 type DnsRecordForm = z.infer<typeof dnsRecordFormSchema>
+
+const DNS_DOMAIN_NONE = "__dns_domain_none__"
 
 export const ManageDns = () => {
 	const router = useRouter()
@@ -149,58 +152,61 @@ export const ManageDns = () => {
 
 	if (domainsPending) {
 		return (
-			<div className="flex flex-row gap-2 items-center justify-center text-sm text-muted-foreground min-h-[25vh]">
-				<span>Loading...</span>
-				<Loader2 className="animate-spin size-4" aria-hidden />
+			<div className="flex flex-col sm:flex-row gap-3 items-center justify-center text-sm text-muted-foreground min-h-[25vh]">
+				<Loader2 className="animate-spin size-5 shrink-0" aria-hidden />
+				<span>Loading…</span>
 			</div>
 		)
 	}
 
 	return (
-		<div className="w-full flex flex-col gap-4">
-			<Card className="h-full p-2.5 rounded-xl max-w-5xl mx-auto w-full">
+		<div className="w-full max-w-5xl mx-auto flex flex-col gap-6">
+			<Card className="h-full w-full bg-sidebar p-2.5 rounded-xl">
 				<div className="rounded-xl bg-background shadow-md">
 					<CardHeader>
-						<CardTitle className="text-xl flex flex-row gap-2">
-							<Globe className="size-6 text-muted-foreground self-center" />
-							Authoritative DNS records (BIND)
+						<CardTitle className="text-xl flex flex-row gap-2 items-center">
+							<Globe className="size-6 text-muted-foreground shrink-0 self-center" aria-hidden />
+							Authoritative DNS (BIND)
 						</CardTitle>
 						<CardDescription>
-							Advanced: manage zone records when Dokploy is your authoritative
-							DNS. External DNS users should follow the instructions in the
-							application Domains card.
+							Advanced: manage zone records when Dokploy is authoritative DNS.
+							For external DNS, use the connection instructions on each application domain.
 						</CardDescription>
 					</CardHeader>
-					<CardContent className="space-y-4 py-8 border-t">
-						<div className="flex flex-wrap gap-2 items-center">
-							<span className="text-sm text-muted-foreground">Domain</span>
-							<select
-								className="border rounded-md px-2 py-1.5 text-sm bg-background min-w-[200px]"
-								value={domainId ?? ""}
-								onChange={(e) => {
-									const v = e.target.value
-									if (!v) {
-										setDomainId(null)
-										void router.replace(
-											{ pathname: "/dashboard/dns", query: {} },
-											undefined,
-											{ shallow: true, scroll: false },
-										)
-										return
-									}
-									handleDomainChange(v)
-								}}
-								aria-label="Select domain for DNS"
-							>
-								<option value="">— Choose —</option>
-								{domains?.map((d) => (
-									<option key={d.id} value={d.id}>
-										{d.name}
-									</option>
-								))}
-							</select>
-							<Button variant="link" asChild className="px-2">
-								<Link href="/dashboard/domains">Manage domains</Link>
+					<CardContent className="space-y-6 py-6 sm:py-8 border-t">
+						<div className="flex flex-col sm:flex-row sm:flex-wrap gap-4 sm:items-end">
+							<div className="space-y-2 min-w-[200px] max-w-md flex-1">
+								<Label htmlFor="dns-domain-select">Domain</Label>
+								<Select
+									value={domainId ?? DNS_DOMAIN_NONE}
+									onValueChange={(v) => {
+										if (v === DNS_DOMAIN_NONE) {
+											setDomainId(null)
+											void router.replace(
+												{ pathname: "/dashboard/dns", query: {} },
+												undefined,
+												{ shallow: true, scroll: false },
+											)
+											return
+										}
+										handleDomainChange(v)
+									}}
+								>
+									<SelectTrigger id="dns-domain-select" aria-label="Select domain for DNS">
+										<SelectValue placeholder="Choose a domain" />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value={DNS_DOMAIN_NONE}>Choose a domain</SelectItem>
+										{domains?.map((d) => (
+											<SelectItem key={d.id} value={d.id}>
+												{d.name}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</div>
+							<Button variant="outline" asChild className="w-full sm:w-auto">
+								<Link href="/dashboard/domains">Domains</Link>
 							</Button>
 						</div>
 
@@ -235,7 +241,8 @@ export const ManageDns = () => {
 								<div className="flex flex-wrap gap-2">
 									<Button
 										type="button"
-										variant="secondary"
+										variant="default"
+										className="w-full sm:w-auto"
 										isLoading={applyDns.isPending}
 										onClick={() =>
 											applyDns.mutate({ domainId: selected.id })
@@ -326,6 +333,7 @@ export const ManageDns = () => {
 									</form>
 								</Form>
 
+								<div className="rounded-lg border overflow-hidden">
 								<Table>
 									<TableHeader>
 										<TableRow>
@@ -367,6 +375,7 @@ export const ManageDns = () => {
 										))}
 									</TableBody>
 								</Table>
+								</div>
 							</>
 						)}
 					</CardContent>

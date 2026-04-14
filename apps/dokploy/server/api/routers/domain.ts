@@ -20,7 +20,7 @@ import {
 	validateDomain,
 	verifyDomainConnection,
 	writeTraefikSetup,
-} from "@dokploy/server";
+} from "@dokploy/server"
 import { checkServicePermissionAndAccess } from "@dokploy/server/services/permission";
 import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
@@ -38,13 +38,11 @@ import {
 	apiFindOneApplication,
 	apiUpdateDomain,
 } from "@/server/db/schema";
-import { db } from "@dokploy/server/db";
-import { cloudflareIntegration, domains } from "@dokploy/server/db/schema";
+import { domains } from "@dokploy/server/db/schema";
 import {
-	getDomainCloudflareConfig,
-	upsertAppDnsRecord,
-} from "@dokploy/server/services/cloudflare/dns-records";
-import { unsealString } from "@dokploy/server/utils/crypto/seal";
+	deleteCloudflareAppDnsForDomain,
+	ensureCloudflareAppDnsForDomain,
+} from "@dokploy/server/services/cloudflare/app-domain-automation";
 
 export const domainRouter = createTRPCRouter({
 	create: protectedProcedure
@@ -67,7 +65,40 @@ export const domainRouter = createTRPCRouter({
 					resourceId: domain.domainId,
 					resourceName: domain.host,
 				});
-				return domain;
+
+				if (input.dnsProvider === "cloudflare") {
+					const cfResult = await ensureCloudflareAppDnsForDomain({
+						organizationId: ctx.session.activeOrganizationId,
+						domainId: domain.domainId,
+						proxiedDefault: input.cfProxied ?? input.cloudflareProxied ?? true,
+					})
+					if (cfResult.skipped) {
+						if (domain.applicationId) {
+							const application = await findApplicationById(domain.applicationId)
+							await removeDomain(application, domain.uniqueConfigKey)
+						}
+						await removeDomainById(domain.domainId)
+						const msg =
+							cfResult.reason === "no_zone_match"
+								? "No Cloudflare zone matches this hostname. Sync zones on Domains or choose a zone when adding the domain."
+								: cfResult.reason === "no_cloudflare_settings"
+									? "Connect Cloudflare under Domains first."
+									: cfResult.reason === "token_unseal_failed"
+										? "Cloudflare token could not be decrypted. Check DOKPLOY_ENCRYPTION_KEY."
+										: "Could not configure Cloudflare DNS for this domain."
+						throw new TRPCError({
+							code: "BAD_REQUEST",
+							message: msg,
+						})
+					}
+					const refreshed = await findDomainById(domain.domainId)
+					if (refreshed.applicationId) {
+						const application = await findApplicationById(refreshed.applicationId)
+						await manageDomain(application, refreshed)
+					}
+				}
+
+				return await findDomainById(domain.domainId)
 			} catch (error) {
 				throw new TRPCError({
 					code: "BAD_REQUEST",
@@ -154,6 +185,14 @@ export const domainRouter = createTRPCRouter({
 				application.appName = previewDeployment.appName;
 				await manageDomain(application, domain);
 			}
+
+			if (domain.dnsProvider === "cloudflare") {
+				await ensureCloudflareAppDnsForDomain({
+					organizationId: ctx.session.activeOrganizationId,
+					domainId: input.domainId,
+					proxiedDefault: true,
+				}).catch(() => {})
+			}
 			return result;
 		}),
 	one: protectedProcedure.input(apiFindDomain).query(async ({ input, ctx }) => {
@@ -189,6 +228,13 @@ export const domainRouter = createTRPCRouter({
 				await checkServicePermissionAndAccess(ctx, preview.applicationId, {
 					domain: ["delete"],
 				});
+			}
+
+			if (domain.dnsProvider === "cloudflare") {
+				await deleteCloudflareAppDnsForDomain({
+					organizationId: ctx.session.activeOrganizationId,
+					domainId: input.domainId,
+				}).catch(() => {})
 			}
 
 			const result = await removeDomainById(input.domainId);
@@ -282,8 +328,6 @@ export const domainRouter = createTRPCRouter({
 		.input(
 			z.object({
 				domainId: z.string().min(1),
-				integrationId: z.string().min(1),
-				zoneId: z.string().min(1),
 				proxied: z.boolean().default(true),
 			}),
 		)
@@ -301,52 +345,17 @@ export const domainRouter = createTRPCRouter({
 				});
 			}
 
-			const organizationId = ctx.session.activeOrganizationId;
-			const [integration] = await db
-				.select()
-				.from(cloudflareIntegration)
-				.where(
-					and(
-						eq(cloudflareIntegration.id, input.integrationId),
-						eq(cloudflareIntegration.organizationId, organizationId),
-					),
-				)
-				.limit(1);
-			if (!integration) {
-				throw new TRPCError({ code: "NOT_FOUND", message: "Cloudflare integration not found" });
-			}
-
-			// Ensure Traefik has the Cloudflare token for DNS-01 (required when proxied=true)
-			try {
-				const token = unsealString(integration.apiTokenEncrypted);
-				const env = await readEnvironmentVariables("dokploy-traefik");
-				const ports = await readPorts("dokploy-traefik");
-				const prepared = prepareEnvironmentVariables(env);
-				const nextEnv = prepared.some((e) => e.startsWith("CF_DNS_API_TOKEN="))
-					? prepared.map((e) =>
-							e.startsWith("CF_DNS_API_TOKEN=") ? `CF_DNS_API_TOKEN=${token}` : e,
-						)
-					: [...prepared, `CF_DNS_API_TOKEN=${token}`];
-				void writeTraefikSetup({ env: nextEnv, additionalPorts: ports }).catch(() => {});
-			} catch {
-				// Token storage may be misconfigured (missing DOKPLOY_ENCRYPTION_KEY).
-				// Domain config still saves, but cert issuance via DNS-01 will fail until fixed.
-			}
-
-			await db
+			await ctx.db
 				.update(domains)
 				.set({
 					dnsProvider: "cloudflare",
-					cloudflareIntegrationId: integration.id,
-					cloudflareZoneId: input.zoneId,
-					cloudflareProxied: input.proxied,
-					cloudflareRecordId: null,
-					cloudflareRecordType: "A",
+					cfProxied: input.proxied,
+					cfStatus: "pending",
+					https: true,
 					certificateType: "letsencrypt",
 					customCertResolver: input.proxied ? "letsencrypt-cloudflare" : null,
-					https: true,
 				})
-				.where(eq(domains.domainId, input.domainId));
+				.where(eq(domains.domainId, input.domainId))
 
 			await audit(ctx, {
 				action: "update",
@@ -354,8 +363,13 @@ export const domainRouter = createTRPCRouter({
 				resourceId: domain.domainId,
 				resourceName: domain.host,
 			});
+			await ensureCloudflareAppDnsForDomain({
+				organizationId: ctx.session.activeOrganizationId,
+				domainId: input.domainId,
+				proxiedDefault: input.proxied,
+			})
 
-			return true;
+			return true
 		}),
 
 	syncCloudflareDns: protectedProcedure
@@ -374,52 +388,23 @@ export const domainRouter = createTRPCRouter({
 				});
 			}
 
-			const cfg = await getDomainCloudflareConfig(input.domainId);
-			if (cfg.dnsProvider !== "cloudflare" || !cfg.cloudflareIntegrationId || !cfg.cloudflareZoneId) {
-				throw new TRPCError({ code: "BAD_REQUEST", message: "Domain is not configured for Cloudflare DNS" });
-			}
+			const [domainRow] = await ctx.db
+				.select({ dnsProvider: domains.dnsProvider })
+				.from(domains)
+				.where(eq(domains.domainId, input.domainId))
+				.limit(1)
 
-			const organizationId = ctx.session.activeOrganizationId;
-			const [integration] = await db
-				.select()
-				.from(cloudflareIntegration)
-				.where(
-					and(
-						eq(cloudflareIntegration.id, cfg.cloudflareIntegrationId),
-						eq(cloudflareIntegration.organizationId, organizationId),
-					),
-				)
-				.limit(1);
-			if (!integration) {
-				throw new TRPCError({ code: "NOT_FOUND", message: "Cloudflare integration not found" });
-			}
-
-			let token: string;
-			try {
-				token = unsealString(integration.apiTokenEncrypted);
-			} catch (e) {
-				const message =
-					e instanceof Error
-						? e.message
-						: "Failed to decrypt Cloudflare token";
-				throw new TRPCError({ code: "BAD_REQUEST", message });
-			}
-			const res = await upsertAppDnsRecord({
-				token,
-				domainId: input.domainId,
-				zoneId: cfg.cloudflareZoneId,
-				proxied: cfg.cloudflareProxied,
-				recordType: "A",
-			});
-
-			await db
-				.update(domains)
-				.set({
-					cloudflareRecordId: res.recordId,
-					cloudflareRecordType: "A",
+			if (domainRow?.dnsProvider !== "cloudflare") {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "Domain is not configured for Cloudflare DNS",
 				})
-				.where(eq(domains.domainId, input.domainId));
+			}
 
-			return res;
+			return await ensureCloudflareAppDnsForDomain({
+				organizationId: ctx.session.activeOrganizationId,
+				domainId: input.domainId,
+				proxiedDefault: true,
+			})
 		}),
 });

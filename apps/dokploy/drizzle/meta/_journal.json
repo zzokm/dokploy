@@ -1100,6 +1100,27 @@
       "when": 1774680000000,
       "tag": "0156_rename_hosted_domain_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 157,
+      "version": "7",
+      "when": 1776146400000,
+      "tag": "0157_domain_connection_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 158,
+      "version": "7",
+      "when": 1776146400001,
+      "tag": "0158_cloudflare_integration",
+      "breakpoints": true
+    },
+    {
+      "idx": 159,
+      "version": "7",
+      "when": 1776146400002,
+      "tag": "0159_cloudflare_native_schema",
+      "breakpoints": true
     }
   ]
 }

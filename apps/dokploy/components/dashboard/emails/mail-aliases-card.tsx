@@ -1,5 +1,6 @@
 "use client"
 
+import { ArrowRightLeft } from "lucide-react"
 import type { FormEvent } from "react"
 import type { UseFormReturn } from "react-hook-form"
 import { Button } from "@/components/ui/button"
@@ -51,15 +52,18 @@ export const MailAliasesCard = ({
 	createPending,
 	aliases,
 }: MailAliasesCardProps) => (
-	<Card className="h-full p-2.5 rounded-xl max-w-5xl mx-auto w-full">
+	<Card className="h-full w-full bg-sidebar p-2.5 rounded-xl">
 		<div className="rounded-xl bg-background shadow-md">
 			<CardHeader>
-				<CardTitle className="text-xl">Aliases</CardTitle>
+				<CardTitle className="text-xl flex flex-row gap-2 items-center">
+					<ArrowRightLeft className="size-6 text-muted-foreground shrink-0" aria-hidden />
+					Aliases
+				</CardTitle>
 				<CardDescription>
-					Map a local part to a full destination address.
+					Map a local part to a full destination address for {domainName}.
 				</CardDescription>
 			</CardHeader>
-			<CardContent className="space-y-4 py-8 border-t">
+			<CardContent className="space-y-4 py-6 sm:py-8 border-t">
 				<Form {...form}>
 					<form
 						onSubmit={onSubmitAlias}
@@ -104,6 +108,7 @@ export const MailAliasesCard = ({
 						</Button>
 					</form>
 				</Form>
+				<div className="rounded-lg border overflow-hidden">
 				<Table>
 					<TableHeader>
 						<TableRow>
@@ -122,6 +127,7 @@ export const MailAliasesCard = ({
 						))}
 					</TableBody>
 				</Table>
+				</div>
 			</CardContent>
 		</div>
 	</Card>

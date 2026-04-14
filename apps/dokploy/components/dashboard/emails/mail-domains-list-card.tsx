@@ -52,30 +52,35 @@ export const MailDomainsListCard = ({
 	enableMailPending,
 	provisionPending,
 }: MailDomainsListCardProps) => (
-	<Card className="h-full p-2.5 rounded-xl max-w-5xl mx-auto w-full">
+	<Card className="h-full w-full bg-sidebar p-2.5 rounded-xl">
 		<div className="rounded-xl bg-background shadow-md">
 			<CardHeader>
-				<CardTitle className="text-xl">Mail domains</CardTitle>
+				<CardTitle className="text-xl flex flex-row gap-2 items-center">
+					<Mail className="size-6 text-muted-foreground shrink-0" aria-hidden />
+					Mail domains
+				</CardTitle>
 				<CardDescription>
-					Domains with mail enabled. Enable mail on a domain from the database
-					(any hosted domain can be toggled), then provision.
-				</CardDescription>
-			</CardHeader>
-			<CardContent className="space-y-2 py-8 border-t">
-				<p className="text-sm text-muted-foreground mb-4">
-					Add domains under{" "}
+					Domains with mail enabled for this server. Use Cloudflare mail DNS
+					above to create the zone entry automatically, or add a domain under{" "}
 					<Link
 						href="/dashboard/domains"
 						className="text-primary underline-offset-4 hover:underline"
 					>
 						Domains
-					</Link>
-					, then enable mail here.
+					</Link>{" "}
+					and enable mail below.
+				</CardDescription>
+			</CardHeader>
+			<CardContent className="space-y-6 py-6 sm:py-8 border-t">
+				<p className="text-sm text-muted-foreground">
+					MX and related records may take a few minutes to propagate; mail can be
+					configured here even before DNS is live everywhere.
 				</p>
 
 				{allDomains?.some((d) => !d.isMailManaged) && (
-					<div className="mb-6">
-						<h3 className="text-sm font-medium mb-2">Enable mail on a domain</h3>
+					<div className="space-y-3">
+						<h3 className="text-sm font-medium">Enable mail on a domain</h3>
+						<div className="rounded-lg border overflow-hidden">
 						<Table>
 							<TableHeader>
 								<TableRow>
@@ -103,23 +108,24 @@ export const MailDomainsListCard = ({
 									))}
 							</TableBody>
 						</Table>
+						</div>
 					</div>
 				)}
 
 				{pendingAllDomains || pendingMailDomains ? (
-					<div className="flex flex-row gap-2 items-center justify-center text-sm text-muted-foreground min-h-[20vh]">
-						<span>Loading...</span>
-						<Loader2 className="animate-spin size-4" />
+					<div className="flex flex-col sm:flex-row gap-3 items-center justify-center text-sm text-muted-foreground min-h-[20vh]">
+						<Loader2 className="animate-spin size-5 shrink-0" aria-hidden />
+						<span>Loading…</span>
 					</div>
 				) : !mailDomains?.length ? (
-					<div className="flex flex-col items-center gap-3 min-h-[20vh] justify-center text-muted-foreground">
-						<Mail className="size-8" />
-						<span className="text-base text-center max-w-md">
-							No mail-enabled domains. Enable mail on a domain (set mail managed)
-							to manage mailboxes here.
+					<div className="flex flex-col items-center gap-3 min-h-[20vh] justify-center text-muted-foreground px-4 text-center">
+						<Mail className="size-10 shrink-0" aria-hidden />
+						<span className="text-sm sm:text-base max-w-md">
+							No mail-enabled domains. Enable mail on a domain to manage mailboxes here.
 						</span>
 					</div>
 				) : (
+					<div className="rounded-lg border overflow-hidden">
 					<Table>
 						<TableHeader>
 							<TableRow>
@@ -162,6 +168,7 @@ export const MailDomainsListCard = ({
 							))}
 						</TableBody>
 					</Table>
+					</div>
 				)}
 			</CardContent>
 		</div>

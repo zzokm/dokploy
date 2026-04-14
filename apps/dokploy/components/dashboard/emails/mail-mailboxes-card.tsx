@@ -1,8 +1,10 @@
 "use client"
 
-import type { FormEvent } from "react"
-import type { UseFormReturn } from "react-hook-form"
+import { Plus, Users } from "lucide-react"
+import { useState } from "react"
+import { AddMailboxDialog } from "@/components/dashboard/emails/add-mailbox-dialog"
 import { MailboxConnectionSettingsDialog } from "@/components/dashboard/emails/mailbox-connection-settings-dialog"
+import { RoundcubeWebmailDialog } from "@/components/dashboard/emails/roundcube-webmail-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -12,15 +14,6 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card"
-import {
-	Form,
-	FormControl,
-	FormField,
-	FormItem,
-	FormLabel,
-	FormMessage,
-} from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
 import {
 	Table,
 	TableBody,
@@ -37,14 +30,24 @@ type MailboxRow = {
 	quotaBytes: number
 }
 
-type MailboxFormValues = { localPart: string; password: string }
+const formatMailboxQuota = (bytes: number) => {
+	if (bytes === 0) {
+		return "Unlimited"
+	}
+	if (bytes >= 1024 ** 3) {
+		return `${(bytes / 1024 ** 3).toFixed(1)} GB`
+	}
+	if (bytes >= 1024 ** 2) {
+		return `${Math.round(bytes / 1024 ** 2)} MB`
+	}
+	return `${bytes} B`
+}
 
 type MailMailboxesCardProps = {
+	domainId: string
 	domainName: string
-	form: UseFormReturn<MailboxFormValues>
-	onSubmitMailbox: (e: FormEvent) => void
-	createPending: boolean
 	mailboxes: MailboxRow[] | undefined
+	onMailboxesChanged: () => void
 	connectionOpen: boolean
 	connectionLocalPart: string | null
 	onConnectionOpenChange: (open: boolean) => void
@@ -52,116 +55,131 @@ type MailMailboxesCardProps = {
 }
 
 export const MailMailboxesCard = ({
+	domainId,
 	domainName,
-	form,
-	onSubmitMailbox,
-	createPending,
 	mailboxes,
+	onMailboxesChanged,
 	connectionOpen,
 	connectionLocalPart,
 	onConnectionOpenChange,
 	onOpenConnection,
-}: MailMailboxesCardProps) => (
-	<Card className="h-full p-2.5 rounded-xl max-w-5xl mx-auto w-full">
-		<div className="rounded-xl bg-background shadow-md">
-			<CardHeader>
-				<CardTitle className="text-xl">Mailboxes</CardTitle>
-				<CardDescription>
-					Passwords are stored as Argon2id hashes.
-				</CardDescription>
-			</CardHeader>
-			<CardContent className="space-y-4 py-8 border-t">
-				<Form {...form}>
-					<form
-						onSubmit={onSubmitMailbox}
-						className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end max-w-3xl"
+}: MailMailboxesCardProps) => {
+	const [webmailLocalPart, setWebmailLocalPart] = useState<string | null>(null)
+	const [addOpen, setAddOpen] = useState(false)
+
+	return (
+		<Card className="h-full w-full bg-sidebar p-2.5 rounded-xl">
+			<div className="rounded-xl bg-background shadow-md">
+				<CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+					<div className="space-y-1 min-w-0">
+						<CardTitle className="text-xl flex flex-row gap-2 items-center">
+							<Users className="size-6 text-muted-foreground shrink-0" aria-hidden />
+							Mailboxes
+						</CardTitle>
+						<CardDescription>
+							Mailboxes and Argon2id password hashes live in Postgres. Webmail DNS should
+							include an A record for{" "}
+							<span className="font-mono">webmail.{domainName}</span> (created when you
+							provision mail DNS in Cloudflare).
+						</CardDescription>
+					</div>
+					<Button
+						type="button"
+						size="sm"
+						className="shrink-0 gap-2"
+						onClick={() => setAddOpen(true)}
+						aria-label="Add mailbox"
 					>
-						<FormField
-							control={form.control}
-							name="localPart"
-							render={({ field }) => (
-								<FormItem>
-									<FormLabel>Local part</FormLabel>
-									<FormControl>
-										<Input autoComplete="off" {...field} />
-									</FormControl>
-									<FormMessage />
-								</FormItem>
-							)}
-						/>
-						<FormField
-							control={form.control}
-							name="password"
-							render={({ field }) => (
-								<FormItem className="sm:col-span-2">
-									<FormLabel>Password</FormLabel>
-									<FormControl>
-										<Input
-											type="password"
-											autoComplete="new-password"
-											{...field}
-										/>
-									</FormControl>
-									<FormMessage />
-								</FormItem>
-							)}
-						/>
-						<Button
-							type="submit"
-							className="sm:col-span-3 w-full sm:w-auto"
-							isLoading={createPending}
-						>
-							Create mailbox
-						</Button>
-					</form>
-				</Form>
+						<Plus className="size-4 shrink-0" aria-hidden />
+						Add mailbox
+					</Button>
+				</CardHeader>
+				<CardContent className="space-y-4 py-6 sm:py-8 border-t">
+					<AddMailboxDialog
+						domainId={domainId}
+						domainName={domainName}
+						open={addOpen}
+						onOpenChange={setAddOpen}
+						onSuccess={() => {
+							onMailboxesChanged()
+						}}
+					/>
 
-				<MailboxConnectionSettingsDialog
-					open={connectionOpen && connectionLocalPart !== null}
-					onOpenChange={onConnectionOpenChange}
-					localPart={connectionLocalPart ?? ""}
-					apexDomain={domainName}
-				/>
+					<MailboxConnectionSettingsDialog
+						open={connectionOpen && connectionLocalPart !== null}
+						onOpenChange={onConnectionOpenChange}
+						localPart={connectionLocalPart ?? ""}
+						apexDomain={domainName}
+					/>
 
-				<Table>
-					<TableHeader>
-						<TableRow>
-							<TableHead>Address</TableHead>
-							<TableHead>Active</TableHead>
-							<TableHead>Quota (bytes)</TableHead>
-							<TableHead className="text-right w-[180px]">Connection</TableHead>
-						</TableRow>
-					</TableHeader>
-					<TableBody>
-						{mailboxes?.map((m) => (
-							<TableRow key={m.id}>
-								<TableCell className="font-medium">
-									{m.localPart}@{domainName}
-								</TableCell>
-								<TableCell>
-									{m.isActive ? (
-										<Badge>Yes</Badge>
-									) : (
-										<Badge variant="secondary">No</Badge>
-									)}
-								</TableCell>
-								<TableCell>{m.quotaBytes}</TableCell>
-								<TableCell className="text-right">
-									<Button
-										type="button"
-										size="sm"
-										variant="outline"
-										aria-label={`Connection settings for ${m.localPart}@${domainName}`}
-										onClick={() => onOpenConnection(m.localPart)}
-									>
-										Connection settings
-									</Button>
-								</TableCell>
-							</TableRow>
-						))}
-					</TableBody>
-				</Table>
-			</CardContent>
-		</div>
-	</Card>
-)
+					<RoundcubeWebmailDialog
+						open={webmailLocalPart !== null}
+						onOpenChange={(open) => {
+							if (!open) {
+								setWebmailLocalPart(null)
+							}
+						}}
+						email={
+							webmailLocalPart
+								? `${webmailLocalPart}@${domainName}`
+								: ""
+						}
+						apexDomain={domainName}
+					/>
+
+					<div className="rounded-lg border overflow-hidden">
+						<Table>
+							<TableHeader>
+								<TableRow>
+									<TableHead>Address</TableHead>
+									<TableHead>Active</TableHead>
+									<TableHead>Quota</TableHead>
+									<TableHead className="text-right min-w-[220px]">Actions</TableHead>
+								</TableRow>
+							</TableHeader>
+							<TableBody>
+								{mailboxes?.map((m) => (
+									<TableRow key={m.id}>
+										<TableCell className="font-medium">
+											{m.localPart}@{domainName}
+										</TableCell>
+										<TableCell>
+											{m.isActive ? (
+												<Badge>Yes</Badge>
+											) : (
+												<Badge variant="secondary">No</Badge>
+											)}
+										</TableCell>
+										<TableCell>{formatMailboxQuota(m.quotaBytes)}</TableCell>
+										<TableCell className="text-right">
+											<div className="flex flex-wrap justify-end gap-2">
+												<Button
+													type="button"
+													size="sm"
+													variant="default"
+													aria-label={`Open Roundcube webmail for ${m.localPart}@${domainName}`}
+													onClick={() => setWebmailLocalPart(m.localPart)}
+												>
+													Open webmail
+												</Button>
+												<Button
+													type="button"
+													size="sm"
+													variant="outline"
+													aria-label={`Connection settings for ${m.localPart}@${domainName}`}
+													onClick={() => onOpenConnection(m.localPart)}
+												>
+													Connection settings
+												</Button>
+											</div>
+										</TableCell>
+									</TableRow>
+								))}
+							</TableBody>
+						</Table>
+					</div>
+				</CardContent>
+			</div>
+		</Card>
+	)
+}

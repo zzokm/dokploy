@@ -14,7 +14,7 @@ import {
 	listMailManagedDomains,
 	syncMailTlsFromTraefikForApex,
 } from "@dokploy/server/services/mail"
-import { applyDnsForDomain, getHostedDomainById } from "@dokploy/server/services/dns"
+import { getHostedDomainById } from "@dokploy/server/services/dns"
 import { TRPCError } from "@trpc/server"
 import { z } from "zod"
 import {
@@ -49,12 +49,6 @@ export const mailRouter = createTRPCRouter({
 				organizationId: oid,
 				serverId: d.serverId,
 			})
-			if (d.isDnsManaged) {
-				await applyDnsForDomain(db, {
-					domainId: input.domainId,
-					organizationId: oid,
-				})
-			}
 			return { ok: true as const }
 		}),
 

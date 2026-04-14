@@ -59,8 +59,133 @@ export const createMailboxInput = z.object({
 		.max(64)
 		.regex(/^[a-zA-Z0-9._+-]+$/),
 	password: z.string().min(8).max(256),
-	quotaBytes: z.number().int().positive().optional(),
+	/** Omitted = default 5 GiB. `0` = unlimited. */
+	quotaBytes: z.number().int().min(0).optional(),
 })
+
+const mailboxLocalPartRegex = /^[a-zA-Z0-9._+-]+$/
+const aliasSourceLocalPartRegex = /^[a-zA-Z0-9.*_+-]+$/
+
+export const addMailboxDialogSchema = z
+	.object({
+		localPart: z
+			.string()
+			.min(1)
+			.max(64)
+			.regex(mailboxLocalPartRegex),
+		password: z.string().min(8).max(256),
+		quotaMode: z.enum(["unlimited", "1gb", "5gb", "10gb", "custom"]),
+		customQuotaMb: z.string().optional(),
+		addAliasToMailbox: z.boolean(),
+		aliasSourceLocalPart: z.string().optional(),
+		addForwardRedirect: z.boolean(),
+		forwardSourceLocalPart: z.string().optional(),
+		forwardDestination: z.string().optional(),
+	})
+	.superRefine((val, ctx) => {
+		if (val.quotaMode === "custom") {
+			const raw = val.customQuotaMb?.trim() ?? ""
+			const n = Number.parseFloat(raw)
+			if (!raw || Number.isNaN(n) || n < 1 || n > 1_048_576) {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					message: "Enter a quota between 1 and 1048576 MB",
+					path: ["customQuotaMb"],
+				})
+			}
+		}
+		if (val.addAliasToMailbox) {
+			const s = val.aliasSourceLocalPart?.trim() ?? ""
+			if (!s) {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					message: "Alias local part is required",
+					path: ["aliasSourceLocalPart"],
+				})
+			} else if (!aliasSourceLocalPartRegex.test(s)) {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					message: "Use letters, numbers, and . _ + - * only",
+					path: ["aliasSourceLocalPart"],
+				})
+			} else if (s === val.localPart.trim()) {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					message: "Alias must differ from the mailbox username",
+					path: ["aliasSourceLocalPart"],
+				})
+			}
+		}
+		if (val.addForwardRedirect) {
+			const src = val.forwardSourceLocalPart?.trim() ?? ""
+			const dest = val.forwardDestination?.trim() ?? ""
+			if (!src) {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					message: "Local part is required",
+					path: ["forwardSourceLocalPart"],
+				})
+			} else if (!aliasSourceLocalPartRegex.test(src)) {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					message: "Use letters, numbers, and . _ + - * only",
+					path: ["forwardSourceLocalPart"],
+				})
+			} else if (src === val.localPart.trim()) {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					message: "Must differ from the mailbox username",
+					path: ["forwardSourceLocalPart"],
+				})
+			}
+			const parsed = z.string().email().safeParse(dest)
+			if (!parsed.success) {
+				ctx.addIssue({
+					code: z.ZodIssueCode.custom,
+					message: "Valid destination email required",
+					path: ["forwardDestination"],
+				})
+			}
+		}
+		const aliasSrc = val.addAliasToMailbox
+			? (val.aliasSourceLocalPart?.trim() ?? "")
+			: ""
+		const fwdSrc = val.addForwardRedirect
+			? (val.forwardSourceLocalPart?.trim() ?? "")
+			: ""
+		if (aliasSrc && fwdSrc && aliasSrc === fwdSrc) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: "Alias and forward address cannot use the same local part",
+				path: ["forwardSourceLocalPart"],
+			})
+		}
+	})
+
+export type AddMailboxDialogForm = z.infer<typeof addMailboxDialogSchema>
+
+export type MailboxQuotaMode = AddMailboxDialogForm["quotaMode"]
+
+export const quotaBytesFromMailboxDialog = (
+	mode: MailboxQuotaMode,
+	customQuotaMb: string | undefined,
+): number => {
+	const MB = 1024 * 1024
+	switch (mode) {
+		case "unlimited":
+			return 0
+		case "1gb":
+			return 1024 ** 3
+		case "5gb":
+			return 5 * 1024 ** 3
+		case "10gb":
+			return 10 * 1024 ** 3
+		case "custom": {
+			const n = Number.parseFloat(customQuotaMb?.trim() ?? "0")
+			return Math.round(n * MB)
+		}
+	}
+}
 
 export const createMailAliasInput = z.object({
 	domainId: z.string().min(1),

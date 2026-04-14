@@ -23,24 +23,24 @@ type EmailsStackCardProps = {
 export const EmailsStackCard = ({
 	stackRef,
 }: EmailsStackCardProps) => (
-	<Card className="h-full p-2.5 rounded-xl max-w-5xl mx-auto w-full">
+	<Card className="h-full w-full bg-sidebar p-2.5 rounded-xl">
 		<div className="rounded-xl bg-background shadow-md">
 			<CardHeader>
-				<CardTitle className="text-xl flex flex-row gap-2">
-					<Mail className="size-6 text-muted-foreground self-center" />
+				<CardTitle className="text-xl flex flex-row gap-2 items-center">
+					<Mail className="size-6 text-muted-foreground shrink-0" aria-hidden />
 					Emails
 				</CardTitle>
 				<CardDescription>
-					Mail stack: Exim (SMTP), Dovecot (IMAP), optional Roundcube webmail.
-					Provision files and DKIM after enabling mail on a domain.
+					Mail stack: Exim (SMTP), Dovecot (IMAP), and optional Roundcube webmail.
+					Enable mail on a domain, then provision DNS and DKIM.
 				</CardDescription>
 			</CardHeader>
-			<CardContent className="space-y-2 py-8 border-t">
+			<CardContent className="space-y-2 py-6 sm:py-8 border-t">
 				{stackRef ? (
-					<div className="text-xs text-muted-foreground">
+					<p className="text-xs text-muted-foreground font-mono break-all leading-relaxed">
 						Images: {stackRef.bindImage}, {stackRef.eximImage},{" "}
 						{stackRef.dovecotImage}, {stackRef.roundcubeImage}
-					</div>
+					</p>
 				) : null}
 			</CardContent>
 		</div>

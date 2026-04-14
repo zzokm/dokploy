@@ -171,7 +171,7 @@ async function cleanupFiles(appName: string) {
 	}
 }
 
-describe(
+describe.skipIf(process.platform === "win32")(
 	"deployApplication - REAL Execution Tests",
 	() => {
 		let currentAppName: string;

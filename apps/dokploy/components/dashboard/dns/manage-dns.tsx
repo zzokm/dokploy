@@ -163,11 +163,12 @@ export const ManageDns = () => {
 					<CardHeader>
 						<CardTitle className="text-xl flex flex-row gap-2">
 							<Globe className="size-6 text-muted-foreground self-center" />
-							DNS records
+							Authoritative DNS records (BIND)
 						</CardTitle>
 						<CardDescription>
-							Select a hosted domain, add records, then apply to write zone files
-							and reload BIND.
+							Advanced: manage zone records when Dokploy is your authoritative
+							DNS. External DNS users should follow the instructions in the
+							application Domains card.
 						</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-4 py-8 border-t">

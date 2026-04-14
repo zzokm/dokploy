@@ -193,6 +193,7 @@ describe("GHSA-66v7-g3fh-47h3 path traversal RCE", () => {
 });
 
 describe("security: existing symlink escape", () => {
+	const canCreateSymlinks = process.platform !== "win32"
 	beforeAll(async () => {
 		await fs.rm(APPLICATIONS_PATH, { recursive: true, force: true });
 	});
@@ -201,7 +202,9 @@ describe("security: existing symlink escape", () => {
 		await fs.rm(APPLICATIONS_PATH, { recursive: true, force: true });
 	});
 
-	it("should NOT write outside base when directory is a symlink", async () => {
+	it.skipIf(!canCreateSymlinks)(
+		"should NOT write outside base when directory is a symlink",
+		async () => {
 		const appName = "symlink-existing";
 		const output = path.join(APPLICATIONS_PATH, appName, "code");
 		await fs.mkdir(output, { recursive: true });
@@ -228,7 +231,8 @@ describe("security: existing symlink escape", () => {
 			.catch(() => false);
 
 		expect(escaped).toBe(false);
-	});
+		},
+	);
 });
 
 describe("security: zip symlink entry blocked", () => {

@@ -1,4 +1,6 @@
 import { exec, execFile } from "node:child_process";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import util from "node:util";
 import { findServerById } from "@dokploy/server/services/server";
 import { Client } from "ssh2";
@@ -13,6 +15,30 @@ export const execAsync = async (
 	command: string,
 	options?: { cwd?: string; env?: NodeJS.ProcessEnv; shell?: string },
 ): Promise<{ stdout: string; stderr: string }> => {
+	// Cross-platform: Windows does not support `mkdir -p` (POSIX).
+	// Several tests and internal helpers rely on this behavior.
+	if (process.platform === "win32") {
+		const trimmed = command.trim();
+		if (trimmed.startsWith("mkdir -p ")) {
+			const dirPath = trimmed.slice("mkdir -p ".length).trim();
+			if (dirPath && !dirPath.includes("&&") && !dirPath.includes("||")) {
+				await mkdir(dirPath, { recursive: true });
+				return { stdout: "", stderr: "" };
+			}
+		}
+
+		const echoToFileMatch = trimmed.match(/^echo\s+"([^"]*)"\s*>\s*(.+)$/);
+		if (echoToFileMatch) {
+			const content = echoToFileMatch[1] ?? "";
+			const filePath = (echoToFileMatch[2] ?? "").trim();
+			if (filePath && !filePath.includes("&&") && !filePath.includes("||")) {
+				await mkdir(path.dirname(filePath), { recursive: true });
+				await writeFile(filePath, `${content}\n`, "utf8");
+				return { stdout: "", stderr: "" };
+			}
+		}
+	}
+
 	try {
 		const result = await execAsyncBase(command, options);
 		return {

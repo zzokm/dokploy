@@ -26,6 +26,8 @@ export * from "./services/deployment";
 export * from "./services/destination";
 export * from "./services/docker";
 export * from "./services/domain";
+export * from "./services/domain-connection";
+export * from "./services/domain-target";
 export * from "./services/environment";
 export * from "./services/git-provider";
 export * from "./services/gitea";

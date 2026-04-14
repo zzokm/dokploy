@@ -210,14 +210,6 @@ const MENU: Menu = {
 		},
 		{
 			isSingle: true,
-			title: "DNS",
-			url: "/dashboard/dns",
-			icon: Network,
-			isEnabled: ({ permissions, isCloud }) =>
-				!!(permissions?.organization.update && !isCloud),
-		},
-		{
-			isSingle: true,
 			title: "Emails",
 			url: "/dashboard/emails",
 			icon: Mail,

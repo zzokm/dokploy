@@ -2,8 +2,7 @@
 
 import { addDomainFormSchema } from "@dokploy/server/validations/dns-mail-schemas"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Globe, Loader2 } from "lucide-react"
-import Link from "next/link"
+import { ChevronRight, Globe, Loader2 } from "lucide-react"
 import { useForm } from "react-hook-form"
 import { toast } from "sonner"
 import type { z } from "zod"
@@ -17,6 +16,12 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card"
+import {
+	Accordion,
+	AccordionContent,
+	AccordionItem,
+	AccordionTrigger,
+} from "@/components/ui/accordion"
 import {
 	Form,
 	FormControl,
@@ -35,6 +40,7 @@ import {
 	TableRow,
 } from "@/components/ui/table"
 import { api } from "@/utils/api"
+import { DomainDnsPanel } from "./domain-dns-panel"
 
 type AddDomainForm = z.infer<typeof addDomainFormSchema>
 
@@ -92,8 +98,9 @@ export const ManageDomains = () => {
 							Domains
 						</CardTitle>
 						<CardDescription>
-							Hosted domains: enable DNS and mail, then open DNS or Emails for
-							records and mailboxes.
+							Add a domain, then copy the required DNS records into your DNS
+							provider. You can also manage zone records per domain if you choose
+							to.
 						</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-2 py-8 border-t">
@@ -140,56 +147,42 @@ export const ManageDomains = () => {
 										</span>
 									</div>
 								) : (
-									<Table>
-										<TableHeader>
-											<TableRow>
-												<TableHead>Domain</TableHead>
-												<TableHead>DNS</TableHead>
-												<TableHead>Mail</TableHead>
-												<TableHead className="text-right">Actions</TableHead>
-											</TableRow>
-										</TableHeader>
-										<TableBody>
-											{domains.map((d) => (
-												<TableRow key={d.id}>
-													<TableCell className="font-medium">{d.name}</TableCell>
-													<TableCell>
-														{d.isDnsManaged ? (
-															<Badge variant="default">On</Badge>
-														) : (
-															<Badge variant="secondary">Off</Badge>
-														)}
-													</TableCell>
-													<TableCell>
-														{d.isMailManaged ? (
-															<Badge variant="default">On</Badge>
-														) : (
-															<Badge variant="secondary">Off</Badge>
-														)}
-													</TableCell>
-													<TableCell className="text-right space-x-2">
-														<Button size="sm" variant="outline" asChild>
-															<Link
-																href={`/dashboard/dns?domainId=${encodeURIComponent(d.id)}`}
+									<Accordion type="single" collapsible className="w-full">
+										{domains.map((d) => (
+											<AccordionItem key={d.id} value={d.id} className="border rounded-md mb-2">
+												<AccordionTrigger className="px-4 hover:no-underline">
+													<div className="flex w-full items-center justify-between gap-3 flex-wrap">
+														<div className="flex items-center gap-3">
+															<div className="font-medium">{d.name}</div>
+															<div className="flex items-center gap-2">
+																<Badge variant={d.isDnsManaged ? "default" : "secondary"}>
+																	DNS {d.isDnsManaged ? "On" : "Off"}
+																</Badge>
+																<Badge variant={d.isMailManaged ? "default" : "secondary"}>
+																	Mail {d.isMailManaged ? "On" : "Off"}
+																</Badge>
+															</div>
+														</div>
+														<div className="flex items-center gap-2">
+															<Button
+																size="sm"
+																variant="ghost"
+																type="button"
+																className="text-muted-foreground"
 															>
-																Manage DNS
-															</Link>
-														</Button>
-														<Button size="sm" variant="outline" asChild>
-															<Link
-																href={`/dashboard/emails?domainId=${encodeURIComponent(d.id)}`}
-															>
-																Manage mail
-															</Link>
-														</Button>
+																Details <ChevronRight className="size-4 ml-1" aria-hidden />
+															</Button>
+														</div>
+													</div>
+												</AccordionTrigger>
+												<AccordionContent className="px-4 pb-4">
+													<div className="flex items-center justify-end gap-2 pb-3">
 														<Button
 															size="sm"
 															variant="secondary"
 															type="button"
 															isLoading={applyDns.isPending}
-															onClick={() =>
-																applyDns.mutate({ domainId: d.id })
-															}
+															onClick={() => applyDns.mutate({ domainId: d.id })}
 														>
 															Apply DNS
 														</Button>
@@ -201,19 +194,17 @@ export const ManageDomains = () => {
 																await deleteDomain.mutateAsync({ id: d.id })
 															}}
 														>
-															<Button
-																size="sm"
-																variant="ghost"
-																className="text-destructive"
-															>
+															<Button size="sm" variant="ghost" className="text-destructive">
 																Delete
 															</Button>
 														</DialogAction>
-													</TableCell>
-												</TableRow>
-											))}
-										</TableBody>
-									</Table>
+													</div>
+
+													<DomainDnsPanel domainId={d.id} />
+												</AccordionContent>
+											</AccordionItem>
+										))}
+									</Accordion>
 								)}
 							</>
 						)}

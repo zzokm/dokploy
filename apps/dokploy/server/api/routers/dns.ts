@@ -13,6 +13,7 @@ import {
 	getHostedDomainById,
 	listHostedDomains,
 } from "@dokploy/server/services/dns"
+import { findServerById, getWebServerSettings, validateDomain } from "@dokploy/server"
 import { deployCoreServices } from "@dokploy/server/services/docker/bootstrap-core-services"
 import {
 	CORE_BIND_IMAGE,
@@ -222,6 +223,71 @@ export const dnsRouter = createTRPCRouter({
 				organizationId: oid,
 			})
 			return { ok: true as const }
+		}),
+
+	getConnectionInfo: protectedProcedure
+		.input(z.object({ domainId: z.string().min(1) }))
+		.query(async ({ ctx, input }) => {
+			const oid = orgId(ctx.session)
+			const d = await getHostedDomainById(db, input.domainId, oid)
+			if (!d) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "Domain not found" })
+			}
+
+			let expectedIp = ""
+			if (d.serverId) {
+				const server = await findServerById(d.serverId)
+				expectedIp = server.ipAddress
+			} else {
+				const settings = await getWebServerSettings()
+				expectedIp = settings?.serverIp || ""
+			}
+
+			const ns1 = `ns1.${d.name}`
+			const ns2 = `ns2.${d.name}`
+
+			return {
+				domainId: d.id,
+				name: d.name,
+				expectedIp,
+				records: expectedIp
+					? [
+							{ type: "A" as const, name: "@", value: expectedIp },
+							{ type: "A" as const, name: "www", value: expectedIp },
+					  ]
+					: [],
+				nameservers: [
+					{ type: "NS" as const, name: "@", value: ns1 },
+					{ type: "NS" as const, name: "@", value: ns2 },
+				],
+				glue: expectedIp
+					? [
+							{ type: "A" as const, name: "ns1", value: expectedIp },
+							{ type: "A" as const, name: "ns2", value: expectedIp },
+					  ]
+					: [],
+			}
+		}),
+
+	verifyConnection: protectedProcedure
+		.input(z.object({ domainId: z.string().min(1) }))
+		.mutation(async ({ ctx, input }) => {
+			const oid = orgId(ctx.session)
+			const d = await getHostedDomainById(db, input.domainId, oid)
+			if (!d) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "Domain not found" })
+			}
+
+			let expectedIp = ""
+			if (d.serverId) {
+				const server = await findServerById(d.serverId)
+				expectedIp = server.ipAddress
+			} else {
+				const settings = await getWebServerSettings()
+				expectedIp = settings?.serverIp || ""
+			}
+
+			return validateDomain(d.name, expectedIp || undefined)
 		}),
 
 	health: protectedProcedure.query(async ({ ctx }) => {

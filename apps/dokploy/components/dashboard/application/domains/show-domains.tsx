@@ -1,17 +1,13 @@
 import {
-	CheckCircle2,
 	ExternalLink,
 	GlobeIcon,
 	InfoIcon,
 	Loader2,
 	PenBoxIcon,
-	RefreshCw,
 	Server,
 	Trash2,
-	XCircle,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
 import { toast } from "sonner";
 import { DialogAction } from "@/components/shared/dialog-action";
 import { Badge } from "@/components/ui/badge";
@@ -30,19 +26,8 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { api } from "@/utils/api";
-import { DnsHelperModal } from "./dns-helper-modal";
 import { AddDomain } from "./handle-domain";
-
-export type ValidationState = {
-	isLoading: boolean;
-	isValid?: boolean;
-	error?: string;
-	resolvedIp?: string;
-	message?: string;
-	cdnProvider?: string;
-};
-
-export type ValidationStates = Record<string, ValidationState>;
+import { DomainConnectionPanel } from "./domain-connection-panel";
 
 interface Props {
 	id: string;
@@ -71,11 +56,6 @@ export const ShowDomains = ({ id, type }: Props) => {
 						enabled: !!id,
 					},
 				);
-	const [validationStates, setValidationStates] = useState<ValidationStates>(
-		{},
-	);
-	const { data: ip } = api.settings.getIp.useQuery();
-
 	const {
 		data,
 		refetch,
@@ -98,47 +78,8 @@ export const ShowDomains = ({ id, type }: Props) => {
 				},
 			);
 
-	const { mutateAsync: validateDomain } =
-		api.domain.validateDomain.useMutation();
 	const { mutateAsync: deleteDomain, isPending: isRemoving } =
 		api.domain.delete.useMutation();
-
-	const handleValidateDomain = async (host: string) => {
-		setValidationStates((prev) => ({
-			...prev,
-			[host]: { isLoading: true },
-		}));
-
-		try {
-			const result = await validateDomain({
-				domain: host,
-				serverIp:
-					application?.server?.ipAddress?.toString() || ip?.toString() || "",
-			});
-
-			setValidationStates((prev) => ({
-				...prev,
-				[host]: {
-					isLoading: false,
-					isValid: result.isValid,
-					error: result.error,
-					resolvedIp: result.resolvedIp,
-					cdnProvider: result.cdnProvider,
-					message: result.error && result.isValid ? result.error : undefined,
-				},
-			}));
-		} catch (err) {
-			const error = err as Error;
-			setValidationStates((prev) => ({
-				...prev,
-				[host]: {
-					isLoading: false,
-					isValid: false,
-					error: error.message || "Failed to validate domain",
-				},
-			}));
-		}
-	};
 
 	return (
 		<div className="flex w-full flex-col gap-5 ">
@@ -189,7 +130,6 @@ export const ShowDomains = ({ id, type }: Props) => {
 					) : (
 						<div className="grid grid-cols-1 gap-4 xl:grid-cols-2 w-full min-h-[40vh] ">
 							{data?.map((item) => {
-								const validationState = validationStates[item.host];
 								return (
 									<Card
 										key={item.domainId}
@@ -206,19 +146,6 @@ export const ShowDomains = ({ id, type }: Props) => {
 														</Badge>
 													)}
 													<div className="flex gap-2 flex-wrap">
-														{!item.host.includes("traefik.me") && (
-															<DnsHelperModal
-																domain={{
-																	host: item.host,
-																	https: item.https,
-																	path: item.path || undefined,
-																}}
-																serverIp={
-																	application?.server?.ipAddress?.toString() ||
-																	ip?.toString()
-																}
-															/>
-														)}
 														{canCreateDomain && (
 															<AddDomain
 																id={id}
@@ -340,64 +267,13 @@ export const ShowDomains = ({ id, type }: Props) => {
 															</Tooltip>
 														</TooltipProvider>
 													)}
-
-													<TooltipProvider>
-														<Tooltip>
-															<TooltipTrigger asChild>
-																<Badge
-																	variant="outline"
-																	className={
-																		validationState?.isValid
-																			? "bg-green-500/10 text-green-500 cursor-pointer"
-																			: validationState?.error
-																				? "bg-red-500/10 text-red-500 cursor-pointer"
-																				: "bg-yellow-500/10 text-yellow-500 cursor-pointer"
-																	}
-																	onClick={() =>
-																		handleValidateDomain(item.host)
-																	}
-																>
-																	{validationState?.isLoading ? (
-																		<>
-																			<Loader2 className="size-3 mr-1 animate-spin" />
-																			Checking DNS...
-																		</>
-																	) : validationState?.isValid ? (
-																		<>
-																			<CheckCircle2 className="size-3 mr-1" />
-																			{validationState.message &&
-																			validationState.cdnProvider
-																				? `Behind ${validationState.cdnProvider}`
-																				: "DNS Valid"}
-																		</>
-																	) : validationState?.error ? (
-																		<>
-																			<XCircle className="size-3 mr-1" />
-																			{validationState.error}
-																		</>
-																	) : (
-																		<>
-																			<RefreshCw className="size-3 mr-1" />
-																			Validate DNS
-																		</>
-																	)}
-																</Badge>
-															</TooltipTrigger>
-															<TooltipContent className="max-w-xs">
-																{validationState?.error ? (
-																	<div className="flex flex-col gap-1">
-																		<p className="font-medium text-red-500">
-																			Error:
-																		</p>
-																		<p>{validationState.error}</p>
-																	</div>
-																) : (
-																	"Click to validate DNS configuration"
-																)}
-															</TooltipContent>
-														</Tooltip>
-													</TooltipProvider>
 												</div>
+
+												{!item.host.includes("traefik.me") ? (
+													<div className="pt-1">
+														<DomainConnectionPanel domainId={item.domainId} />
+													</div>
+												) : null}
 											</div>
 										</CardContent>
 									</Card>

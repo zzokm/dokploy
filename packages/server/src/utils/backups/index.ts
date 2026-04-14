@@ -3,6 +3,7 @@ import { member } from "@dokploy/server/db/schema";
 import type { BackupSchedule } from "@dokploy/server/services/backup";
 import { getAllServers } from "@dokploy/server/services/server";
 import { getWebServerSettings } from "@dokploy/server/services/web-server-settings";
+import { pollDomainConnectionsOnce } from "@dokploy/server/services/domain-connection";
 import { eq } from "drizzle-orm";
 import { scheduleJob } from "node-schedule";
 import { db } from "../../db/index";
@@ -104,6 +105,19 @@ export const initCronJobs = async () => {
 		} catch (error) {
 			console.error("[Backup] Log Cleanup Error", error);
 		}
+	}
+
+	try {
+		scheduleJob("domain-connection-poll", "*/10 * * * *", async () => {
+			const result = await pollDomainConnectionsOnce({ limit: 20 });
+			if (result.checked > 0) {
+				console.log(
+					`[Domain] Polled ${result.checked} domain connection checks`,
+				);
+			}
+		});
+	} catch (error) {
+		console.error("[Domain] Poll schedule error", error);
 	}
 };
 

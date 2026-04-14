@@ -7,6 +7,7 @@ export * from "./bitbucket";
 export * from "./certificate";
 export * from "./compose";
 export * from "./deployment";
+export * from "./domain-connection-check";
 export * from "./destination";
 export * from "./domain";
 export * from "./environment";

@@ -16,6 +16,8 @@ import {
 import { getWebServerSettings } from "@dokploy/server/services/web-server-settings"
 import { unsealString } from "@dokploy/server/utils/crypto/seal"
 import { readDkimDnsTxtFromPublicKeyFile } from "@dokploy/server/utils/mail/dkim-openssl"
+import { parseDkimTxtFromMailDotTxt } from "@dokploy/server/utils/mail/dms-dkim-mail-txt"
+import { readFile } from "node:fs/promises"
 import { upsertCloudflareDnsRecord } from "./dns-records"
 
 const MAIL_DKIM_SELECTOR = "mail"
@@ -117,11 +119,24 @@ export const provisionMailDnsForZone = async (input: {
 	await ensureDkimForMailDomain(db, hostedDomainId)
 
 	const p = serverPaths(false)
-	const publicPath = path.join(
-		p.dkimKeysDir,
-		`${apex}.${MAIL_DKIM_SELECTOR}.public.pem`,
+	const mailTxtPath = path.join(
+		p.mailDmsConfigDir,
+		"opendkim",
+		"keys",
+		apex,
+		"mail.txt",
 	)
-	const dkimTxt = await readDkimDnsTxtFromPublicKeyFile(publicPath)
+	let dkimTxt: string
+	try {
+		const raw = await readFile(mailTxtPath, "utf8")
+		dkimTxt = parseDkimTxtFromMailDotTxt(raw)
+	} catch {
+		const publicPath = path.join(
+			p.dkimKeysDir,
+			`${apex}.${MAIL_DKIM_SELECTOR}.public.pem`,
+		)
+		dkimTxt = await readDkimDnsTxtFromPublicKeyFile(publicPath)
+	}
 
 	await upsertCloudflareDnsRecord({
 		token,

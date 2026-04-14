@@ -1,39 +1,12 @@
 import type Dockerode from "dockerode"
+import { execDmsSupervisor } from "../mail/dms-setup-exec"
 
 type MailContainerPaths = {
-	dovecotContainerName: string
-	eximContainerName: string
-}
-
-const execAndDrain = async (
-	docker: Dockerode,
-	containerName: string,
-	cmd: string[],
-): Promise<void> => {
-	const container = docker.getContainer(containerName)
-	const exec = await container.exec({
-		Cmd: cmd,
-		AttachStdout: true,
-		AttachStderr: true,
-	})
-	await new Promise<void>((resolve, reject) => {
-		exec.start({ hijack: true, Tty: false }, (err, stream) => {
-			if (err) {
-				reject(err)
-				return
-			}
-			if (!stream) {
-				reject(new Error("No exec stream"))
-				return
-			}
-			stream.on("end", () => resolve())
-			stream.on("error", reject)
-		})
-	})
+	mailserverContainerName: string
 }
 
 /**
- * Reload Dovecot (`doveadm reload`) and Exim (`SIGHUP`) after global mail auth files change.
+ * Reloads postfix and dovecot inside docker-mailserver after config / TLS changes.
  * Skipped when `PANEL_SKIP_MAIL_RELOAD=true` (debug).
  */
 export const reloadMailServices = async (
@@ -44,14 +17,19 @@ export const reloadMailServices = async (
 		return
 	}
 	try {
-		await execAndDrain(docker, p.dovecotContainerName, ["doveadm", "reload"])
+		await execDmsSupervisor(docker, p.mailserverContainerName, [
+			"restart",
+			"postfix",
+		])
 	} catch {
 		// Container may be absent in dev
 	}
 	try {
-		const exim = docker.getContainer(p.eximContainerName)
-		await exim.kill({ signal: "HUP" })
+		await execDmsSupervisor(docker, p.mailserverContainerName, [
+			"restart",
+			"dovecot",
+		])
 	} catch {
-		// Exim may not be running
+		// Dovecot may not be running yet
 	}
 }

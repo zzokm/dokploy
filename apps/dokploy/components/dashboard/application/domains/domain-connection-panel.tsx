@@ -1,6 +1,6 @@
 "use client"
 
-import { Copy, Loader2, RefreshCw } from "lucide-react"
+import { Copy, Globe, Loader2, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -80,50 +80,55 @@ export const DomainConnectionPanel = ({ domainId }: DomainConnectionPanelProps) 
 	const statusMessage = status.data?.message ?? null
 
 	return (
-		<div className="rounded-xl border border-border bg-muted/30 p-4 space-y-4">
-			<div className="space-y-1">
-				<p className="text-sm font-medium">Connection &amp; DNS</p>
-				<p className="text-xs text-muted-foreground">
-					Point DNS at your server, then verify. Copy values into your DNS provider if you are not using Cloudflare automation.
-				</p>
+		<div className="flex w-full flex-col gap-3 rounded-lg border p-3 transition-colors bg-muted/50 sm:flex-row sm:items-start">
+			<div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/5">
+				<Globe className="size-4 text-primary/70" aria-hidden />
 			</div>
-
-			<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-				<Badge variant="outline" className={badgeClassForStatus(currentStatus)}>
-					{verify.isPending || status.isFetching ? (
-						<>
-							<Loader2 className="size-3 mr-1 animate-spin" aria-hidden />
-							Checking
-						</>
-					) : (
-						labelForStatus(currentStatus)
-					)}
-				</Badge>
-				<Button
-					type="button"
-					variant="outline"
-					size="sm"
-					className="w-full sm:w-auto shrink-0"
-					isLoading={verify.isPending}
-					onClick={() => verify.mutate({ domainId })}
-				>
-					<RefreshCw className="size-4 mr-2" aria-hidden />
-					Verify connection
-				</Button>
-			</div>
-
-			{statusMessage ? (
-				<p className="text-sm text-muted-foreground">{statusMessage}</p>
-			) : null}
-
-			{instructions.isPending ? (
-				<div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-					<Loader2 className="size-4 animate-spin shrink-0" aria-hidden />
-					<span>Loading DNS instructions…</span>
+			<div className="min-w-0 flex-1 space-y-3">
+				<div className="space-y-1">
+					<p className="text-sm font-medium leading-none">Connection &amp; DNS</p>
+					<p className="text-xs text-muted-foreground">
+						Point DNS at your server, then verify. Copy values into your DNS provider if you are not using
+						Cloudflare automation.
+					</p>
 				</div>
-			) : instructions.data?.records?.length ? (
-				<div className="rounded-lg border border-border overflow-hidden bg-background">
-					<Table>
+
+				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+					<Badge variant="outline" className={`w-fit text-[11px] ${badgeClassForStatus(currentStatus)}`}>
+						{verify.isPending || status.isFetching ? (
+							<>
+								<Loader2 className="mr-1 size-3 animate-spin" aria-hidden />
+								Checking
+							</>
+						) : (
+							labelForStatus(currentStatus)
+						)}
+					</Badge>
+					<Button
+						type="button"
+						variant="outline"
+						size="sm"
+						className="w-full shrink-0 sm:w-auto"
+						isLoading={verify.isPending}
+						onClick={() => verify.mutate({ domainId })}
+					>
+						<RefreshCw className="mr-2 size-4" aria-hidden />
+						Verify connection
+					</Button>
+				</div>
+
+				{statusMessage ? (
+					<p className="text-xs text-muted-foreground">{statusMessage}</p>
+				) : null}
+
+				{instructions.isPending ? (
+					<div className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
+						<Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+						<span>Loading DNS instructions…</span>
+					</div>
+				) : instructions.data?.records?.length ? (
+					<div className="overflow-hidden rounded-md border bg-background">
+						<Table>
 						<TableHeader>
 							<TableRow>
 								<TableHead className="w-[72px] sm:w-[90px]">Type</TableHead>
@@ -157,11 +162,12 @@ export const DomainConnectionPanel = ({ domainId }: DomainConnectionPanelProps) 
 						</TableBody>
 					</Table>
 				</div>
-			) : (
-				<p className="text-sm text-muted-foreground">
-					No DNS instructions available for this domain yet.
-				</p>
-			)}
+				) : (
+					<p className="text-xs text-muted-foreground">
+						No DNS instructions available for this domain yet.
+					</p>
+				)}
+			</div>
 		</div>
 	)
 }

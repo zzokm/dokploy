@@ -127,14 +127,16 @@ export const MailMailboxesCard = ({
 						apexDomain={domainName}
 					/>
 
-					<div className="rounded-lg border overflow-hidden">
-						<Table>
+					<div className="rounded-lg border overflow-x-auto">
+						<Table className="min-w-[560px]">
 							<TableHeader>
 								<TableRow>
 									<TableHead>Address</TableHead>
 									<TableHead>Active</TableHead>
 									<TableHead>Quota</TableHead>
-									<TableHead className="text-right min-w-[220px]">Actions</TableHead>
+									<TableHead className="text-right w-[1%] whitespace-nowrap min-w-[200px] pl-4">
+										Actions
+									</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
@@ -151,12 +153,13 @@ export const MailMailboxesCard = ({
 											)}
 										</TableCell>
 										<TableCell>{formatMailboxQuota(m.quotaBytes)}</TableCell>
-										<TableCell className="text-right">
-											<div className="flex flex-wrap justify-end gap-2">
+										<TableCell className="text-right align-middle p-2 sm:p-3">
+											<div className="inline-flex flex-row flex-nowrap items-center justify-end gap-2">
 												<Button
 													type="button"
 													size="sm"
 													variant="default"
+													className="shrink-0"
 													aria-label={`Open Roundcube webmail for ${m.localPart}@${domainName}`}
 													onClick={() => setWebmailLocalPart(m.localPart)}
 												>
@@ -166,6 +169,7 @@ export const MailMailboxesCard = ({
 													type="button"
 													size="sm"
 													variant="outline"
+													className="shrink-0"
 													aria-label={`Connection settings for ${m.localPart}@${domainName}`}
 													onClick={() => onOpenConnection(m.localPart)}
 												>

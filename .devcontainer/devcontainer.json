@@ -39,6 +39,7 @@
 		1053,
 		3025,
 		3587,
+		3465,
 		3143,
 		3993,
 		3080
@@ -65,19 +66,23 @@
 			"onAutoForward": "silent"
 		},
 		"3025": {
-			"label": "Panel Exim SMTP (mail profile)",
+			"label": "Panel DMS SMTP 25 (mail profile)",
 			"onAutoForward": "silent"
 		},
 		"3587": {
-			"label": "Panel Exim submission 587 (mail profile)",
+			"label": "Panel DMS submission 587 (mail profile)",
+			"onAutoForward": "silent"
+		},
+		"3465": {
+			"label": "Panel DMS SMTPS 465 (mail profile)",
 			"onAutoForward": "silent"
 		},
 		"3143": {
-			"label": "Panel Dovecot IMAP (mail profile)",
+			"label": "Panel DMS IMAP 143 (mail profile)",
 			"onAutoForward": "silent"
 		},
 		"3993": {
-			"label": "Panel Dovecot IMAPS (mail profile)",
+			"label": "Panel DMS IMAPS 993 (mail profile)",
 			"onAutoForward": "silent"
 		}
 	},

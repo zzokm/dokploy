@@ -65,62 +65,57 @@ export const ShowDomains = ({ id, type }: Props) => {
 		api.domain.delete.useMutation();
 
 	return (
-		<div className="flex w-full max-w-5xl mx-auto flex-col gap-6">
-			<Card className="h-full w-full bg-sidebar p-2.5 rounded-xl">
-				<div className="rounded-xl bg-background shadow-md">
-					<CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:flex-wrap">
-						<div className="flex flex-col gap-1 min-w-0">
-							<CardTitle className="text-xl flex flex-row gap-2 items-center">
-								<GlobeIcon className="size-6 text-muted-foreground shrink-0" aria-hidden />
-								Domains
-							</CardTitle>
-							<CardDescription>
-								Hostnames and paths that route traffic to this deployment through Traefik.
-							</CardDescription>
-						</div>
-
-						<div className="flex flex-row gap-2 flex-wrap shrink-0">
-							{canCreateDomain && data && data?.length > 0 && (
-								<AddDomain id={id} type={type}>
-									<Button type="button" className="gap-2">
-										<GlobeIcon className="size-4 shrink-0" aria-hidden />
-										Add domain
-									</Button>
-								</AddDomain>
-							)}
-						</div>
-					</CardHeader>
-					<CardContent className="flex w-full flex-col gap-4 border-t py-6">
-					{isLoadingDomains ? (
-						<div className="flex w-full flex-col sm:flex-row gap-3 min-h-[40vh] justify-center items-center text-muted-foreground">
-							<Loader2 className="size-5 animate-spin shrink-0" aria-hidden />
-							<span className="text-sm sm:text-base">Loading domains…</span>
-						</div>
-					) : data?.length === 0 ? (
-						<div className="flex w-full flex-col items-center justify-center gap-4 min-h-[40vh] px-4 text-center">
-							<GlobeIcon className="size-10 text-muted-foreground" aria-hidden />
-							<p className="text-sm sm:text-base text-muted-foreground max-w-md">
-								Add at least one domain so Traefik can route HTTP traffic to your service.
-							</p>
-							{canCreateDomain && (
-								<AddDomain id={id} type={type}>
-									<Button type="button" className="gap-2">
-										<GlobeIcon className="size-4 shrink-0" aria-hidden />
-										Add domain
-									</Button>
-								</AddDomain>
-							)}
-						</div>
-					) : (
-						<div className="grid grid-cols-1 gap-4 xl:grid-cols-2 w-full min-h-[40vh]">
-							{data?.map((item) => {
-								return (
-									<Card
-										key={item.domainId}
-										className="relative overflow-hidden w-full border border-border bg-card transition-shadow hover:shadow-md rounded-xl h-fit"
-									>
-										<CardContent className="p-5 sm:p-6">
-											<div className="flex flex-col gap-4">
+		<Card className="h-full min-h-[50vh] border bg-transparent px-6 shadow-none">
+			<CardHeader className="px-0">
+				<div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:flex-wrap">
+					<div className="flex min-w-0 flex-col gap-2">
+						<CardTitle className="text-xl font-bold">Domains</CardTitle>
+						<CardDescription>
+							Hostnames and paths that route traffic to this deployment through Traefik.
+						</CardDescription>
+					</div>
+					<div className="flex shrink-0 flex-row flex-wrap gap-2">
+						{canCreateDomain && data && data?.length > 0 && (
+							<AddDomain id={id} type={type}>
+								<Button type="button" className="gap-2">
+									<GlobeIcon className="size-4 shrink-0" aria-hidden />
+									Add domain
+								</Button>
+							</AddDomain>
+						)}
+					</div>
+				</div>
+			</CardHeader>
+			<CardContent className="flex w-full flex-col gap-4 px-0 pb-2">
+				{isLoadingDomains ? (
+					<div className="flex min-h-[45vh] w-full flex-col items-center justify-center gap-3 text-center text-muted-foreground/70 sm:flex-row">
+						<Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+						<span className="text-sm">Loading domains…</span>
+					</div>
+				) : data?.length === 0 ? (
+					<div className="flex min-h-[45vh] w-full flex-col items-center justify-center gap-4 px-4 text-center">
+						<GlobeIcon className="size-10 text-muted-foreground" aria-hidden />
+						<p className="max-w-md text-sm text-muted-foreground">
+							Add at least one domain so Traefik can route HTTP traffic to your service.
+						</p>
+						{canCreateDomain && (
+							<AddDomain id={id} type={type}>
+								<Button type="button" className="gap-2">
+									<GlobeIcon className="size-4 shrink-0" aria-hidden />
+									Add domain
+								</Button>
+							</AddDomain>
+						)}
+					</div>
+				) : (
+					<div className="grid min-h-[40vh] w-full grid-cols-1 gap-4 xl:grid-cols-2">
+						{data?.map((item) => {
+							return (
+								<div
+									key={item.domainId}
+									className="flex h-fit w-full flex-col gap-4 rounded-lg border p-4 transition-colors bg-muted/50"
+								>
+									<div className="flex flex-col gap-4">
 												{/* Service & Domain Info */}
 												<div className="flex items-center justify-between flex-wrap gap-y-2">
 													{item.serviceName && (
@@ -260,17 +255,7 @@ export const ShowDomains = ({ id, type }: Props) => {
 
 												{!item.host.includes("traefik.me") &&
 												item.dnsProvider !== "cloudflare" ? (
-													<div className="pt-1">
-														<DomainConnectionPanel domainId={item.domainId} />
-													</div>
-												) : null}
-
-												{item.dnsProvider === "cloudflare" &&
-												!item.host.includes("traefik.me") ? (
-													<p className="text-sm text-muted-foreground pt-1">
-														DNS records are created automatically in Cloudflare. Use
-														the controls below to adjust proxying and sync.
-													</p>
+													<DomainConnectionPanel domainId={item.domainId} />
 												) : null}
 
 												{!item.host.includes("traefik.me") ? (
@@ -283,15 +268,12 @@ export const ShowDomains = ({ id, type }: Props) => {
 													/>
 												) : null}
 											</div>
-										</CardContent>
-									</Card>
-								);
-							})}
-						</div>
-					)}
-					</CardContent>
-				</div>
-			</Card>
-		</div>
+								</div>
+							);
+						})}
+					</div>
+				)}
+			</CardContent>
+		</Card>
 	);
 };

@@ -145,18 +145,22 @@ export const applyDnsForDomain = async (
 export const replaceStandardMailDnsRecords = async (
 	db: PostgresJsDatabase<typeof schema>,
 	domainId: string,
-	opts: { mailHost: string; dkimTxt: string },
+	opts: { mailHost: string; dkimTxt: string; serverIp?: string | null },
 ) => {
-	const exists = await db
-		.select({ id: hostedDomain.id })
+	const [row] = await db
+		.select({ id: hostedDomain.id, name: hostedDomain.name })
 		.from(hostedDomain)
 		.where(eq(hostedDomain.id, domainId))
 		.limit(1);
-	if (!exists[0]) {
+	if (!row) {
 		return;
 	}
-	const spf = "v=spf1 mx ~all";
-	const dmarc = "v=DMARC1; p=quarantine; adkim=r; aspf=r;";
+	const apex = row.name.trim().toLowerCase();
+	const ip = opts.serverIp?.trim();
+	const spf = ip
+		? `v=spf1 mx a ip4:${ip} ~all`
+		: "v=spf1 mx ~all";
+	const dmarc = `v=DMARC1; p=quarantine; rua=mailto:postmaster@${apex}`;
 	const mailHost = opts.mailHost.replace(/\.$/, "");
 	const rows = [
 		{

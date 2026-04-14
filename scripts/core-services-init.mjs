@@ -65,10 +65,29 @@ const mailDirs = [
 	"mail/tls",
 	"mail/dkim",
 	"mail/roundcube",
+	"mail/state",
+	"mail/logs",
+	"mail/dms-config",
+	"mail/dms-config/ssl",
 ]
 const base = join(repoRoot, "apps/dokploy/.docker/core-services")
 for (const rel of mailDirs) {
 	const dir = join(base, rel)
 	mkdirSync(dir, { recursive: true })
+}
+const dmsCert = join(base, "mail/dms-config/ssl/cert.pem")
+const dmsKey = join(base, "mail/dms-config/ssl/key.pem")
+if (!existsSync(dmsCert) || !existsSync(dmsKey)) {
+	try {
+		execSync(
+			`openssl req -x509 -nodes -newkey rsa:2048 -keyout "${dmsKey}" -out "${dmsCert}" -days 3650 -subj "/CN=dokploy-mailserver/O=Dokploy"`,
+			{ stdio: "ignore" },
+		)
+		console.info("Created placeholder TLS PEMs for docker-mailserver (SSL_TYPE=manual)")
+	} catch {
+		console.warn(
+			"openssl not available: create mail/dms-config/ssl/cert.pem and key.pem before starting docker-mailserver with SSL_TYPE=manual",
+		)
+	}
 }
 console.info(`Ensured mail directories under ${base}`)

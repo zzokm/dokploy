@@ -11,8 +11,7 @@ import {
 
 type StackRef = {
 	bindImage: string
-	eximImage: string
-	dovecotImage: string
+	mailserverImage: string
 	roundcubeImage: string
 }
 
@@ -31,15 +30,15 @@ export const EmailsStackCard = ({
 					Emails
 				</CardTitle>
 				<CardDescription>
-					Mail stack: Exim (SMTP), Dovecot (IMAP), and optional Roundcube webmail.
+					Mail stack: docker-mailserver (Postfix, Dovecot, filters) and Roundcube webmail.
 					Enable mail on a domain, then provision DNS and DKIM.
 				</CardDescription>
 			</CardHeader>
 			<CardContent className="space-y-2 py-6 sm:py-8 border-t">
 				{stackRef ? (
 					<p className="text-xs text-muted-foreground font-mono break-all leading-relaxed">
-						Images: {stackRef.bindImage}, {stackRef.eximImage},{" "}
-						{stackRef.dovecotImage}, {stackRef.roundcubeImage}
+						Images: {stackRef.bindImage}, {stackRef.mailserverImage},{" "}
+						{stackRef.roundcubeImage}
 					</p>
 				) : null}
 			</CardContent>

@@ -80,7 +80,7 @@ export const MailDomainsListCard = ({
 				{allDomains?.some((d) => !d.isMailManaged) && (
 					<div className="space-y-3">
 						<h3 className="text-sm font-medium">Enable mail on a domain</h3>
-						<div className="rounded-lg border overflow-hidden">
+						<div className="rounded-lg border overflow-x-auto">
 						<Table>
 							<TableHeader>
 								<TableRow>
@@ -125,13 +125,15 @@ export const MailDomainsListCard = ({
 						</span>
 					</div>
 				) : (
-					<div className="rounded-lg border overflow-hidden">
-					<Table>
+					<div className="rounded-lg border overflow-x-auto">
+					<Table className="min-w-[520px]">
 						<TableHeader>
 							<TableRow>
 								<TableHead>Domain</TableHead>
 								<TableHead>DKIM</TableHead>
-								<TableHead className="text-right">Actions</TableHead>
+								<TableHead className="text-right w-[1%] whitespace-nowrap pl-4">
+									Actions
+								</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
@@ -145,24 +147,28 @@ export const MailDomainsListCard = ({
 											<Badge variant="secondary">Not provisioned</Badge>
 										)}
 									</TableCell>
-									<TableCell className="text-right space-x-2">
-										<Button
-											size="sm"
-											variant={selectedId === d.id ? "default" : "outline"}
-											type="button"
-											onClick={() => onSelectDomain(d.id)}
-										>
-											Manage
-										</Button>
-										<Button
-											size="sm"
-											variant="secondary"
-											type="button"
-											isLoading={provisionPending}
-											onClick={() => onProvision(d.id)}
-										>
-											Provision
-										</Button>
+									<TableCell className="text-right align-middle p-2 sm:p-3">
+										<div className="inline-flex flex-row flex-nowrap items-center justify-end gap-2">
+											<Button
+												size="sm"
+												variant={selectedId === d.id ? "default" : "outline"}
+												type="button"
+												className="shrink-0"
+												onClick={() => onSelectDomain(d.id)}
+											>
+												Manage
+											</Button>
+											<Button
+												size="sm"
+												variant="secondary"
+												type="button"
+												className="shrink-0"
+												isLoading={provisionPending}
+												onClick={() => onProvision(d.id)}
+											>
+												Provision
+											</Button>
+										</div>
 									</TableCell>
 								</TableRow>
 							))}

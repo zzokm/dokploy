@@ -17,8 +17,7 @@ import { findServerById, getWebServerSettings, validateDomain } from "@dokploy/s
 import { deployCoreServices } from "@dokploy/server/services/docker/bootstrap-core-services"
 import {
 	CORE_BIND_IMAGE,
-	CORE_DOVECOT_IMAGE,
-	CORE_EXIM_IMAGE,
+	CORE_DMS_IMAGE,
 	CORE_ROUNDCUBE_IMAGE,
 } from "@dokploy/server/utils/docker/core-services"
 import { TRPCError } from "@trpc/server"
@@ -307,8 +306,7 @@ export const dnsRouter = createTRPCRouter({
 
 	stackReference: protectedProcedure.query(() => ({
 		bindImage: CORE_BIND_IMAGE,
-		eximImage: CORE_EXIM_IMAGE,
-		dovecotImage: CORE_DOVECOT_IMAGE,
+		mailserverImage: CORE_DMS_IMAGE,
 		roundcubeImage: CORE_ROUNDCUBE_IMAGE,
 	})),
 

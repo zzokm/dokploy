@@ -11,21 +11,19 @@ type Props = {
 	serverId?: string
 }
 
-type ServiceKey = "bind" | "exim" | "dovecot" | "roundcube"
+type ServiceKey = "bind" | "mailserver" | "roundcube"
 
 const labelFor = (name: ServiceKey) => {
 	if (name === "bind") return "BIND (DNS)"
-	if (name === "exim") return "Exim (SMTP)"
-	if (name === "dovecot") return "Dovecot (IMAP)"
+	if (name === "mailserver") return "Mail (docker-mailserver)"
 	if (name === "roundcube") return "Roundcube (Webmail)"
 	return name
 }
 
 const sortOrder: Record<ServiceKey, number> = {
 	bind: 0,
-	exim: 1,
-	dovecot: 2,
-	roundcube: 3,
+	mailserver: 1,
+	roundcube: 2,
 }
 
 export const CoreServicesStatusGrid = ({ serverId }: Props) => {

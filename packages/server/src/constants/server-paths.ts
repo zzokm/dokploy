@@ -18,6 +18,7 @@ export const serverPaths = (isServer = false) => {
 		path.join(basePath, "core-services")
 
 	const acmeDefault = path.join(dynamicTraefik, "acme.json")
+	const acmeCloudflareDefault = path.join(dynamicTraefik, "acme-cloudflare.json")
 
 	return {
 		baseDir: defaultBase,
@@ -29,15 +30,24 @@ export const serverPaths = (isServer = false) => {
 			process.env.PANEL_MAIL_AUTH_DIR ?? path.join(defaultBase, "mail", "auth"),
 		mailDataDir:
 			process.env.PANEL_MAIL_DATA_DIR ?? path.join(defaultBase, "mail", "data"),
+		mailStateDir:
+			process.env.PANEL_MAIL_STATE_DIR ?? path.join(defaultBase, "mail", "state"),
+		mailLogsDir:
+			process.env.PANEL_MAIL_LOGS_DIR ?? path.join(defaultBase, "mail", "logs"),
+		/** docker-mailserver `ONE_DIR=1` config root on the host */
+		mailDmsConfigDir:
+			process.env.PANEL_MAIL_DMS_CONFIG_DIR ??
+			path.join(defaultBase, "mail", "dms-config"),
 		mailTlsDir:
 			process.env.PANEL_MAIL_TLS_DIR ?? path.join(defaultBase, "mail", "tls"),
 		dkimKeysDir:
 			process.env.PANEL_DKIM_KEYS_DIR ?? path.join(defaultBase, "mail", "dkim"),
 		acmeJsonPath: process.env.PANEL_ACME_JSON_PATH ?? acmeDefault,
+		acmeCloudflareJsonPath:
+			process.env.PANEL_ACME_CLOUDFLARE_JSON_PATH ?? acmeCloudflareDefault,
 		bindContainerName: process.env.PANEL_BIND_CONTAINER ?? "core-services-bind",
-		dovecotContainerName:
-			process.env.PANEL_DOVECOT_CONTAINER ?? "core-services-dovecot",
-		eximContainerName: process.env.PANEL_EXIM_CONTAINER ?? "core-services-exim",
+		mailserverContainerName:
+			process.env.PANEL_MAILSERVER_CONTAINER ?? "dokploy-mailserver",
 		roundcubeContainerName:
 			process.env.PANEL_ROUNDCUBE_CONTAINER ?? "core-services-roundcube",
 		mailPasswdFileName: "passwd",

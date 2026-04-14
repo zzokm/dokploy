@@ -7,46 +7,70 @@ type AcmeCertEntry = {
 	key?: string
 }
 
-type TraefikAcme = {
-	letsencrypt?: {
-		Account?: unknown
-		Certificates?: AcmeCertEntry[]
-	}
-}
+type TraefikAcmeFile = Record<string, { Certificates?: AcmeCertEntry[] } | unknown>
 
 const certMatchesHost = (c: AcmeCertEntry, host: string): boolean => {
 	const wanted = host.toLowerCase()
 	const main = c.domain?.main?.toLowerCase()
-	const sans =
-		c.domain?.sans?.map((s: string) => s.toLowerCase()) ?? []
+	const sans = c.domain?.sans?.map((s: string) => s.toLowerCase()) ?? []
 	return main === wanted || sans.includes(wanted)
 }
 
+const collectCertificatesFromAcmeFile = async (
+	filePath: string,
+): Promise<AcmeCertEntry[]> => {
+	const raw = await readFile(filePath, "utf8")
+	const data = JSON.parse(raw) as TraefikAcmeFile
+	const out: AcmeCertEntry[] = []
+	for (const v of Object.values(data)) {
+		if (
+			v &&
+			typeof v === "object" &&
+			"Certificates" in v &&
+			Array.isArray((v as { Certificates: AcmeCertEntry[] }).Certificates)
+		) {
+			out.push(...(v as { Certificates: AcmeCertEntry[] }).Certificates)
+		}
+	}
+	return out
+}
+
 /**
- * Reads Dokploy/Traefik's `acme.json` (same file Traefik persists via `certificatesResolvers`)
- * and writes PEM cert/key for the first matching entry in `domainCandidates` (main or SAN order).
+ * Reads one or more Traefik ACME JSON stores (HTTP-01, DNS-01 Cloudflare, etc.) and writes PEM
+ * cert/key for the first matching entry in `domainCandidates` (main or SAN order).
  */
 export const extractMailTlsFromAcmeJson = async (opts: {
-	acmeJsonPath: string
+	/** Tried in order; first readable file wins after merging its certificate entries. */
+	acmeJsonPaths: string[]
 	/** Tried in order, e.g. `mail.example.com` then apex `example.com` */
 	domainCandidates: string[]
 	outCertPath: string
 	outKeyPath: string
 }): Promise<void> => {
-	const raw = await readFile(opts.acmeJsonPath, "utf8")
-	const data = JSON.parse(raw) as TraefikAcme
-	const certs: AcmeCertEntry[] = data.letsencrypt?.Certificates ?? []
+	let merged: AcmeCertEntry[] = []
+	for (const filePath of opts.acmeJsonPaths) {
+		try {
+			const part = await collectCertificatesFromAcmeFile(filePath)
+			merged = merged.concat(part)
+		} catch {
+			// Missing or invalid file — try next store
+		}
+	}
+
 	let match: AcmeCertEntry | undefined
 	for (const host of opts.domainCandidates) {
-		match = certs.find((c) => certMatchesHost(c, host))
+		match = merged.find((c) => certMatchesHost(c, host))
 		if (match?.certificate && match.key) {
 			break
 		}
 		match = undefined
 	}
 	if (!match?.certificate || !match.key) {
-		const tried = opts.domainCandidates.join(", ")
-		throw new Error(`No ACME certificate in Traefik store for any of: ${tried}`)
+		const triedHosts = opts.domainCandidates.join(", ")
+		const triedFiles = opts.acmeJsonPaths.join(", ")
+		throw new Error(
+			`No ACME certificate for any of [${triedHosts}] in stores [${triedFiles}]`,
+		)
 	}
 	await mkdir(path.dirname(opts.outCertPath), { recursive: true })
 	await mkdir(path.dirname(opts.outKeyPath), { recursive: true })

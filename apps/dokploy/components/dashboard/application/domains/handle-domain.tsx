@@ -236,6 +236,14 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 	const host = form.watch("host");
 	const isTraefikMeDomain = host?.includes("traefik.me") || false;
 
+	const hideHttpsForCloudflareAutomation =
+		!domainId &&
+		(hostInputMode === "cloudflare" ||
+			(hostInputMode === "manual" && !!cfSettings?.connected && !isTraefikMeDomain))
+
+	const showManualCloudflareProxyRow =
+		!domainId && hostInputMode === "manual" && !!cfSettings?.connected && !isTraefikMeDomain
+
 	const enabledCfZones =
 		cfZones?.filter((z) => z.status !== "disabled" && !z.paused) ?? []
 
@@ -276,7 +284,16 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 			form.setValue("https", true)
 			form.setValue("certificateType", "letsencrypt")
 		}
-	}, [domainId, hostInputMode, form])
+		if (
+			!domainId &&
+			hostInputMode === "manual" &&
+			cfSettings?.connected &&
+			!isTraefikMeDomain
+		) {
+			form.setValue("https", true)
+			form.setValue("certificateType", "letsencrypt")
+		}
+	}, [domainId, hostInputMode, cfSettings?.connected, isTraefikMeDomain, form])
 
 	useEffect(() => {
 		if (data) {
@@ -344,7 +361,12 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 			finalHost = buildHostFromCloudflareZone(selectedZone.name, sub)
 		}
 
-		const isCloudflareCreate = !domainId && hostInputMode === "cloudflare"
+		const traefikMeHost = finalHost.includes("traefik.me")
+		const wantsCloudflareDns =
+			!domainId &&
+			!traefikMeHost &&
+			(hostInputMode === "cloudflare" ||
+				(hostInputMode === "manual" && !!cfSettings?.connected))
 
 		await mutateAsync({
 			domainId,
@@ -356,7 +378,7 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 			}),
 			...data,
 			host: finalHost,
-			...(isCloudflareCreate
+			...(wantsCloudflareDns
 				? {
 						dnsProvider: "cloudflare" as const,
 						cfProxied: cfProxiedOnCreate,
@@ -784,6 +806,25 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 								/>
 								)}
 
+								{showManualCloudflareProxyRow ? (
+									<div className="flex flex-col gap-4 rounded-xl border border-border bg-background/80 p-4 sm:flex-row sm:items-center sm:justify-between">
+										<div className="min-w-0 space-y-0.5">
+											<FormLabel>Cloudflare proxy (orange cloud)</FormLabel>
+											<FormDescription>
+												With Cloudflare connected, new domains use managed DNS by default. Traffic
+												hits your server on 80/443; Traefik forwards to the container port you set
+												below.
+											</FormDescription>
+										</div>
+										<Switch
+											checked={cfProxiedOnCreate}
+											onCheckedChange={setCfProxiedOnCreate}
+											aria-label="Cloudflare proxy enabled for new domain"
+											className="shrink-0"
+										/>
+									</div>
+								) : null}
+
 								<FormField
 									control={form.control}
 									name="path"
@@ -864,7 +905,7 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 									}}
 								/>
 
-								{!(!domainId && hostInputMode === "cloudflare") ? (
+								{!hideHttpsForCloudflareAutomation ? (
 								<FormField
 									control={form.control}
 									name="https"
@@ -888,7 +929,7 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 								/>
 								) : null}
 
-								{https && !(!domainId && hostInputMode === "cloudflare") && (
+								{https && !hideHttpsForCloudflareAutomation && (
 									<>
 										<FormField
 											control={form.control}

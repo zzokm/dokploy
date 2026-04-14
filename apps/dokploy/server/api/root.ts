@@ -7,6 +7,7 @@ import { bitbucketRouter } from "./routers/bitbucket";
 import { certificateRouter } from "./routers/certificate";
 import { clusterRouter } from "./routers/cluster";
 import { composeRouter } from "./routers/compose";
+import { cloudflareRouter } from "./routers/cloudflare";
 import { deploymentRouter } from "./routers/deployment";
 import { destinationRouter } from "./routers/destination";
 import { dockerRouter } from "./routers/docker";
@@ -60,6 +61,7 @@ export const appRouter = createTRPCRouter({
 	application: applicationRouter,
 	backup: backupRouter,
 	bitbucket: bitbucketRouter,
+	cloudflare: cloudflareRouter,
 	certificates: certificateRouter,
 	cluster: clusterRouter,
 	compose: composeRouter,

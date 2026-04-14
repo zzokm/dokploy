@@ -131,6 +131,12 @@ const baseApp: ApplicationNested = {
 const baseDomain: Domain = {
 	applicationId: "",
 	certificateType: "none",
+	dnsProvider: "none",
+	cloudflareIntegrationId: null,
+	cloudflareZoneId: null,
+	cloudflareRecordId: null,
+	cloudflareProxied: true,
+	cloudflareRecordType: null,
 	createdAt: "",
 	domainId: "",
 	host: "",

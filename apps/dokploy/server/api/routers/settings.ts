@@ -738,8 +738,12 @@ export const settingsRouter = createTRPCRouter({
 	haveTraefikDashboardPortEnabled: adminProcedure
 		.input(apiServerSchema)
 		.query(async ({ input }) => {
-			const ports = await readPorts("dokploy-traefik", input?.serverId);
-			return ports.some((port) => port.targetPort === 8080);
+			try {
+				const ports = await readPorts("dokploy-traefik", input?.serverId);
+				return ports.some((port) => port.targetPort === 8080);
+			} catch {
+				return false;
+			}
 		}),
 
 	readStatsLogs: protectedProcedure

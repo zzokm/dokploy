@@ -5,6 +5,7 @@ export * from "./application";
 export * from "./backups";
 export * from "./bitbucket";
 export * from "./certificate";
+export * from "./cloudflare-integration";
 export * from "./compose";
 export * from "./deployment";
 export * from "./domain-connection-check";

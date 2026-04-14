@@ -13,6 +13,7 @@ import { ShowStorageActions } from "./servers/actions/show-storage-actions";
 import { ShowTraefikActions } from "./servers/actions/show-traefik-actions";
 import { ToggleDockerCleanup } from "./servers/actions/toggle-docker-cleanup";
 import { UpdateServer } from "./web-server/update-server";
+import { CloudflareSettingsCard } from "./dns-providers/cloudflare-settings-card";
 
 export const WebServer = () => {
 	const { data: webServerSettings } =
@@ -47,6 +48,13 @@ export const WebServer = () => {
 							<ShowStorageActions />
 
 							<UpdateServer />
+						</div>
+
+						<div className="space-y-3">
+							<div className="text-sm font-medium">DNS providers</div>
+							<div className="grid md:grid-cols-2 gap-4">
+								<CloudflareSettingsCard />
+							</div>
 						</div>
 
 						<div className="space-y-3">

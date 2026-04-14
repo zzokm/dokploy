@@ -13,6 +13,7 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import { domain } from "../validations/domain";
 import { applications } from "./application";
+import { cloudflareIntegration } from "./cloudflare-integration";
 import { compose } from "./compose";
 import { previewDeployments } from "./preview-deployments";
 import { certificateType } from "./shared";
@@ -21,6 +22,14 @@ export const domainType = pgEnum("domainType", [
 	"compose",
 	"application",
 	"preview",
+]);
+
+export const domainDnsProvider = pgEnum("domainDnsProvider", ["none", "cloudflare"]);
+
+export const cloudflareDnsRecordType = pgEnum("cloudflareDnsRecordType", [
+	"A",
+	"AAAA",
+	"CNAME",
 ]);
 
 export const domains = pgTable("domain", {
@@ -53,6 +62,16 @@ export const domains = pgTable("domain", {
 	certificateType: certificateType("certificateType").notNull().default("none"),
 	internalPath: text("internalPath").default("/"),
 	stripPath: boolean("stripPath").notNull().default(false),
+
+	dnsProvider: domainDnsProvider("dnsProvider").notNull().default("none"),
+	cloudflareIntegrationId: text("cloudflare_integration_id").references(
+		() => cloudflareIntegration.id,
+		{ onDelete: "set null" },
+	),
+	cloudflareZoneId: text("cloudflare_zone_id"),
+	cloudflareRecordId: text("cloudflare_record_id"),
+	cloudflareProxied: boolean("cloudflare_proxied").notNull().default(true),
+	cloudflareRecordType: cloudflareDnsRecordType("cloudflare_record_type"),
 });
 
 export const domainsRelations = relations(domains, ({ one }) => ({
@@ -67,6 +86,10 @@ export const domainsRelations = relations(domains, ({ one }) => ({
 	previewDeployment: one(previewDeployments, {
 		fields: [domains.previewDeploymentId],
 		references: [previewDeployments.previewDeploymentId],
+	}),
+	cloudflareIntegration: one(cloudflareIntegration, {
+		fields: [domains.cloudflareIntegrationId],
+		references: [cloudflareIntegration.id],
 	}),
 }));
 

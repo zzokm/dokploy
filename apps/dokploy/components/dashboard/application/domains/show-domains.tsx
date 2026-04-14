@@ -28,6 +28,7 @@ import {
 import { api } from "@/utils/api";
 import { AddDomain } from "./handle-domain";
 import { DomainConnectionPanel } from "./domain-connection-panel";
+import { CloudflareDomainControls } from "./cloudflare-domain-controls";
 
 interface Props {
 	id: string;
@@ -273,6 +274,16 @@ export const ShowDomains = ({ id, type }: Props) => {
 													<div className="pt-1">
 														<DomainConnectionPanel domainId={item.domainId} />
 													</div>
+												) : null}
+
+												{!item.host.includes("traefik.me") ? (
+													<CloudflareDomainControls
+														domainId={item.domainId}
+														currentDnsProvider={item.dnsProvider}
+														currentIntegrationId={item.cloudflareIntegrationId}
+														currentZoneId={item.cloudflareZoneId}
+														currentProxied={item.cloudflareProxied}
+													/>
 												) : null}
 											</div>
 										</CardContent>

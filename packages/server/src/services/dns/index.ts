@@ -16,6 +16,7 @@ import {
 } from "../../utils/dns/zone-file";
 import { generateNamedConfLocal } from "../../utils/dns/named-local";
 import { getRemoteDocker } from "../../utils/servers/remote-docker";
+import { reconcileCoreServices } from "../docker/core-services-reconcile";
 
 export const listHostedDomains = async (
 	db: PostgresJsDatabase<typeof schema>,
@@ -75,6 +76,10 @@ export const applyDnsForDomain = async (
 		isServer?: boolean;
 	},
 ): Promise<void> => {
+	// Ensure core data-plane containers are present and running before we attempt
+	// to write configs and reload BIND.
+	await reconcileCoreServices({ serverId: null, isServer: opts.isServer ?? false });
+
 	const domain = await getHostedDomainById(
 		db,
 		opts.domainId,
@@ -230,9 +235,19 @@ export const replaceStandardMailDnsRecords = async (
 export const checkDnsStackStatus = async (serverId?: string | null) => {
 	const p = serverPaths();
 	const docker = await getRemoteDocker(serverId ?? undefined);
+
+	// Best-effort self-heal so the UI doesn't get stuck on “no such container”.
+	await reconcileCoreServices({ serverId: serverId ?? null });
+
 	try {
-		const container = docker.getContainer(p.bindContainerName);
-		await container.inspect();
+		const inspect = await docker.getContainer(p.bindContainerName).inspect();
+		const running = !!inspect?.State?.Running;
+		if (!running) {
+			return {
+				ok: false as const,
+				message: `BIND container "${p.bindContainerName}" is not running.`,
+			};
+		}
 		return {
 			ok: true as const,
 			message: `BIND container "${p.bindContainerName}" is running.`,

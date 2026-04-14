@@ -49,31 +49,21 @@ export const EmailsStackCard = ({
 						isLoading={deployPending}
 						onClick={onDeploy}
 					>
-						Deploy core services
+						Reconcile core services
 					</Button>
 				</div>
-				{stackRef && (
-					<AlertBlock type="info">
-						<span className="font-medium">Reference images (data plane):</span>
-						<ul className="list-disc pl-5 mt-2 space-y-1 text-sm">
-							<li>BIND (DNS): {stackRef.bindImage}</li>
-							<li>Exim: {stackRef.eximImage}</li>
-							<li>Dovecot: {stackRef.dovecotImage}</li>
-							<li>Roundcube: {stackRef.roundcubeImage}</li>
-						</ul>
-						<p className="mt-2 text-sm">
-							Third-party licenses: see{" "}
-							<code className="text-xs">THIRD_PARTY_LICENSES.md</code> at the
-							repository root.
-						</p>
-					</AlertBlock>
-				)}
-				<AlertBlock type="warning">
-					Use <span className="font-medium">Deploy core services</span> to create
-					BIND, Dovecot, Exim, and Roundcube with panel volume paths, or run the
-					compose scripts from{" "}
-					<code className="text-xs">docker/core-services</code>.
+				<AlertBlock type="info">
+					Core services are managed automatically and are expected to stay online
+					24/7. If anything is missing or stopped, use{" "}
+					<span className="font-medium">Reconcile core services</span> to
+					(deploy/start) them.
 				</AlertBlock>
+				{stackRef ? (
+					<div className="text-xs text-muted-foreground">
+						Images: {stackRef.bindImage}, {stackRef.eximImage},{" "}
+						{stackRef.dovecotImage}, {stackRef.roundcubeImage}
+					</div>
+				) : null}
 			</CardContent>
 		</div>
 	</Card>

@@ -59,7 +59,7 @@ export const ManageDomains = () => {
 
 	const deployStack = api.dns.deployCoreServices.useMutation({
 		onSuccess: () => {
-			toast.success("Core services deployment started")
+			toast.success("Core services reconcile started")
 			void refetchDnsStatus()
 		},
 		onError: (e) => toast.error(e.message),
@@ -117,7 +117,7 @@ export const ManageDomains = () => {
 								isLoading={deployStack.isPending}
 								onClick={() => deployStack.mutate({})}
 							>
-								Deploy core services
+								Reconcile core services
 							</Button>
 						</div>
 						{dnsStatus && (

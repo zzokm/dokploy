@@ -79,6 +79,10 @@ import {
 	protectedProcedure,
 	publicProcedure,
 } from "../trpc";
+import {
+	getCoreServicesStatus,
+	reconcileCoreServices,
+} from "@dokploy/server/services/docker/core-services-reconcile";
 
 export const settingsRouter = createTRPCRouter({
 	getWebServerSettings: protectedProcedure.query(async () => {
@@ -1064,4 +1068,31 @@ export const settingsRouter = createTRPCRouter({
 		const ips = process.env.DOKPLOY_CLOUD_IPS?.split(",");
 		return ips;
 	}),
+
+	getCoreServicesStatus: adminProcedure
+		.input(apiServerSchema)
+		.query(async ({ input }) => {
+			if (IS_CLOUD) {
+				return {
+					networkName: "dokploy-network",
+					services: [],
+				}
+			}
+			return getCoreServicesStatus({ serverId: input?.serverId })
+		}),
+
+	reconcileCoreServices: adminProcedure
+		.input(apiServerSchema)
+		.mutation(async ({ input, ctx }) => {
+			if (IS_CLOUD) {
+				return true
+			}
+			await reconcileCoreServices({ serverId: input?.serverId ?? null })
+			await audit(ctx, {
+				action: "update",
+				resourceType: "settings",
+				resourceName: "core-services-reconcile",
+			})
+			return true
+		}),
 });

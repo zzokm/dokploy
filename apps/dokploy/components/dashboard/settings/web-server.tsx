@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/card";
 import { api } from "@/utils/api";
 import { ShowDokployActions } from "./servers/actions/show-dokploy-actions";
+import { ShowCoreServicesActions } from "./servers/actions/show-core-services-actions";
 import { ShowStorageActions } from "./servers/actions/show-storage-actions";
 import { ShowTraefikActions } from "./servers/actions/show-traefik-actions";
 import { ToggleDockerCleanup } from "./servers/actions/toggle-docker-cleanup";
@@ -43,6 +44,7 @@ export const WebServer = () => {
 						<div className="grid md:grid-cols-2 gap-4">
 							<ShowDokployActions />
 							<ShowTraefikActions />
+							<ShowCoreServicesActions />
 							<ShowStorageActions />
 
 							<UpdateServer />

@@ -112,32 +112,32 @@ export type DeployCoreServicesOptions = {
 const coreBindPort = () =>
 	process.env.PANEL_CORE_BIND_HOST_PORT ??
 	process.env.PANEL_INFRA_BIND_HOST_PORT ??
-	"53";
+	"1053";
 
 const coreEximSmtp = () =>
 	process.env.PANEL_CORE_EXIM_SMTP_HOST ??
 	process.env.PANEL_INFRA_EXIM_SMTP_HOST ??
-	"25";
+	"3025";
 
 const coreEximSubmit = () =>
 	process.env.PANEL_CORE_EXIM_SUBMISSION_HOST ??
 	process.env.PANEL_INFRA_EXIM_SUBMISSION_HOST ??
-	"587";
+	"3587";
 
 const coreDoveImap = () =>
 	process.env.PANEL_CORE_DOVECOT_IMAP_HOST ??
 	process.env.PANEL_INFRA_DOVECOT_IMAP_HOST ??
-	"143";
+	"3143";
 
 const coreDoveImaps = () =>
 	process.env.PANEL_CORE_DOVECOT_IMAPS_HOST ??
 	process.env.PANEL_INFRA_DOVECOT_IMAPS_HOST ??
-	"993";
+	"3993";
 
 const coreRoundcubeHttp = () =>
 	process.env.PANEL_CORE_ROUNDCUBE_HTTP_HOST ??
 	process.env.PANEL_INFRA_ROUNDCUBE_HTTP_HOST ??
-	"80";
+	"3080";
 
 /**
  * Programmatically pulls and starts BIND, Dovecot, Exim, and Roundcube with

@@ -1,8 +1,6 @@
 "use client"
 
 import { Mail } from "lucide-react"
-import { AlertBlock } from "@/components/shared/alert-block"
-import { Button } from "@/components/ui/button"
 import {
 	Card,
 	CardContent,
@@ -20,14 +18,10 @@ type StackRef = {
 
 type EmailsStackCardProps = {
 	stackRef: StackRef | undefined
-	deployPending: boolean
-	onDeploy: () => void
 }
 
 export const EmailsStackCard = ({
 	stackRef,
-	deployPending,
-	onDeploy,
 }: EmailsStackCardProps) => (
 	<Card className="h-full p-2.5 rounded-xl max-w-5xl mx-auto w-full">
 		<div className="rounded-xl bg-background shadow-md">
@@ -42,22 +36,6 @@ export const EmailsStackCard = ({
 				</CardDescription>
 			</CardHeader>
 			<CardContent className="space-y-2 py-8 border-t">
-				<div className="flex flex-wrap gap-2 pb-2">
-					<Button
-						type="button"
-						variant="secondary"
-						isLoading={deployPending}
-						onClick={onDeploy}
-					>
-						Reconcile core services
-					</Button>
-				</div>
-				<AlertBlock type="info">
-					Core services are managed automatically and are expected to stay online
-					24/7. If anything is missing or stopped, use{" "}
-					<span className="font-medium">Reconcile core services</span> to
-					(deploy/start) them.
-				</AlertBlock>
 				{stackRef ? (
 					<div className="text-xs text-muted-foreground">
 						Images: {stackRef.bindImage}, {stackRef.eximImage},{" "}

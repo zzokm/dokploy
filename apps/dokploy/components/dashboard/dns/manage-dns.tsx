@@ -9,7 +9,6 @@ import { useEffect, useMemo, useState } from "react"
 import { useForm } from "react-hook-form"
 import { toast } from "sonner"
 import type { z } from "zod"
-import { AlertBlock } from "@/components/shared/alert-block"
 import { DialogAction } from "@/components/shared/dialog-action"
 import { Button } from "@/components/ui/button"
 import {
@@ -71,13 +70,9 @@ export const ManageDns = () => {
 		{ enabled: !!domainId },
 	)
 
-	const { data: dnsStatus, refetch: refetchDnsStatus } =
-		api.dns.dnsStackStatus.useQuery({}, { refetchOnWindowFocus: false })
-
 	const applyDns = api.dns.applyDns.useMutation({
 		onSuccess: () => {
 			toast.success("DNS applied")
-			void refetchDnsStatus()
 		},
 		onError: (e) => toast.error(e.message),
 	})
@@ -208,15 +203,8 @@ export const ManageDns = () => {
 							</Button>
 						</div>
 
-						{dnsStatus && (
-							<AlertBlock type={dnsStatus.ok ? "success" : "warning"}>
-								<span className="font-medium">BIND: </span>
-								{dnsStatus.message}
-							</AlertBlock>
-						)}
-
 						{!domainId && (
-							<AlertBlock type="info">
+							<p className="text-sm text-muted-foreground">
 								Choose a domain above or open this page from{" "}
 								<Link
 									href="/dashboard/domains"
@@ -225,11 +213,11 @@ export const ManageDns = () => {
 									Domains
 								</Link>
 								.
-							</AlertBlock>
+							</p>
 						)}
 
 						{domainId && !selected && (
-							<AlertBlock type="warning">
+							<p className="text-sm text-muted-foreground">
 								Domain not found. Return to{" "}
 								<Link
 									href="/dashboard/domains"
@@ -238,7 +226,7 @@ export const ManageDns = () => {
 									Domains
 								</Link>
 								.
-							</AlertBlock>
+							</p>
 						)}
 
 						{selected && (

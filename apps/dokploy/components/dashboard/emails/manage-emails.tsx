@@ -89,11 +89,6 @@ export const ManageEmails = () => {
 		onError: (e) => toast.error(e.message),
 	})
 
-	const deployStack = api.dns.deployCoreServices.useMutation({
-		onSuccess: () => toast.success("Core services deployment started"),
-		onError: (e) => toast.error(e.message),
-	})
-
 	const provisionMail = api.mail.provisionMail.useMutation({
 		onSuccess: () => {
 			toast.success("Mail files written")
@@ -180,11 +175,7 @@ export const ManageEmails = () => {
 
 	return (
 		<div className="w-full flex flex-col gap-4">
-			<EmailsStackCard
-				stackRef={stackRef}
-				deployPending={deployStack.isPending}
-				onDeploy={() => deployStack.mutate({})}
-			/>
+			<EmailsStackCard stackRef={stackRef} />
 
 			<MailDomainsListCard
 				allDomains={allDomains}

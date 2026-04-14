@@ -7,7 +7,6 @@ import Link from "next/link"
 import { useForm } from "react-hook-form"
 import { toast } from "sonner"
 import type { z } from "zod"
-import { AlertBlock } from "@/components/shared/alert-block"
 import { DialogAction } from "@/components/shared/dialog-action"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -45,22 +44,11 @@ export const ManageDomains = () => {
 		refetch,
 		isPending,
 	} = api.dns.listDomains.useQuery()
-	const { data: dnsStatus, refetch: refetchDnsStatus } =
-		api.dns.dnsStackStatus.useQuery({}, { refetchOnWindowFocus: false })
 
 	const createDomain = api.dns.createDomain.useMutation({
 		onSuccess: () => {
 			toast.success("Domain created")
 			void refetch()
-			void refetchDnsStatus()
-		},
-		onError: (e) => toast.error(e.message),
-	})
-
-	const deployStack = api.dns.deployCoreServices.useMutation({
-		onSuccess: () => {
-			toast.success("Core services reconcile started")
-			void refetchDnsStatus()
 		},
 		onError: (e) => toast.error(e.message),
 	})
@@ -68,7 +56,6 @@ export const ManageDomains = () => {
 	const applyDns = api.dns.applyDns.useMutation({
 		onSuccess: () => {
 			toast.success("DNS applied")
-			void refetchDnsStatus()
 		},
 		onError: (e) => toast.error(e.message),
 	})
@@ -110,29 +97,6 @@ export const ManageDomains = () => {
 						</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-2 py-8 border-t">
-						<div className="flex flex-wrap gap-2 pb-2">
-							<Button
-								type="button"
-								variant="secondary"
-								isLoading={deployStack.isPending}
-								onClick={() => deployStack.mutate({})}
-							>
-								Reconcile core services
-							</Button>
-						</div>
-						{dnsStatus && (
-							<AlertBlock type={dnsStatus.ok ? "success" : "warning"}>
-								<span className="font-medium">BIND: </span>
-								{dnsStatus.message}
-							</AlertBlock>
-						)}
-						<AlertBlock type="info">
-							Set <code className="text-xs">PANEL_SKIP_RNDC_RELOAD=true</code>{" "}
-							to write zone files without running{" "}
-							<code className="text-xs">rndc reload</code> (debug only). Restart
-							the process after changing env.
-						</AlertBlock>
-
 						{isPending ? (
 							<div className="flex flex-row gap-2 items-center justify-center text-sm text-muted-foreground min-h-[25vh]">
 								<span>Loading...</span>

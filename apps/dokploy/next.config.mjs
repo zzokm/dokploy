@@ -3,11 +3,16 @@
  * for Docker builds.
  */
 
-/** @type {import("next").NextConfig} */
+/** @type {any} */
 const nextConfig = {
 	reactStrictMode: true,
+	// Reduce parallelism during `next build` to avoid OOM/SIGKILL on small builders.
+	serverWorkers: 4,
 	typescript: {
 		ignoreBuildErrors: true,
+	},
+	experimental: {
+		webpackMemoryOptimizations: true,
 	},
 	transpilePackages: ["@dokploy/server"],
 	async redirects() {

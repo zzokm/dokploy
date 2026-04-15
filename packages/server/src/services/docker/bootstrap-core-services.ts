@@ -13,6 +13,7 @@ import {
 	DMS_SSL_CERT_CONTAINER_PATH,
 	DMS_SSL_KEY_CONTAINER_PATH,
 } from "../../utils/docker/dms-tls"
+import { ensureNoContainerSmtp25Egress } from "../mail/smtp-egress-policy"
 
 const LEGACY_DOVECOT_CONTAINER = "core-services-dovecot"
 const LEGACY_EXIM_CONTAINER = "core-services-exim"
@@ -239,6 +240,9 @@ postconf -e 'smtpd_sender_login_maps = unionmap:{ texthash:/etc/postfix/virtual,
 	await ensureDmsManualTlsBootstrap(dmsSslHost)
 
 	await ensureNetwork(docker, networkName)
+	// Best-effort: enforce tenant containers can't egress smtp/25 (Linux hosts only).
+	// On non-Linux OSes, enforcement must be done by the operator outside Dokploy.
+	await ensureNoContainerSmtp25Egress().catch(() => {})
 
 	const dms25 = coreDmsSmtp()
 	const dms587 = coreDmsSubmission()

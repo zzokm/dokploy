@@ -4,7 +4,6 @@ import { Plus, Users } from "lucide-react"
 import { useState } from "react"
 import { AddMailboxDialog } from "@/components/dashboard/emails/add-mailbox-dialog"
 import { MailboxConnectionSettingsDialog } from "@/components/dashboard/emails/mailbox-connection-settings-dialog"
-import { RoundcubeWebmailDialog } from "@/components/dashboard/emails/roundcube-webmail-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -43,6 +42,14 @@ const formatMailboxQuota = (bytes: number) => {
 	return `${bytes} B`
 }
 
+const buildRoundcubeWebmailUrl = (apexDomain: string, email: string) => {
+	const apex = apexDomain.trim().replace(/\/$/, "")
+	const u = new URL(`https://webmail.${apex}/`)
+	u.searchParams.set("_task", "login")
+	u.searchParams.set("_user", email)
+	return u.toString()
+}
+
 type MailMailboxesCardProps = {
 	domainId: string
 	domainName: string
@@ -64,8 +71,15 @@ export const MailMailboxesCard = ({
 	onConnectionOpenChange,
 	onOpenConnection,
 }: MailMailboxesCardProps) => {
-	const [webmailLocalPart, setWebmailLocalPart] = useState<string | null>(null)
 	const [addOpen, setAddOpen] = useState(false)
+
+	const handleOpenWebmail = (email: string) => {
+		window.open(
+			buildRoundcubeWebmailUrl(domainName, email),
+			"_blank",
+			"noopener,noreferrer",
+		)
+	}
 
 	return (
 		<Card className="h-full w-full bg-sidebar p-2.5 rounded-xl">
@@ -112,21 +126,6 @@ export const MailMailboxesCard = ({
 						apexDomain={domainName}
 					/>
 
-					<RoundcubeWebmailDialog
-						open={webmailLocalPart !== null}
-						onOpenChange={(open) => {
-							if (!open) {
-								setWebmailLocalPart(null)
-							}
-						}}
-						email={
-							webmailLocalPart
-								? `${webmailLocalPart}@${domainName}`
-								: ""
-						}
-						apexDomain={domainName}
-					/>
-
 					<div className="rounded-lg border overflow-x-auto">
 						<Table className="min-w-[560px]">
 							<TableHeader>
@@ -161,7 +160,9 @@ export const MailMailboxesCard = ({
 													variant="default"
 													className="shrink-0"
 													aria-label={`Open Roundcube webmail for ${m.localPart}@${domainName}`}
-													onClick={() => setWebmailLocalPart(m.localPart)}
+													onClick={() =>
+														handleOpenWebmail(`${m.localPart}@${domainName}`)
+													}
 												>
 													Open webmail
 												</Button>

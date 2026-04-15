@@ -68,13 +68,14 @@ services:
     ports:
       - "${PANEL_INFRA_ROUNDCUBE_HTTP:-3080}:80"
     environment:
-      ROUNDCUBEMAIL_DEFAULT_HOST: "tls://${PANEL_MAILSERVER_CONTAINER:-dokploy-mailserver}"
-      ROUNDCUBEMAIL_DEFAULT_PORT: "143"
+      ROUNDCUBEMAIL_DEFAULT_HOST: "ssl://${PANEL_MAILSERVER_CONTAINER:-dokploy-mailserver}"
+      ROUNDCUBEMAIL_DEFAULT_PORT: "993"
       ROUNDCUBEMAIL_SMTP_SERVER: "tls://${PANEL_MAILSERVER_CONTAINER:-dokploy-mailserver}"
       ROUNDCUBEMAIL_SMTP_PORT: "587"
       ROUNDCUBEMAIL_DB_TYPE: sqlite
     volumes:
       - ../../apps/dokploy/.docker/core-services/mail/roundcube:/var/roundcube/db
+      - ../../apps/dokploy/.docker/core-services/mail/roundcube-config:/var/roundcube/config
     networks:
       - core-services
 

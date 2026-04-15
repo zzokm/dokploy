@@ -65,6 +65,7 @@ const mailDirs = [
 	"mail/tls",
 	"mail/dkim",
 	"mail/roundcube",
+	"mail/roundcube-config",
 	"mail/state",
 	"mail/logs",
 	"mail/dms-config",

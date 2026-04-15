@@ -233,6 +233,37 @@ export const deployCoreServices = async (
 	await mkdir(p.mailTlsDir, { recursive: true })
 	await mkdir(p.dkimKeysDir, { recursive: true })
 	await mkdir(path.join(p.baseDir, "mail", "roundcube"), { recursive: true })
+	const roundcubeConfigDir = path.join(p.baseDir, "mail", "roundcube-config")
+	await mkdir(roundcubeConfigDir, { recursive: true })
+	const roundcubeTlsSnippet = path.join(
+		roundcubeConfigDir,
+		"zz-dokploy-internal-tls.inc.php",
+	)
+	await writeFile(
+		roundcubeTlsSnippet,
+		`<?php
+/**
+ * Dokploy data plane: Roundcube reaches docker-mailserver by Docker DNS name while the
+ * server certificate is issued for OVERRIDE_HOSTNAME (public mail host). Relax TLS
+ * verification only for this private bridge network hop.
+ */
+$config['imap_conn_options'] = [
+	'ssl' => [
+		'verify_peer' => false,
+		'verify_peer_name' => false,
+		'allow_self_signed' => true,
+	],
+];
+$config['smtp_conn_options'] = [
+	'ssl' => [
+		'verify_peer' => false,
+		'verify_peer_name' => false,
+		'allow_self_signed' => true,
+	],
+];
+`,
+		"utf8",
+	)
 
 	const dmsSslHost = path.join(p.mailDmsConfigDir, "ssl")
 	await ensureDmsManualTlsBootstrap(dmsSslHost)
@@ -352,14 +383,17 @@ export const deployCoreServices = async (
 			"80/tcp": {},
 		},
 		Env: [
-			`ROUNDCUBEMAIL_DEFAULT_HOST=tls://${ms}`,
-			"ROUNDCUBEMAIL_DEFAULT_PORT=143",
+			`ROUNDCUBEMAIL_DEFAULT_HOST=ssl://${ms}`,
+			"ROUNDCUBEMAIL_DEFAULT_PORT=993",
 			`ROUNDCUBEMAIL_SMTP_SERVER=tls://${ms}`,
 			"ROUNDCUBEMAIL_SMTP_PORT=587",
 			"ROUNDCUBEMAIL_DB_TYPE=sqlite",
 		],
 		HostConfig: {
-			Binds: [bindMount(path.join(p.baseDir, "mail", "roundcube"), "/var/roundcube/db")],
+			Binds: [
+				bindMount(path.join(p.baseDir, "mail", "roundcube"), "/var/roundcube/db"),
+				bindMount(roundcubeConfigDir, "/var/roundcube/config"),
+			],
 			PortBindings: {
 				"80/tcp": [{ HostPort: rcHttpHost }],
 			},

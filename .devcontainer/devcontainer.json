@@ -36,7 +36,6 @@
 		3000,
 		5432,
 		6379,
-		1053,
 		3025,
 		3587,
 		3465,
@@ -55,10 +54,6 @@
 		},
 		"6379": {
 			"label": "Redis",
-			"onAutoForward": "silent"
-		},
-		"1053": {
-			"label": "Panel BIND (DNS)",
 			"onAutoForward": "silent"
 		},
 		"3080": {

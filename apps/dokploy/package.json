@@ -39,8 +39,8 @@
 		"test": "vitest --config __test__/vitest.config.ts",
 		"generate:openapi": "tsx -r dotenv/config scripts/generate-openapi.ts",
 		"core-services:init": "node ../../scripts/core-services-init.mjs",
-		"core-services:up": "node ../../scripts/core-services-init.mjs && docker compose -f ../../docker/core-services/docker-compose.yml up -d",
-		"core-services:up:mail": "node ../../scripts/core-services-init.mjs && docker compose -f ../../docker/core-services/docker-compose.yml --profile mail up -d",
+		"core-services:up": "node ../../scripts/core-services-init.mjs && docker compose -f ../../docker/core-services/docker-compose.yml up -d --remove-orphans",
+		"core-services:up:mail": "node ../../scripts/core-services-init.mjs && docker compose -f ../../docker/core-services/docker-compose.yml --profile mail up -d --remove-orphans",
 		"core-services:down": "docker compose -f ../../docker/core-services/docker-compose.yml --profile mail down"
 	},
 	"dependencies": {

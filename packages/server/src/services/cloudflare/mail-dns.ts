@@ -208,3 +208,35 @@ export const provisionMailDnsForZone = async (input: {
 	return { ok: true as const, hostedDomainId }
 }
 
+/**
+ * Cloudflare-native mail DNS provisioning for a specific apex domain.
+ * Finds the synced zone row and delegates to `provisionMailDnsForZone`.
+ */
+export const provisionMailDnsForApex = async (input: {
+	organizationId: string
+	apex: string
+}) => {
+	const apex = input.apex.trim().toLowerCase()
+	const [zone] = await db
+		.select({ cfZoneId: cloudflareZone.cfZoneId, name: cloudflareZone.name })
+		.from(cloudflareZone)
+		.where(
+			and(
+				eq(cloudflareZone.organizationId, input.organizationId),
+				eq(cloudflareZone.name, apex),
+			),
+		)
+		.limit(1)
+
+	if (!zone) {
+		throw new Error(
+			`No synced Cloudflare zone found for ${apex}. Open Domains and click Sync zones.`,
+		)
+	}
+
+	return await provisionMailDnsForZone({
+		organizationId: input.organizationId,
+		cfZoneId: zone.cfZoneId,
+	})
+}
+

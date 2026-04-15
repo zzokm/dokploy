@@ -14,6 +14,7 @@ import {
 	listMailManagedDomains,
 	syncMailTlsFromTraefikForApex,
 } from "@dokploy/server/services/mail"
+import { provisionMailDnsForApex } from "@dokploy/server/services/cloudflare/mail-dns"
 import { getHostedDomainById, listHostedDomains } from "@dokploy/server/services/hosted-domain"
 import { TRPCError } from "@trpc/server"
 import { z } from "zod"
@@ -52,6 +53,8 @@ export const mailRouter = createTRPCRouter({
 			if (!existing) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Domain not found" })
 			}
+			const willEnableMail =
+				input.isMailManaged === true && existing.isMailManaged !== true
 			const [row] = await ctx.db
 				.update(hostedDomain)
 				.set({
@@ -70,6 +73,19 @@ export const mailRouter = createTRPCRouter({
 					),
 				)
 				.returning()
+			if (willEnableMail) {
+				try {
+					await provisionMailDnsForApex({ organizationId: oid, apex: existing.name })
+				} catch (e) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message:
+							e instanceof Error
+								? e.message
+								: "Failed to provision Cloudflare mail DNS",
+					})
+				}
+			}
 			return row
 		}),
 
@@ -210,6 +226,17 @@ export const mailRouter = createTRPCRouter({
 			const d = await getHostedDomainById(db, input.domainId, oid)
 			if (!d) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Domain not found" })
+			}
+			try {
+				await provisionMailDnsForApex({ organizationId: oid, apex: d.name })
+			} catch (e) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message:
+						e instanceof Error
+							? e.message
+							: "Failed to provision Cloudflare mail DNS",
+				})
 			}
 			await ensureDkimForMailDomain(db, input.domainId)
 			try {

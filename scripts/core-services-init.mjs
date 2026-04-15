@@ -3,7 +3,7 @@
  * Ensures the Docker network used by compose (default dokploy-network) exists — compose treats it as external.
  */
 import { execSync } from "node:child_process"
-import { existsSync, mkdirSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -58,5 +58,25 @@ if (!existsSync(dmsCert) || !existsSync(dmsKey)) {
 			"openssl not available: create mail/dms-config/ssl/cert.pem and key.pem before starting docker-mailserver with SSL_TYPE=manual",
 		)
 	}
+}
+
+// Hard-enforce spoof protection in DMS (do not rely on env flags)
+const userPatches = join(base, "mail/dms-config/user-patches.sh")
+if (!existsSync(userPatches)) {
+	writeFileSync(
+		userPatches,
+		`#!/bin/bash
+set -euo pipefail
+
+# Dokploy hardening: prevent authenticated users from forging envelope FROM.
+# This mirrors docker-mailserver's SPOOF_PROTECTION behavior, but is enforced
+# via a mounted patch script rather than an environment variable.
+postconf -e 'mua_sender_restrictions = reject_authenticated_sender_login_mismatch, $smtpd_sender_restrictions'
+postconf -e 'smtpd_sender_login_maps = unionmap:{ texthash:/etc/postfix/virtual, hash:/etc/aliases, pcre:/etc/postfix/maps/sender_login_maps.pcre }'
+`,
+		"utf8",
+	)
+	chmodSync(userPatches, 0o755)
+	console.info("Created docker-mailserver user-patches.sh (spoof protection)")
 }
 console.info(`Ensured mail directories under ${base}`)

@@ -1,4 +1,4 @@
-import { access, constants, mkdir, writeFile } from "node:fs/promises"
+import { access, constants, mkdir, writeFile, chmod } from "node:fs/promises"
 import path from "node:path"
 import { spawn } from "node:child_process"
 import type { Readable } from "node:stream"
@@ -216,6 +216,24 @@ $config['smtp_conn_options'] = [
 `,
 		"utf8",
 	)
+
+	// Hard-enforce spoof protection in DMS (do not rely on env flags).
+	// We mount this script via the DMS config bind; DMS executes it at startup.
+	const userPatches = path.join(p.mailDmsConfigDir, "user-patches.sh")
+	await writeFile(
+		userPatches,
+		`#!/bin/bash
+set -euo pipefail
+
+# Dokploy hardening: prevent authenticated users from forging envelope FROM.
+# This mirrors docker-mailserver's SPOOF_PROTECTION behavior, but is enforced
+# via a mounted patch script rather than an environment variable.
+postconf -e 'mua_sender_restrictions = reject_authenticated_sender_login_mismatch, $smtpd_sender_restrictions'
+postconf -e 'smtpd_sender_login_maps = unionmap:{ texthash:/etc/postfix/virtual, hash:/etc/aliases, pcre:/etc/postfix/maps/sender_login_maps.pcre }'
+`,
+		"utf8",
+	)
+	await chmod(userPatches, 0o755)
 
 	const dmsSslHost = path.join(p.mailDmsConfigDir, "ssl")
 	await ensureDmsManualTlsBootstrap(dmsSslHost)

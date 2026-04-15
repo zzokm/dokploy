@@ -1,6 +1,7 @@
 import { serverPaths } from "../../constants/server-paths"
 import { getRemoteDocker } from "../../utils/servers/remote-docker"
 import { deployCoreServices } from "./bootstrap-core-services"
+import { getWebServerSettings } from "../web-server-settings"
 
 export type CoreServiceName = "mailserver" | "roundcube"
 
@@ -130,6 +131,25 @@ export const reconcileCoreServices = async (
 ): Promise<CoreServicesStatus> => {
 	const docker = await getRemoteDocker(opts.serverId ?? undefined)
 	const p = serverPaths(opts.isServer ?? false)
+
+	// Allow users to reclaim RAM by disabling the built-in mail stack.
+	// Infra-only: UI stays, but the data plane containers are removed.
+	const settings = await getWebServerSettings().catch(() => null)
+	if (settings?.disableBuiltInEmailServer) {
+		for (const containerName of [
+			p.mailserverContainerName,
+			p.roundcubeContainerName,
+		]) {
+			try {
+				const c = docker.getContainer(containerName)
+				await c.stop({ t: 10 }).catch(() => {})
+				await c.remove({ force: true }).catch(() => {})
+			} catch {
+				// ignore
+			}
+		}
+		return getCoreServicesStatus(opts)
+	}
 
 	await ensureNetworkExists(docker, p.mailNetworkName)
 

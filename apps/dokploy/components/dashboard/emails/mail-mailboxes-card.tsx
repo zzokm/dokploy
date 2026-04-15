@@ -3,6 +3,7 @@
 import { Plus, Users } from "lucide-react"
 import { useState } from "react"
 import { AddMailboxDialog } from "@/components/dashboard/emails/add-mailbox-dialog"
+import { BulkImportMailboxesDialog } from "@/components/dashboard/emails/bulk-import-mailboxes-dialog"
 import { MailboxConnectionSettingsDialog } from "@/components/dashboard/emails/mailbox-connection-settings-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -72,6 +73,7 @@ export const MailMailboxesCard = ({
 	onOpenConnection,
 }: MailMailboxesCardProps) => {
 	const [addOpen, setAddOpen] = useState(false)
+	const [bulkOpen, setBulkOpen] = useState(false)
 
 	const handleOpenWebmail = (email: string) => {
 		window.open(
@@ -97,16 +99,28 @@ export const MailMailboxesCard = ({
 							provision mail DNS in Cloudflare).
 						</CardDescription>
 					</div>
-					<Button
-						type="button"
-						size="sm"
-						className="shrink-0 gap-2"
-						onClick={() => setAddOpen(true)}
-						aria-label="Add mailbox"
-					>
-						<Plus className="size-4 shrink-0" aria-hidden />
-						Add mailbox
-					</Button>
+					<div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto shrink-0">
+						<Button
+							type="button"
+							size="sm"
+							variant="outline"
+							className="shrink-0 gap-2 w-full sm:w-auto"
+							onClick={() => setBulkOpen(true)}
+							aria-label="Bulk import mailboxes CSV"
+						>
+							Bulk import CSV
+						</Button>
+						<Button
+							type="button"
+							size="sm"
+							className="shrink-0 gap-2 w-full sm:w-auto"
+							onClick={() => setAddOpen(true)}
+							aria-label="Add mailbox"
+						>
+							<Plus className="size-4 shrink-0" aria-hidden />
+							Add mailbox
+						</Button>
+					</div>
 				</CardHeader>
 				<CardContent className="space-y-4 py-6 sm:py-8 border-t">
 					<AddMailboxDialog
@@ -116,6 +130,16 @@ export const MailMailboxesCard = ({
 						onOpenChange={setAddOpen}
 						onSuccess={() => {
 							onMailboxesChanged()
+						}}
+					/>
+					<BulkImportMailboxesDialog
+						open={bulkOpen}
+						onOpenChange={setBulkOpen}
+						domainId={domainId}
+						apexDomain={domainName}
+						onSuccess={() => {
+							onMailboxesChanged()
+							setBulkOpen(false)
 						}}
 					/>
 

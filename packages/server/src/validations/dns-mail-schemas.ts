@@ -1,11 +1,13 @@
 import { z } from "zod"
 
 const dnsTypes = z.enum(["A", "AAAA", "CNAME", "MX", "TXT", "SRV"])
+const emailHosting = z.enum(["dokploy", "external", "none"])
 
 export const createHostedDomainInput = z.object({
 	name: z.string().min(1).max(253),
 	isDnsManaged: z.boolean().optional(),
 	isMailManaged: z.boolean().optional(),
+	emailHosting: emailHosting.optional(),
 	serverId: z.string().min(1).nullable().optional(),
 })
 

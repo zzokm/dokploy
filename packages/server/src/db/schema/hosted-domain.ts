@@ -4,6 +4,7 @@ import {
 	boolean,
 	index,
 	integer,
+	pgEnum,
 	pgTable,
 	text,
 	uniqueIndex,
@@ -11,6 +12,12 @@ import {
 import { nanoid } from "nanoid";
 import { organization } from "./account";
 import { server } from "./server";
+
+export const hostedDomainEmailHosting = pgEnum("hostedDomainEmailHosting", [
+	"dokploy",
+	"external",
+	"none",
+])
 
 export const hostedDomain = pgTable(
 	"hosted_domain",
@@ -27,6 +34,9 @@ export const hostedDomain = pgTable(
 		name: text("name").notNull(),
 		isDnsManaged: boolean("is_dns_managed").notNull().default(true),
 		isMailManaged: boolean("is_mail_managed").notNull().default(false),
+		emailHosting: hostedDomainEmailHosting("email_hosting")
+			.notNull()
+			.default("none"),
 		catchAllLocalPart: text("catch_all_local_part"),
 		dkimSelector: text("dkim_selector"),
 		dkimPrivateKeyPath: text("dkim_private_key_path"),

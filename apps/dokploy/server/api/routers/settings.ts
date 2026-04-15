@@ -599,6 +599,28 @@ export const settingsRouter = createTRPCRouter({
 		const settings = await getWebServerSettings();
 		return settings?.serverIp || "";
 	}),
+	setDisableBuiltInEmailServer: adminProcedure
+		.input(
+			z.object({
+				disableBuiltInEmailServer: z.boolean(),
+			}),
+		)
+		.mutation(async ({ input, ctx }) => {
+			if (IS_CLOUD) {
+				return true
+			}
+			const settings = await updateWebServerSettings({
+				disableBuiltInEmailServer: input.disableBuiltInEmailServer,
+			})
+			// Apply immediately: reconcile core services will remove mail containers when disabled.
+			await reconcileCoreServices({ serverId: null, isServer: true })
+			await audit(ctx, {
+				action: "update",
+				resourceType: "settings",
+				resourceName: "disable-built-in-email-server",
+			})
+			return settings
+		}),
 	updateServerIp: adminProcedure
 		.input(
 			z.object({

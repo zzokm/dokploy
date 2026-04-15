@@ -1,8 +1,9 @@
-import { eq } from "drizzle-orm"
+import { eq, inArray } from "drizzle-orm"
 import { TRPCError } from "@trpc/server"
 import {
 	cloudflareSettings,
 	cloudflareZone,
+	hostedDomain,
 } from "@dokploy/server/db/schema"
 import {
 	canSealSecrets,
@@ -291,6 +292,7 @@ export const cloudflareSettingsRouter = createTRPCRouter({
 		const zones = await ctx.db
 			.select({
 				cfZoneId: cloudflareZone.cfZoneId,
+				name: cloudflareZone.name,
 				status: cloudflareZone.status,
 				paused: cloudflareZone.paused,
 			})
@@ -298,8 +300,53 @@ export const cloudflareSettingsRouter = createTRPCRouter({
 			.where(eq(cloudflareZone.organizationId, organizationId))
 
 		const enabledZones = zones.filter((z) => z.status !== "disabled" && !z.paused)
-		const mailResults: Array<{ cfZoneId: string; ok: boolean; error?: string }> = []
+
+		// Ensure we have a hosted_domain row for each synced zone apex.
+		// Default email hosting preference is `none` so we never break Workspace/O365 by accident.
+		const zoneApexes = zones.map((z) => z.name.trim().toLowerCase()).filter(Boolean)
+		for (const apex of zoneApexes) {
+			await ctx.db
+				.insert(hostedDomain)
+				.values({
+					organizationId,
+					name: apex,
+					isDnsManaged: false,
+					isMailManaged: false,
+					emailHosting: "none",
+					serverId: null,
+					createdAt: new Date().toISOString(),
+					updatedAt: new Date().toISOString(),
+				})
+				.onConflictDoNothing({
+					target: [hostedDomain.organizationId, hostedDomain.name],
+				})
+		}
+
+		const prefs = await ctx.db
+			.select({
+				name: hostedDomain.name,
+				emailHosting: hostedDomain.emailHosting,
+			})
+			.from(hostedDomain)
+			.where(
+				inArray(hostedDomain.name, enabledZones.map((z) => z.name.trim().toLowerCase())),
+			)
+
+		const prefByApex = new Map(prefs.map((r) => [r.name, r.emailHosting]))
+
+		const mailResults: Array<{
+			cfZoneId: string
+			ok: boolean
+			skipped?: boolean
+			error?: string
+		}> = []
 		for (const z of enabledZones) {
+			const apex = z.name.trim().toLowerCase()
+			const hosting = prefByApex.get(apex) ?? "none"
+			if (hosting !== "dokploy") {
+				mailResults.push({ cfZoneId: z.cfZoneId, ok: true, skipped: true })
+				continue
+			}
 			try {
 				await provisionMailDnsForZone({ organizationId, cfZoneId: z.cfZoneId })
 				mailResults.push({ cfZoneId: z.cfZoneId, ok: true })

@@ -37,6 +37,7 @@ export const createHostedDomain = async (
 		organizationId: string
 		name: string
 		isMailManaged?: boolean
+		emailHosting?: "dokploy" | "external" | "none"
 		serverId?: string | null
 	},
 ) => {
@@ -47,7 +48,39 @@ export const createHostedDomain = async (
 			name: input.name.trim().toLowerCase(),
 			isDnsManaged: false,
 			isMailManaged: input.isMailManaged ?? false,
+			emailHosting: input.emailHosting ?? "none",
 			serverId: input.serverId ?? null,
+		})
+		.returning()
+	return row
+}
+
+export const upsertHostedDomainEmailHosting = async (
+	db: PostgresJsDatabase<typeof schema>,
+	input: {
+		organizationId: string
+		apex: string
+		emailHosting: "dokploy" | "external" | "none"
+	},
+) => {
+	const apex = input.apex.trim().toLowerCase()
+	const [row] = await db
+		.insert(hostedDomain)
+		.values({
+			organizationId: input.organizationId,
+			name: apex,
+			isDnsManaged: false,
+			isMailManaged: input.emailHosting === "dokploy",
+			emailHosting: input.emailHosting,
+			serverId: null,
+		})
+		.onConflictDoUpdate({
+			target: [hostedDomain.organizationId, hostedDomain.name],
+			set: {
+				emailHosting: input.emailHosting,
+				isMailManaged: input.emailHosting === "dokploy",
+				updatedAt: new Date().toISOString(),
+			},
 		})
 		.returning()
 	return row

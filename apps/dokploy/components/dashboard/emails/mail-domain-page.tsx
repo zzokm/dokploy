@@ -23,6 +23,13 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card"
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select"
 import { api } from "@/utils/api"
 
 type MailDomainPageProps = {
@@ -57,6 +64,14 @@ export const MailDomainPage = ({ domainId }: MailDomainPageProps) => {
 	const updateDomain = api.mail.updateDomain.useMutation({
 		onSuccess: async () => {
 			toast.success("Domain updated")
+			await utils.mail.listMailDomains.invalidate()
+		},
+		onError: (e) => toast.error(e.message),
+	})
+
+	const setEmailHosting = api.mail.setEmailHosting.useMutation({
+		onSuccess: async () => {
+			toast.success("Email hosting updated")
 			await utils.mail.listMailDomains.invalidate()
 		},
 		onError: (e) => toast.error(e.message),
@@ -104,6 +119,14 @@ export const MailDomainPage = ({ domainId }: MailDomainPageProps) => {
 	})
 
 	const services = api.mail.stackStatus.useQuery()
+	const [dnsChecks, setDnsChecks] = useState<
+		Array<{
+			name: string
+			type: string
+			status: "ok" | "missing" | "mismatch" | "error"
+			details?: string | null
+		}>
+	>([])
 
 	if (pendingMailDomains) {
 		return (
@@ -151,6 +174,16 @@ export const MailDomainPage = ({ domainId }: MailDomainPageProps) => {
 	const mailserverOk = services.data?.mailserver?.running ?? null
 	const roundcubeOk = services.data?.roundcube?.running ?? null
 
+	const spf = dnsChecks.find((c) => c.type === "TXT (SPF)") ?? null
+	const dmarc = dnsChecks.find((c) => c.type === "TXT (DMARC)") ?? null
+	const dkim = dnsChecks.find((c) => c.type === "TXT (DKIM)") ?? null
+
+	const checklistVariant = (status: string | null) => {
+		if (status === "ok") return "default"
+		if (status === "missing") return "secondary"
+		return "outline"
+	}
+
 	return (
 		<div className="flex flex-col gap-6">
 			<Card className="h-full w-full bg-sidebar p-2.5 rounded-xl">
@@ -193,6 +226,98 @@ export const MailDomainPage = ({ domainId }: MailDomainPageProps) => {
 								<Badge>DKIM: {domain.dkimSelector}</Badge>
 							) : (
 								<Badge variant="secondary">DKIM: Pending</Badge>
+							)}
+						</div>
+						<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-lg border bg-muted/30 p-4">
+							<div className="space-y-0.5">
+								<div className="text-sm font-medium">Where is email hosted?</div>
+								<div className="text-xs text-muted-foreground">
+									Set to External/None to prevent Dokploy from pushing MX/SPF/DKIM/DMARC records.
+								</div>
+							</div>
+							<Select
+								value={(domain as { emailHosting?: string | null }).emailHosting ?? "none"}
+								onValueChange={(v) => {
+									setEmailHosting.mutate({
+										domainId,
+										emailHosting: v as "dokploy" | "external" | "none",
+									})
+								}}
+							>
+								<SelectTrigger
+									className="h-9 w-full sm:w-[200px]"
+									aria-label="Where email is hosted"
+									disabled={setEmailHosting.isPending}
+								>
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="dokploy">Dokploy</SelectItem>
+									<SelectItem value="external">External</SelectItem>
+									<SelectItem value="none">None</SelectItem>
+								</SelectContent>
+							</Select>
+						</div>
+						<div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+							<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+								<div className="space-y-0.5">
+									<div className="text-sm font-medium">DNS health</div>
+									<div className="text-xs text-muted-foreground">
+										Check SPF, DKIM, and DMARC propagation to improve deliverability.
+									</div>
+								</div>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									isLoading={checkDns.isPending}
+									onClick={() =>
+										checkDns.mutate(
+											{ domainId },
+											{
+												onSuccess: (data) => {
+													setDnsChecks(data.checks)
+												},
+											},
+										)
+									}
+								>
+									<RefreshCw className="mr-2 size-4" aria-hidden />
+									Run checks
+								</Button>
+							</div>
+
+							<div className="flex flex-wrap gap-2">
+								<Badge variant={checklistVariant(spf?.status ?? null)}>
+									SPF: {spf?.status ?? "not checked"}
+								</Badge>
+								<Badge variant={checklistVariant(dkim?.status ?? null)}>
+									DKIM: {dkim?.status ?? "not checked"}
+								</Badge>
+								<Badge variant={checklistVariant(dmarc?.status ?? null)}>
+									DMARC: {dmarc?.status ?? "not checked"}
+								</Badge>
+							</div>
+
+							{dnsChecks.length ? (
+								<div className="space-y-2 text-xs text-muted-foreground">
+									{[spf, dkim, dmarc].map((c) =>
+										c ? (
+											<div key={`${c.type}-${c.name}`} className="space-y-0.5">
+												<div className="font-medium text-foreground">{c.type}</div>
+												{c.details ? (
+													<div className="font-mono break-all">{c.details}</div>
+												) : (
+													<div className="font-mono">—</div>
+												)}
+											</div>
+										) : null,
+									)}
+								</div>
+							) : (
+								<p className="text-xs text-muted-foreground">
+									Click <span className="font-medium text-foreground">Run checks</span> to fetch live DNS.
+								</p>
 							)}
 						</div>
 					</CardContent>

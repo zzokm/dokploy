@@ -6,6 +6,13 @@ import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select"
+import {
 	Card,
 	CardContent,
 	CardDescription,
@@ -38,6 +45,9 @@ export const CloudflareZonesGrid = () => {
 		api.cloudflareSettings.listZones.useQuery(undefined, {
 			enabled: !!settings?.connected,
 		})
+	const { data: hostedDomains } = api.mail.listDomains.useQuery(undefined, {
+		enabled: !!settings?.connected,
+	})
 
 	const { data: previewRows, isFetching: previewLoading } =
 		api.cloudflareSettings.previewAppDns.useQuery(undefined, {
@@ -85,6 +95,13 @@ export const CloudflareZonesGrid = () => {
 			await utils.cloudflareSettings.listZones.invalidate()
 			await utils.domain.byApplicationId.invalidate()
 			await utils.domain.byComposeId.invalidate()
+		},
+		onError: (e) => toast.error(e.message),
+	})
+
+	const setEmailHosting = api.mail.setEmailHosting.useMutation({
+		onSuccess: async () => {
+			await utils.mail.listDomains.invalidate()
 		},
 		onError: (e) => toast.error(e.message),
 	})
@@ -209,6 +226,7 @@ export const CloudflareZonesGrid = () => {
 									<TableRow>
 										<TableHead>Zone</TableHead>
 										<TableHead>Status</TableHead>
+										<TableHead>Email hosted</TableHead>
 										<TableHead className="hidden sm:table-cell">Proxy</TableHead>
 									</TableRow>
 								</TableHeader>
@@ -221,6 +239,34 @@ export const CloudflareZonesGrid = () => {
 													<Badge variant={statusVariant(z.status)}>{z.status}</Badge>
 													{z.paused && <Badge variant="outline">paused</Badge>}
 												</div>
+											</TableCell>
+											<TableCell className="align-top">
+												<Select
+													value={
+														hostedDomains?.find(
+															(d) => d.name.trim().toLowerCase() === z.name.trim().toLowerCase(),
+														)?.emailHosting ?? "none"
+													}
+													onValueChange={(v) => {
+														setEmailHosting.mutate({
+															apex: z.name,
+															emailHosting: v as "dokploy" | "external" | "none",
+														})
+													}}
+												>
+													<SelectTrigger
+														className="h-9 w-[180px]"
+														aria-label={`Where email is hosted for ${z.name}`}
+														disabled={setEmailHosting.isPending}
+													>
+														<SelectValue />
+													</SelectTrigger>
+													<SelectContent>
+														<SelectItem value="dokploy">Dokploy</SelectItem>
+														<SelectItem value="external">External</SelectItem>
+														<SelectItem value="none">None</SelectItem>
+													</SelectContent>
+												</Select>
 											</TableCell>
 											<TableCell className="hidden sm:table-cell text-sm text-muted-foreground">
 												Managed per domain

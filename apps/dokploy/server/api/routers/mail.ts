@@ -16,6 +16,7 @@ import {
 } from "@dokploy/server/services/mail"
 import { provisionMailDnsForApex } from "@dokploy/server/services/cloudflare/mail-dns"
 import { getHostedDomainById, listHostedDomains } from "@dokploy/server/services/hosted-domain"
+import { getWebServerSettings } from "@dokploy/server/services/web-server-settings"
 import { TRPCError } from "@trpc/server"
 import { z } from "zod"
 import {
@@ -39,6 +40,17 @@ const orgId = (session: { activeOrganizationId: string }) => {
 	return session.activeOrganizationId
 }
 
+const assertBuiltInMailEnabled = async () => {
+	const ws = await getWebServerSettings()
+	if (ws?.disableBuiltInEmailServer) {
+		throw new TRPCError({
+			code: "BAD_REQUEST",
+			message:
+				"Built-in email server is disabled under Web Server settings. Re-enable it to manage mailboxes.",
+		})
+	}
+}
+
 export const mailRouter = createTRPCRouter({
 	listDomains: protectedProcedure.query(async ({ ctx }) => {
 		const oid = orgId(ctx.session)
@@ -53,13 +65,25 @@ export const mailRouter = createTRPCRouter({
 			if (!existing) {
 				throw new TRPCError({ code: "NOT_FOUND", message: "Domain not found" })
 			}
+			const nextEmailHosting = input.emailHosting ?? existing.emailHosting ?? "none"
+			const nextIsMailManaged =
+				input.isMailManaged !== undefined
+					? input.isMailManaged
+					: nextEmailHosting === "dokploy"
+
 			const willEnableMail =
-				input.isMailManaged === true && existing.isMailManaged !== true
+				nextIsMailManaged === true &&
+				existing.isMailManaged !== true &&
+				nextEmailHosting === "dokploy"
 			const [row] = await ctx.db
 				.update(hostedDomain)
 				.set({
 					...(input.isMailManaged !== undefined && {
 						isMailManaged: input.isMailManaged,
+					}),
+					...(input.emailHosting !== undefined && {
+						emailHosting: input.emailHosting,
+						isMailManaged: input.emailHosting === "dokploy",
 					}),
 					...(input.catchAllLocalPart !== undefined && {
 						catchAllLocalPart: input.catchAllLocalPart,
@@ -74,6 +98,7 @@ export const mailRouter = createTRPCRouter({
 				)
 				.returning()
 			if (willEnableMail) {
+				await assertBuiltInMailEnabled()
 				try {
 					await provisionMailDnsForApex({ organizationId: oid, apex: existing.name })
 				} catch (e) {
@@ -86,6 +111,102 @@ export const mailRouter = createTRPCRouter({
 					})
 				}
 			}
+			return row
+		}),
+
+	setEmailHosting: withPermission("organization", "update")
+		.input(
+			z
+				.object({
+					domainId: z.string().min(1).optional(),
+					apex: z.string().min(1).optional(),
+					emailHosting: z.enum(["dokploy", "external", "none"]),
+				})
+				.superRefine((val, ctx) => {
+					if (!val.domainId && !val.apex) {
+						ctx.addIssue({
+							code: z.ZodIssueCode.custom,
+							message: "domainId or apex is required",
+							path: ["domainId"],
+						})
+					}
+				}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const oid = orgId(ctx.session)
+			const apex = (input.apex ?? "").trim().toLowerCase()
+			const domainId = input.domainId ?? ""
+			const existing = domainId
+				? await getHostedDomainById(db, domainId, oid)
+				: null
+
+			const target =
+				existing ??
+				(apex
+					? (
+							await ctx.db
+								.insert(hostedDomain)
+								.values({
+									organizationId: oid,
+									name: apex,
+									isDnsManaged: false,
+									isMailManaged: false,
+									emailHosting: "none",
+									serverId: null,
+									createdAt: new Date().toISOString(),
+									updatedAt: new Date().toISOString(),
+								})
+								.onConflictDoUpdate({
+									target: [hostedDomain.organizationId, hostedDomain.name],
+									set: { updatedAt: new Date().toISOString() },
+								})
+								.returning()
+						)[0] ?? null
+					: null)
+
+			if (!target) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "Domain not found" })
+			}
+
+			const enabling = input.emailHosting === "dokploy"
+			if (enabling) {
+				await assertBuiltInMailEnabled()
+			}
+
+			const [row] = await ctx.db
+				.update(hostedDomain)
+				.set({
+					emailHosting: input.emailHosting,
+					isMailManaged: enabling,
+					updatedAt: new Date().toISOString(),
+				})
+				.where(
+					and(
+						eq(hostedDomain.id, target.id),
+						eq(hostedDomain.organizationId, oid),
+					),
+				)
+				.returning()
+
+			if (enabling) {
+				try {
+					await provisionMailDnsForApex({ organizationId: oid, apex: target.name })
+				} catch (e) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message:
+							e instanceof Error
+								? e.message
+								: "Failed to provision Cloudflare mail DNS",
+					})
+				}
+				await ensureDkimForMailDomain(db, target.id)
+				await applyMailConfigurations(db, {
+					organizationId: oid,
+					serverId: target.serverId,
+				})
+			}
+
 			return row
 		}),
 
@@ -222,6 +343,7 @@ export const mailRouter = createTRPCRouter({
 	provisionMail: withPermission("organization", "update")
 		.input(z.object({ domainId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
+			await assertBuiltInMailEnabled()
 			const oid = orgId(ctx.session)
 			const d = await getHostedDomainById(db, input.domainId, oid)
 			if (!d) {
@@ -254,6 +376,7 @@ export const mailRouter = createTRPCRouter({
 	createMailbox: withPermission("organization", "update")
 		.input(createMailboxInput)
 		.mutation(async ({ ctx, input }) => {
+			await assertBuiltInMailEnabled()
 			const oid = orgId(ctx.session)
 			return createMailbox(db, {
 				organizationId: oid,
@@ -264,9 +387,86 @@ export const mailRouter = createTRPCRouter({
 			})
 		}),
 
+	bulkCreateMailboxes: withPermission("organization", "update")
+		.input(
+			z.object({
+				domainId: z.string().min(1),
+				rows: z
+					.array(
+						z.object({
+							email: z.string().email().max(320),
+							password: z.string().min(8).max(256),
+						}),
+					)
+					.min(1)
+					.max(500),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			await assertBuiltInMailEnabled()
+			const oid = orgId(ctx.session)
+			const d = await getHostedDomainById(db, input.domainId, oid)
+			if (!d) {
+				throw new TRPCError({ code: "NOT_FOUND", message: "Domain not found" })
+			}
+			if (!d.isMailManaged) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "Mail is not enabled for this domain",
+				})
+			}
+
+			const apex = d.name.trim().toLowerCase()
+			const results: Array<{
+				email: string
+				ok: boolean
+				error?: string
+			}> = []
+
+			for (const r of input.rows) {
+				const email = r.email.trim().toLowerCase()
+				if (!email.endsWith(`@${apex}`)) {
+					results.push({
+						email,
+						ok: false,
+						error: `Email must be under @${apex}`,
+					})
+					continue
+				}
+				const localPart = email.slice(0, -1 * (`@${apex}`.length))
+				if (!localPart) {
+					results.push({
+						email,
+						ok: false,
+						error: "Local part is required",
+					})
+					continue
+				}
+				try {
+					await createMailbox(db, {
+						organizationId: oid,
+						domainId: input.domainId,
+						localPart,
+						password: r.password,
+					})
+					results.push({ email, ok: true })
+				} catch (e) {
+					results.push({
+						email,
+						ok: false,
+						error: e instanceof Error ? e.message : "Failed to create mailbox",
+					})
+				}
+			}
+
+			const okCount = results.filter((r) => r.ok).length
+			return { ok: true as const, okCount, results }
+		}),
+
 	createAlias: withPermission("organization", "update")
 		.input(createMailAliasInput)
 		.mutation(async ({ ctx, input }) => {
+			await assertBuiltInMailEnabled()
 			const oid = orgId(ctx.session)
 			const d = await getHostedDomainById(db, input.domainId, oid)
 			if (!d) {
@@ -290,6 +490,7 @@ export const mailRouter = createTRPCRouter({
 	extractMailTls: withPermission("organization", "update")
 		.input(z.object({ domain: z.string().min(1) }))
 		.mutation(async ({ input }) => {
+			await assertBuiltInMailEnabled()
 			await extractMailTlsForDomain({ domain: input.domain })
 			return { ok: true as const }
 		}),

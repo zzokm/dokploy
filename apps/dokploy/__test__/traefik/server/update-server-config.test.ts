@@ -65,6 +65,7 @@ const baseSettings: WebServerSettings = {
 	cleanupCacheApplications: false,
 	cleanupCacheOnCompose: false,
 	cleanupCacheOnPreviews: false,
+	disableBuiltInEmailServer: false,
 	createdAt: null,
 	updatedAt: new Date(),
 };

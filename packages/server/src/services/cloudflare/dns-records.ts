@@ -180,7 +180,6 @@ export const getDomainCloudflareConfig = async (domainId: string) => {
 	}
 	return {
 		dnsProvider: row.dnsProvider,
-		cloudflareIntegrationId: row.cloudflareIntegrationId,
 		cloudflareZoneId: row.cloudflareZoneId,
 		cloudflareRecordId: row.cloudflareRecordId,
 		cloudflareProxied: row.cloudflareProxied,

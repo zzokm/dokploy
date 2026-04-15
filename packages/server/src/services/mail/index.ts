@@ -10,10 +10,8 @@ import {
 	mailbox,
 } from "../../db/schema/hosted-domain"
 import {
-	applyDnsForDomain,
 	getHostedDomainById,
-	replaceStandardMailDnsRecords,
-} from "../dns"
+} from "../hosted-domain"
 import { getWebServerSettings } from "../web-server-settings"
 import { parseDkimTxtFromMailDotTxt } from "../../utils/mail/dms-dkim-mail-txt"
 import { extractMailTlsFromAcmeJson } from "../../utils/mail/extract-acme-certs"
@@ -127,12 +125,7 @@ export const ensureDkimForMailDomain = async (
 		.where(eq(hostedDomain.id, domainId))
 
 	const ws = await getWebServerSettings()
-	const serverIp = ws?.serverIp?.trim() ?? null
-	await replaceStandardMailDnsRecords(db, domainId, {
-		mailHost,
-		dkimTxt: dnsTxtValue,
-		serverIp,
-	})
+	void ws
 }
 
 /**
@@ -171,13 +164,6 @@ export const onboardMailServiceForDomain = async (
 		organizationId: opts.organizationId,
 		serverId: domain.serverId,
 	})
-	if (domain.isDnsManaged) {
-		await applyDnsForDomain(db, {
-			domainId: opts.domainId,
-			organizationId: opts.organizationId,
-			isServer: opts.isServer,
-		})
-	}
 }
 
 /**

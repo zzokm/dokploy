@@ -5,7 +5,6 @@ import type { Readable } from "node:stream"
 import type { ContainerCreateOptions } from "dockerode"
 import { serverPaths } from "../../constants/server-paths"
 import {
-	CORE_BIND_IMAGE,
 	CORE_DMS_IMAGE,
 	CORE_ROUNDCUBE_IMAGE,
 } from "../../utils/docker/core-services"
@@ -14,26 +13,6 @@ import {
 	DMS_SSL_CERT_CONTAINER_PATH,
 	DMS_SSL_KEY_CONTAINER_PATH,
 } from "../../utils/docker/dms-tls"
-
-/**
- * Programmatic core-services deployment: pulls official BIND9, docker-mailserver, Roundcube images,
- * creates containers with `serverPaths()` host bind mounts, publishes DNS (53/tcp+udp), mail
- * ports on high host mappings by default, Roundcube HTTP, attaches all to `mailNetworkName`, and
- * uses `unless-stopped` restart policy.
- */
-const NAMED_CONF_TEMPLATE = `// Core services — BIND 9 authoritative (generated bootstrap; zones from control plane).
-
-options {
-	directory "/var/cache/bind";
-	listen-on port 53 { any; };
-	listen-on-v6 port 53 { any; };
-	allow-query { any; };
-	recursion no;
-	dnssec-validation no;
-};
-
-include "/etc/bind/named.conf.local";
-`
 
 const LEGACY_DOVECOT_CONTAINER = "core-services-dovecot"
 const LEGACY_EXIM_CONTAINER = "core-services-exim"
@@ -93,25 +72,6 @@ const ensureNetwork = async (
 	await docker.createNetwork({ Name: name, Driver: "bridge" })
 }
 
-const ensureNamedConf = async (dnsConfigDir: string): Promise<void> => {
-	const named = path.join(dnsConfigDir, "named.conf")
-	try {
-		await access(named, constants.F_OK)
-	} catch {
-		await writeFile(named, NAMED_CONF_TEMPLATE, "utf8")
-	}
-	const local = path.join(dnsConfigDir, "named.conf.local")
-	try {
-		await access(local, constants.F_OK)
-	} catch {
-		await writeFile(
-			local,
-			"// Placeholder — replaced when you Apply DNS from the panel\n",
-			"utf8",
-		)
-	}
-}
-
 /** Minimal PEM pair so `SSL_TYPE=manual` docker-mailserver can start before Traefik ACME sync. */
 const ensureDmsManualTlsBootstrap = async (sslDir: string): Promise<void> => {
 	await mkdir(sslDir, { recursive: true })
@@ -159,11 +119,6 @@ export type DeployCoreServicesOptions = {
 	serverId?: string | null
 	isServer?: boolean
 }
-
-const coreBindPort = () =>
-	process.env.PANEL_CORE_BIND_HOST_PORT ??
-	process.env.PANEL_INFRA_BIND_HOST_PORT ??
-	"1053"
 
 const coreDmsSmtp = () =>
 	process.env.PANEL_CORE_DMS_SMTP_HOST ??
@@ -222,9 +177,6 @@ export const deployCoreServices = async (
 	const p = serverPaths(opts.isServer ?? false)
 	const networkName = p.mailNetworkName
 
-	await mkdir(p.dnsConfigDir, { recursive: true })
-	await mkdir(path.join(p.dnsConfigDir, "zones"), { recursive: true })
-	await mkdir(p.dnsCacheDir, { recursive: true })
 	await mkdir(p.mailAuthDir, { recursive: true })
 	await mkdir(p.mailDataDir, { recursive: true })
 	await mkdir(p.mailStateDir, { recursive: true })
@@ -268,10 +220,8 @@ $config['smtp_conn_options'] = [
 	const dmsSslHost = path.join(p.mailDmsConfigDir, "ssl")
 	await ensureDmsManualTlsBootstrap(dmsSslHost)
 
-	await ensureNamedConf(p.dnsConfigDir)
 	await ensureNetwork(docker, networkName)
 
-	const bindHostPort = coreBindPort()
 	const dms25 = coreDmsSmtp()
 	const dms587 = coreDmsSubmission()
 	const dms465 = coreDmsSmtps()
@@ -279,7 +229,7 @@ $config['smtp_conn_options'] = [
 	const dms993 = coreDmsImaps()
 	const rcHttpHost = coreRoundcubeHttp()
 
-	const images = [CORE_BIND_IMAGE, CORE_DMS_IMAGE, CORE_ROUNDCUBE_IMAGE] as const
+	const images = [CORE_DMS_IMAGE, CORE_ROUNDCUBE_IMAGE] as const
 	for (const img of images) {
 		await pullImage(docker, img)
 	}
@@ -288,7 +238,6 @@ $config['smtp_conn_options'] = [
 	await removeIfExists(docker, p.mailserverContainerName)
 	await removeIfExists(docker, LEGACY_DOVECOT_CONTAINER)
 	await removeIfExists(docker, LEGACY_EXIM_CONTAINER)
-	await removeIfExists(docker, p.bindContainerName)
 
 	const overrideHost = dmsOverrideHostname()
 	const postmaster = dmsPostmasterAddress()
@@ -329,31 +278,6 @@ $config['smtp_conn_options'] = [
 				"465/tcp": [{ HostPort: dms465 }],
 				"143/tcp": [{ HostPort: dms143 }],
 				"993/tcp": [{ HostPort: dms993 }],
-			},
-			RestartPolicy: { Name: "unless-stopped" },
-		},
-		NetworkingConfig: {
-			EndpointsConfig: {
-				[networkName]: {},
-			},
-		},
-	}
-
-	const bindOpts: ContainerCreateOptions = {
-		name: p.bindContainerName,
-		Image: CORE_BIND_IMAGE,
-		ExposedPorts: {
-			"53/tcp": {},
-			"53/udp": {},
-		},
-		HostConfig: {
-			Binds: [
-				bindMount(p.dnsConfigDir, "/etc/bind"),
-				bindMount(p.dnsCacheDir, "/var/cache/bind"),
-			],
-			PortBindings: {
-				"53/tcp": [{ HostPort: bindHostPort }],
-				"53/udp": [{ HostPort: bindHostPort }],
 			},
 			RestartPolicy: { Name: "unless-stopped" },
 		},
@@ -406,11 +330,9 @@ $config['smtp_conn_options'] = [
 		},
 	}
 
-	await docker.createContainer(bindOpts)
 	await docker.createContainer(mailserverOpts)
 	await docker.createContainer(roundcubeOpts)
 
-	await docker.getContainer(p.bindContainerName).start()
 	await docker.getContainer(p.mailserverContainerName).start()
 	await docker.getContainer(p.roundcubeContainerName).start()
 }

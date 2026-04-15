@@ -12,7 +12,6 @@ describe("createDomainLabels", () => {
 		customCertResolver: null,
 		certificateType: "none",
 		dnsProvider: "none",
-		cloudflareIntegrationId: null,
 		cloudflareZoneId: null,
 		cloudflareRecordId: null,
 		cloudflareProxied: true,

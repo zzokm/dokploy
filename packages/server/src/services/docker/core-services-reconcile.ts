@@ -2,7 +2,7 @@ import { serverPaths } from "../../constants/server-paths"
 import { getRemoteDocker } from "../../utils/servers/remote-docker"
 import { deployCoreServices } from "./bootstrap-core-services"
 
-export type CoreServiceName = "bind" | "mailserver" | "roundcube"
+export type CoreServiceName = "mailserver" | "roundcube"
 
 export type CoreServiceStatus = {
 	name: CoreServiceName
@@ -91,7 +91,6 @@ export const getCoreServicesStatus = async (
 	const p = serverPaths(opts.isServer ?? false)
 
 	const services: Array<{ name: CoreServiceName; containerName: string }> = [
-		{ name: "bind", containerName: p.bindContainerName },
 		{ name: "mailserver", containerName: p.mailserverContainerName },
 		{ name: "roundcube", containerName: p.roundcubeContainerName },
 	]

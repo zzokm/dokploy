@@ -13,7 +13,6 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import { domain } from "../validations/domain";
 import { applications } from "./application";
-import { cloudflareIntegration } from "./cloudflare-integration";
 import { compose } from "./compose";
 import { previewDeployments } from "./preview-deployments";
 import { certificateType } from "./shared";
@@ -70,10 +69,6 @@ export const domains = pgTable("domain", {
 	stripPath: boolean("stripPath").notNull().default(false),
 
 	dnsProvider: domainDnsProvider("dnsProvider").notNull().default("none"),
-	cloudflareIntegrationId: text("cloudflare_integration_id").references(
-		() => cloudflareIntegration.id,
-		{ onDelete: "set null" },
-	),
 	cloudflareZoneId: text("cloudflare_zone_id"),
 	cloudflareRecordId: text("cloudflare_record_id"),
 	cloudflareProxied: boolean("cloudflare_proxied").notNull().default(true),
@@ -98,10 +93,6 @@ export const domainsRelations = relations(domains, ({ one }) => ({
 	previewDeployment: one(previewDeployments, {
 		fields: [domains.previewDeploymentId],
 		references: [previewDeployments.previewDeploymentId],
-	}),
-	cloudflareIntegration: one(cloudflareIntegration, {
-		fields: [domains.cloudflareIntegrationId],
-		references: [cloudflareIntegration.id],
 	}),
 }));
 

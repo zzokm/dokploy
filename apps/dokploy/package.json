@@ -41,8 +41,7 @@
 		"core-services:init": "node ../../scripts/core-services-init.mjs",
 		"core-services:up": "node ../../scripts/core-services-init.mjs && docker compose -f ../../docker/core-services/docker-compose.yml up -d",
 		"core-services:up:mail": "node ../../scripts/core-services-init.mjs && docker compose -f ../../docker/core-services/docker-compose.yml --profile mail up -d",
-		"core-services:down": "docker compose -f ../../docker/core-services/docker-compose.yml --profile mail down",
-		"core-services:logs:bind": "docker compose -f ../../docker/core-services/docker-compose.yml logs -f core-services-bind"
+		"core-services:down": "docker compose -f ../../docker/core-services/docker-compose.yml --profile mail down"
 	},
 	"dependencies": {
 		"@ai-sdk/anthropic": "^3.0.44",

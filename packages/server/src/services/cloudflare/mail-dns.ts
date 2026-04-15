@@ -7,7 +7,7 @@ import {
 	hostedDomain,
 } from "@dokploy/server/db/schema"
 import { serverPaths } from "@dokploy/server/constants/server-paths"
-import { createHostedDomain } from "@dokploy/server/services/dns"
+import { createHostedDomain } from "@dokploy/server/services/hosted-domain"
 import {
 	applyMailConfigurations,
 	ensureDkimForMailDomain,
@@ -54,7 +54,6 @@ const ensureMailHostedDomain = async (input: {
 		organizationId: input.organizationId,
 		name: apex,
 		isMailManaged: true,
-		isDnsManaged: false,
 	})
 	if (!row) {
 		throw new Error("Failed to create hosted domain for mail")

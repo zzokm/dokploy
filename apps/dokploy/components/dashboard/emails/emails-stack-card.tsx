@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/card"
 
 type StackRef = {
-	bindImage: string
 	mailserverImage: string
 	roundcubeImage: string
 }
@@ -37,8 +36,7 @@ export const EmailsStackCard = ({
 			<CardContent className="space-y-2 py-6 sm:py-8 border-t">
 				{stackRef ? (
 					<p className="text-xs text-muted-foreground font-mono break-all leading-relaxed">
-						Images: {stackRef.bindImage}, {stackRef.mailserverImage},{" "}
-						{stackRef.roundcubeImage}
+						Images: {stackRef.mailserverImage}, {stackRef.roundcubeImage}
 					</p>
 				) : null}
 			</CardContent>

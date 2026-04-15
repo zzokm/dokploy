@@ -25,6 +25,7 @@ import {
 } from "@dokploy/server/services/cloudflare/dns-preview"
 import { listCloudflareZones } from "@dokploy/server/services/cloudflare/zones"
 import { syncCloudflareZonesForOrg } from "@dokploy/server/services/cloudflare/sync-zones"
+import { provisionMailDnsForZone } from "@dokploy/server/services/cloudflare/mail-dns"
 import { createTRPCRouter, protectedProcedure } from "../trpc"
 import { z } from "zod"
 
@@ -241,5 +242,81 @@ export const cloudflareSettingsRouter = createTRPCRouter({
 				selections: input.selections,
 			})
 		}),
+
+	syncDns: protectedProcedure.mutation(async ({ ctx }) => {
+		const organizationId = ctx.session.activeOrganizationId
+		// Ensure Cloudflare token is present + decryptable
+		const [settings] = await ctx.db
+			.select({ apiTokenEncrypted: cloudflareSettings.apiTokenEncrypted })
+			.from(cloudflareSettings)
+			.where(eq(cloudflareSettings.organizationId, organizationId))
+			.limit(1)
+
+		if (!settings) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: "Connect Cloudflare first",
+			})
+		}
+
+		try {
+			unsealString(settings.apiTokenEncrypted)
+		} catch {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message:
+					"Cloudflare token could not be decrypted. Check DOKPLOY_ENCRYPTION_KEY and restart Dokploy.",
+			})
+		}
+
+		await syncCloudflareZonesForOrg(organizationId)
+
+		const preview = await previewCloudflareAppDnsForOrg(organizationId)
+		const actionable = preview.filter((r) => r.state !== "ok")
+		const selections = actionable.map((r) => {
+			const canApply =
+				r.state === "drift" ||
+				r.state === "missing" ||
+				(r.state === "error" && r.wouldChange)
+			return { domainId: r.domainId, apply: canApply }
+		})
+
+		const appliedRes = selections.some((s) => s.apply)
+			? await applyCloudflareDnsSelectionsForOrg({
+					organizationId,
+					selections,
+				})
+			: { applied: [], errors: [] }
+
+		const zones = await ctx.db
+			.select({
+				cfZoneId: cloudflareZone.cfZoneId,
+				status: cloudflareZone.status,
+				paused: cloudflareZone.paused,
+			})
+			.from(cloudflareZone)
+			.where(eq(cloudflareZone.organizationId, organizationId))
+
+		const enabledZones = zones.filter((z) => z.status !== "disabled" && !z.paused)
+		const mailResults: Array<{ cfZoneId: string; ok: boolean; error?: string }> = []
+		for (const z of enabledZones) {
+			try {
+				await provisionMailDnsForZone({ organizationId, cfZoneId: z.cfZoneId })
+				mailResults.push({ cfZoneId: z.cfZoneId, ok: true })
+			} catch (e) {
+				mailResults.push({
+					cfZoneId: z.cfZoneId,
+					ok: false,
+					error: e instanceof Error ? e.message : "Failed to provision mail DNS",
+				})
+			}
+		}
+
+		return {
+			ok: true as const,
+			appDns: appliedRes,
+			mail: mailResults,
+		}
+	}),
 })
 

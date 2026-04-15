@@ -1,6 +1,7 @@
 "use client"
 
 import { ArrowRight, Loader2 } from "lucide-react"
+import { useEffect, useRef } from "react"
 import { toast } from "sonner"
 import {
 	AlertDialog,
@@ -31,6 +32,8 @@ export const CloudflareDomainSyncDialog = ({
 		{ enabled: open && !!domainId },
 	)
 
+	const didAutoApply = useRef(false)
+
 	const apply = api.cloudflareSettings.applyAppDnsSelections.useMutation({
 		onSuccess: async () => {
 			toast.success("DNS updated")
@@ -44,12 +47,6 @@ export const CloudflareDomainSyncDialog = ({
 		onError: (e) => toast.error(e.message),
 	})
 
-	const handleApply = () => {
-		apply.mutate({
-			selections: [{ domainId, apply: true }],
-		})
-	}
-
 	const current = preview?.currentIp ?? "—"
 	const desired = preview?.desiredIp ?? "—"
 
@@ -60,6 +57,20 @@ export const CloudflareDomainSyncDialog = ({
 		preview.state !== "no_zone" &&
 		preview.state !== "no_target"
 
+	useEffect(() => {
+		if (!open) {
+			didAutoApply.current = false
+			return
+		}
+		if (!canApply || apply.isPending || didAutoApply.current) {
+			return
+		}
+		didAutoApply.current = true
+		apply.mutate({
+			selections: [{ domainId, apply: true }],
+		})
+	}, [open, canApply, apply, domainId])
+
 	return (
 		<AlertDialog open={open} onOpenChange={onOpenChange}>
 			<AlertDialogContent>
@@ -67,10 +78,10 @@ export const CloudflareDomainSyncDialog = ({
 					<AlertDialogTitle>Sync DNS for this domain</AlertDialogTitle>
 					<AlertDialogDescription asChild>
 						<div className="space-y-3 text-left text-sm text-muted-foreground">
-							{isFetching ? (
+							{isFetching || apply.isPending ? (
 								<div className="flex items-center gap-2 py-4">
 									<Loader2 className="size-4 animate-spin" aria-hidden />
-									<span>Checking Cloudflare…</span>
+									<span>{apply.isPending ? "Updating Cloudflare…" : "Checking Cloudflare…"}</span>
 								</div>
 							) : preview ? (
 								<>
@@ -115,21 +126,14 @@ export const CloudflareDomainSyncDialog = ({
 					</AlertDialogDescription>
 				</AlertDialogHeader>
 				<AlertDialogFooter>
-					<AlertDialogCancel type="button">Cancel</AlertDialogCancel>
-					{canApply ? (
-						<Button
-							type="button"
-							isLoading={apply.isPending}
-							disabled={isFetching}
-							onClick={handleApply}
-						>
-							Apply update
-						</Button>
-					) : (
-						<Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>
-							Close
-						</Button>
-					)}
+					<Button
+						type="button"
+						variant="secondary"
+						onClick={() => onOpenChange(false)}
+						disabled={apply.isPending}
+					>
+						Close
+					</Button>
 				</AlertDialogFooter>
 			</AlertDialogContent>
 		</AlertDialog>

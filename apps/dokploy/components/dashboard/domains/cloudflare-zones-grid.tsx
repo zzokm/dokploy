@@ -3,7 +3,6 @@
 import { Cloud, Loader2, RefreshCw } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
-import { CloudflareDnsPreviewDialog } from "@/components/dashboard/domains/cloudflare-dns-preview-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -34,8 +33,6 @@ const statusVariant = (status: "active" | "pending" | "disabled") => {
 export const CloudflareZonesGrid = () => {
 	const utils = api.useUtils()
 	const [tokenInput, setTokenInput] = useState("")
-	const [previewOpen, setPreviewOpen] = useState(false)
-	const [autoReview, setAutoReview] = useState(false)
 	const { data: settings } = api.cloudflareSettings.get.useQuery()
 	const { data: zones, refetch, isPending } =
 		api.cloudflareSettings.listZones.useQuery(undefined, {
@@ -44,25 +41,9 @@ export const CloudflareZonesGrid = () => {
 
 	const { data: previewRows, isFetching: previewLoading } =
 		api.cloudflareSettings.previewAppDns.useQuery(undefined, {
-			enabled: !!settings?.connected && (previewOpen || autoReview),
+			enabled: !!settings?.connected,
 		})
-
-	useEffect(() => {
-		if (!autoReview || previewLoading) {
-			return
-		}
-		if (!previewRows || previewRows.length === 0) {
-			setAutoReview(false)
-			return
-		}
-		const needsAttention = previewRows.filter((r) => r.state !== "ok")
-		if (needsAttention.length > 0) {
-			setPreviewOpen(true)
-		} else {
-			toast.success("All Cloudflare app domains already point at this server.")
-		}
-		setAutoReview(false)
-	}, [autoReview, previewLoading, previewRows])
+	void previewRows
 
 	const setToken = api.cloudflareSettings.setToken.useMutation({
 		onSuccess: async () => {
@@ -71,7 +52,6 @@ export const CloudflareZonesGrid = () => {
 			await utils.cloudflareSettings.get.invalidate()
 			await utils.cloudflareSettings.listZones.invalidate()
 			await refetch()
-			setAutoReview(true)
 		},
 		onError: (e) => toast.error(e.message),
 	})
@@ -80,7 +60,31 @@ export const CloudflareZonesGrid = () => {
 		onSuccess: async () => {
 			toast.success("Zones synced")
 			await refetch()
-			setAutoReview(true)
+		},
+		onError: (e) => toast.error(e.message),
+	})
+
+	const syncDns = api.cloudflareSettings.syncDns.useMutation({
+		onSuccess: async (data) => {
+			const applied = data.appDns.applied.length
+			const errors = data.appDns.errors.length
+			if (applied) {
+				toast.success(`Updated DNS for ${applied} domain${applied === 1 ? "" : "s"}`)
+			} else {
+				toast.success("DNS already up to date")
+			}
+			if (errors) {
+				toast.error(`${errors} domain(s) could not be updated`)
+			}
+			const mailFailures = data.mail.filter((m) => !m.ok).length
+			if (mailFailures) {
+				toast.error(`${mailFailures} zone(s) could not be provisioned for mail DNS`)
+			}
+			await utils.cloudflareSettings.previewAppDns.invalidate()
+			await utils.cloudflareSettings.previewAppDnsForDomain.invalidate()
+			await utils.cloudflareSettings.listZones.invalidate()
+			await utils.domain.byApplicationId.invalidate()
+			await utils.domain.byComposeId.invalidate()
 		},
 		onError: (e) => toast.error(e.message),
 	})
@@ -141,18 +145,12 @@ export const CloudflareZonesGrid = () => {
 		)
 	}
 
-	const handleOpenDnsReview = () => {
-		setPreviewOpen(true)
+	const handleSyncDns = () => {
+		syncDns.mutate()
 	}
 
 	return (
 		<>
-			<CloudflareDnsPreviewDialog
-				open={previewOpen}
-				onOpenChange={setPreviewOpen}
-				rows={previewRows}
-				isLoading={previewLoading && (previewOpen || autoReview)}
-			/>
 			<Card className="h-full w-full bg-sidebar p-2.5 rounded-xl">
 			<div className="rounded-xl bg-background shadow-md">
 				<CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -169,13 +167,13 @@ export const CloudflareZonesGrid = () => {
 					<div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto shrink-0">
 						<Button
 							type="button"
-							variant="outline"
+							variant="default"
 							size="default"
 							className="w-full sm:w-auto"
-							isLoading={previewLoading}
-							onClick={handleOpenDnsReview}
+							isLoading={syncDns.isPending || previewLoading}
+							onClick={handleSyncDns}
 						>
-							Review DNS targets
+							Sync DNS
 						</Button>
 						<Button
 							type="button"

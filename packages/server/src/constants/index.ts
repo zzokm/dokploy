@@ -89,7 +89,6 @@ export const BETTER_AUTH_SECRET =
 	process.env.BETTER_AUTH_SECRET || "better-auth-secret-123456789";
 
 export {
-	bindZoneFilePathForNamedConf,
 	serverPaths,
 } from "./server-paths"
 

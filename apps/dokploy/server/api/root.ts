@@ -7,15 +7,12 @@ import { bitbucketRouter } from "./routers/bitbucket";
 import { certificateRouter } from "./routers/certificate";
 import { clusterRouter } from "./routers/cluster";
 import { composeRouter } from "./routers/compose";
-import { cloudflareRouter } from "./routers/cloudflare";
-import { cloudflareMailRouter } from "./routers/cloudflare-mail";
 import { cloudflareSettingsRouter } from "./routers/cloudflare-settings";
 import { deploymentRouter } from "./routers/deployment";
 import { destinationRouter } from "./routers/destination";
 import { dockerRouter } from "./routers/docker";
 import { domainRouter } from "./routers/domain";
 import { environmentRouter } from "./routers/environment";
-import { dnsRouter } from "./routers/dns";
 import { mailRouter } from "./routers/mail";
 import { gitProviderRouter } from "./routers/git-provider";
 import { giteaRouter } from "./routers/gitea";
@@ -63,9 +60,7 @@ export const appRouter = createTRPCRouter({
 	application: applicationRouter,
 	backup: backupRouter,
 	bitbucket: bitbucketRouter,
-	cloudflare: cloudflareRouter,
 	cloudflareSettings: cloudflareSettingsRouter,
-	cloudflareMail: cloudflareMailRouter,
 	certificates: certificateRouter,
 	cluster: clusterRouter,
 	compose: composeRouter,
@@ -73,7 +68,6 @@ export const appRouter = createTRPCRouter({
 	destination: destinationRouter,
 	docker: dockerRouter,
 	domain: domainRouter,
-	dns: dnsRouter,
 	mail: mailRouter,
 	gitea: giteaRouter,
 	gitProvider: gitProviderRouter,

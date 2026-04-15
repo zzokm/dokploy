@@ -10,28 +10,12 @@
 # try to own it or you get label conflicts.
 
 services:
-  core-services-bind:
-    image: internetsystemsconsortium/bind9:9.18
-    container_name: core-services-bind
-    restart: unless-stopped
-    ports:
-      # Default 1053: port 53 is privileged; 5353 is mDNS and often in use on Windows/macOS.
-      - "${PANEL_INFRA_BIND_DNS_PORT:-1053}:53/udp"
-      - "${PANEL_INFRA_BIND_DNS_PORT:-1053}:53/tcp"
-    volumes:
-      - ../../apps/dokploy/.docker/core-services/dns/config:/etc/bind:rw
-      - ../../apps/dokploy/.docker/core-services/dns/cache:/var/cache/bind:rw
-    networks:
-      - core-services
-
   dokploy-mailserver:
     profiles: [mail]
     image: mailserver/docker-mailserver:latest
     container_name: ${PANEL_MAILSERVER_CONTAINER:-dokploy-mailserver}
     hostname: ${PANEL_DMS_OVERRIDE_HOSTNAME:-mail.local}
     restart: unless-stopped
-    depends_on:
-      - core-services-bind
     ports:
       - "${PANEL_INFRA_DMS_SMTP:-3025}:25"
       - "${PANEL_INFRA_DMS_SUBMISSION:-3587}:587"

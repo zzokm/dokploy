@@ -6,7 +6,7 @@ const dokployBasePath = (isServer: boolean) =>
 		: path.join(process.cwd(), ".docker")
 
 /**
- * Host paths and env vars for core data-plane services (BIND, mail, DKIM, TLS).
+ * Host paths and env vars for core data-plane services (mail, DKIM, TLS).
  * Override with PANEL_* env vars; defaults align with Dokploy's `/etc/dokploy` layout in production.
  */
 export const serverPaths = (isServer = false) => {
@@ -22,10 +22,6 @@ export const serverPaths = (isServer = false) => {
 
 	return {
 		baseDir: defaultBase,
-		dnsConfigDir:
-			process.env.PANEL_DNS_CONFIG_DIR ?? path.join(defaultBase, "dns", "config"),
-		dnsCacheDir:
-			process.env.PANEL_DNS_CACHE_DIR ?? path.join(defaultBase, "dns", "cache"),
 		mailAuthDir:
 			process.env.PANEL_MAIL_AUTH_DIR ?? path.join(defaultBase, "mail", "auth"),
 		mailDataDir:
@@ -45,7 +41,6 @@ export const serverPaths = (isServer = false) => {
 		acmeJsonPath: process.env.PANEL_ACME_JSON_PATH ?? acmeDefault,
 		acmeCloudflareJsonPath:
 			process.env.PANEL_ACME_CLOUDFLARE_JSON_PATH ?? acmeCloudflareDefault,
-		bindContainerName: process.env.PANEL_BIND_CONTAINER ?? "core-services-bind",
 		mailserverContainerName:
 			process.env.PANEL_MAILSERVER_CONTAINER ?? "dokploy-mailserver",
 		roundcubeContainerName:
@@ -56,16 +51,4 @@ export const serverPaths = (isServer = false) => {
 		mailVirtualAliasFileName: "virtual",
 		mailNetworkName: process.env.PANEL_MAIL_NETWORK ?? "dokploy-network",
 	}
-}
-
-/**
- * POSIX path written into `named.conf.local` as the `file` argument for each zone.
- * Must match where BIND reads zones **inside** the container (e.g. `/etc/bind/zones`
- * when `dns/config` is mounted at `/etc/bind`). Host writes still use `dnsConfigDir/zones/`.
- *
- * Set `PANEL_BIND_ZONE_FILE_ROOT` if your mount differs (default `/etc/bind`).
- */
-export const bindZoneFilePathForNamedConf = (domainName: string): string => {
-	const root = process.env.PANEL_BIND_ZONE_FILE_ROOT ?? "/etc/bind"
-	return path.posix.join(root, "zones", `${domainName}.zone`)
 }

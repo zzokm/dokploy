@@ -6,7 +6,6 @@ export * from "./backups";
 export * from "./bitbucket";
 export * from "./certificate";
 export * from "./cloudflare-dns-record";
-export * from "./cloudflare-integration";
 export * from "./cloudflare-settings";
 export * from "./cloudflare-zone";
 export * from "./compose";

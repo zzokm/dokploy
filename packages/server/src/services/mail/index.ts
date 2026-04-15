@@ -40,13 +40,45 @@ const readDkimMailTxtWithRetry = async (
 }
 
 /**
+ * Reads and parses docker-mailserver's OpenDKIM `mail.txt` into a single TXT value.
+ *
+ * Source path inside the DMS config volume:
+ * `/tmp/docker-mailserver/opendkim/keys/<domain>/mail.txt`
+ */
+export const readDkimDnsTxtFromDmsMailTxt = async (opts: {
+	domain: string
+	isServer?: boolean
+}): Promise<string> => {
+	const domain = opts.domain.trim().toLowerCase()
+	const p = serverPaths(opts.isServer)
+	const mailTxtPath = path.join(
+		p.mailDmsConfigDir,
+		"opendkim",
+		"keys",
+		domain,
+		"mail.txt",
+	)
+	const raw = await readDkimMailTxtWithRetry(mailTxtPath)
+	return parseDkimTxtFromMailDotTxt(raw)
+}
+
+const readIfExists = async (filePath: string): Promise<Buffer | null> => {
+	try {
+		const raw = await readFile(filePath)
+		return raw
+	} catch {
+		return null
+	}
+}
+
+/**
  * Copies Traefik ACME material for `mail.<apex>` (fallback: apex) into
  * `mailTlsDir/<apex>/` and docker-mailserver `ssl/` for manual TLS.
  */
-export const syncMailTlsFromTraefikForApex = async (opts: {
+const syncMailTlsFromTraefikForApexInternal = async (opts: {
 	apexDomain: string
 	isServer?: boolean
-}): Promise<void> => {
+}): Promise<{ changed: boolean }> => {
 	const p = serverPaths(opts.isServer)
 	const apex = opts.apexDomain.trim().toLowerCase()
 	const mailHost = `mail.${apex}`
@@ -55,15 +87,42 @@ export const syncMailTlsFromTraefikForApex = async (opts: {
 	const outCertPath = path.join(outDir, "cert.pem")
 	const outKeyPath = path.join(outDir, "key.pem")
 	await extractMailTlsFromAcmeJson({
-		acmeJsonPaths: [p.acmeCloudflareJsonPath, p.acmeJsonPath],
+		acmeJsonPaths: [
+			// Prefer DNS-01 (Cloudflare) store, but also try legacy name + HTTP-01 store
+			p.acmeCloudflareJsonPath,
+			path.join(path.dirname(p.acmeCloudflareJsonPath), "acme-cf.json"),
+			p.acmeJsonPath,
+		],
 		domainCandidates: [mailHost, apex],
 		outCertPath,
 		outKeyPath,
 	})
 	const dmsSsl = path.join(p.mailDmsConfigDir, "ssl")
 	await mkdir(dmsSsl, { recursive: true })
-	await copyFile(outCertPath, path.join(dmsSsl, "cert.pem"))
-	await copyFile(outKeyPath, path.join(dmsSsl, "key.pem"))
+
+	const dmsCertPath = path.join(dmsSsl, "cert.pem")
+	const dmsKeyPath = path.join(dmsSsl, "key.pem")
+	const [prevCert, prevKey] = await Promise.all([
+		readIfExists(dmsCertPath),
+		readIfExists(dmsKeyPath),
+	])
+	const [nextCert, nextKey] = await Promise.all([
+		readFile(outCertPath),
+		readFile(outKeyPath),
+	])
+
+	const changed =
+		!prevCert ||
+		!prevKey ||
+		Buffer.compare(prevCert, nextCert) !== 0 ||
+		Buffer.compare(prevKey, nextKey) !== 0
+
+	if (changed) {
+		await copyFile(outCertPath, dmsCertPath)
+		await copyFile(outKeyPath, dmsKeyPath)
+	}
+
+	return { changed }
 }
 
 /** @deprecated Prefer `syncMailTlsFromTraefikForApex`; `domain` is the apex hostname. */
@@ -75,6 +134,17 @@ export const extractMailTlsForDomain = async (opts: {
 		apexDomain: opts.domain,
 		isServer: opts.isServer,
 	})
+}
+
+/**
+ * Copies Traefik ACME material for `mail.<apex>` (fallback: apex) into
+ * docker-mailserver `ssl/` for manual TLS.
+ */
+export const syncMailTlsFromTraefikForApex = async (opts: {
+	apexDomain: string
+	isServer?: boolean
+}): Promise<void> => {
+	await syncMailTlsFromTraefikForApexInternal(opts)
 }
 
 export const ensureDkimForMailDomain = async (
@@ -106,15 +176,11 @@ export const ensureDkimForMailDomain = async (
 			dkimRes.stdout.trim() || "docker-mailserver DKIM generation failed",
 		)
 	}
-	const mailTxtPath = path.join(
-		p.mailDmsConfigDir,
-		"opendkim",
-		"keys",
-		domain.name,
-		"mail.txt",
-	)
-	const raw = await readDkimMailTxtWithRetry(mailTxtPath)
-	const dnsTxtValue = parseDkimTxtFromMailDotTxt(raw)
+	const dnsTxtValue = await readDkimDnsTxtFromDmsMailTxt({
+		domain: domain.name,
+		isServer,
+	})
+	void dnsTxtValue
 	await db
 		.update(hostedDomain)
 		.set({
@@ -126,6 +192,45 @@ export const ensureDkimForMailDomain = async (
 
 	const ws = await getWebServerSettings()
 	void ws
+}
+
+/**
+ * Background sync: refreshes DMS TLS material from Traefik ACME stores and reloads
+ * postfix/dovecot only if a certificate actually changed.
+ */
+export const syncMailTlsFromTraefikForAllMailDomains = async (opts: {
+	db: PostgresJsDatabase<typeof schema>
+	isServer?: boolean
+}): Promise<{ changedDomains: string[] }> => {
+	const p = serverPaths(opts.isServer)
+	const rows = await opts.db
+		.select({ name: hostedDomain.name, serverId: hostedDomain.serverId })
+		.from(hostedDomain)
+		.where(eq(hostedDomain.isMailManaged, true))
+
+	const changedDomains: string[] = []
+	for (const r of rows) {
+		const apex = r.name.trim().toLowerCase()
+		if (!apex) continue
+		try {
+			const res = await syncMailTlsFromTraefikForApexInternal({
+				apexDomain: apex,
+				isServer: opts.isServer,
+			})
+			if (res.changed) {
+				changedDomains.push(apex)
+			}
+		} catch {
+			// Ignore missing certs; Traefik may not have issued yet.
+		}
+	}
+
+	if (changedDomains.length > 0) {
+		const docker = await getRemoteDocker(undefined)
+		await reloadMailServices(docker, p)
+	}
+
+	return { changedDomains }
 }
 
 /**

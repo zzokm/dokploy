@@ -4,6 +4,7 @@ import type { BackupSchedule } from "@dokploy/server/services/backup";
 import { getAllServers } from "@dokploy/server/services/server";
 import { getWebServerSettings } from "@dokploy/server/services/web-server-settings";
 import { pollDomainConnectionsOnce } from "@dokploy/server/services/domain-connection";
+import { syncMailTlsFromTraefikForAllMailDomains } from "@dokploy/server/services/mail"
 import { eq } from "drizzle-orm";
 import { scheduleJob } from "node-schedule";
 import { db } from "../../db/index";
@@ -118,6 +119,22 @@ export const initCronJobs = async () => {
 		});
 	} catch (error) {
 		console.error("[Domain] Poll schedule error", error);
+	}
+
+	// Keep docker-mailserver TLS material in sync with Traefik ACME renewals.
+	// Default: every 15 minutes. Override with PANEL_MAIL_TLS_SYNC_CRON.
+	try {
+		const cron = process.env.PANEL_MAIL_TLS_SYNC_CRON || "*/15 * * * *"
+		scheduleJob("mail-tls-sync", cron, async () => {
+			const r = await syncMailTlsFromTraefikForAllMailDomains({ db, isServer: true })
+			if (r.changedDomains.length > 0) {
+				console.log(
+					`[Mail] TLS synced for ${r.changedDomains.length} domain(s): ${r.changedDomains.join(", ")}`,
+				)
+			}
+		})
+	} catch (error) {
+		console.error("[Mail] TLS sync schedule error", error)
 	}
 };
 

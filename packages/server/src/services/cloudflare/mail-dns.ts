@@ -11,6 +11,7 @@ import { createHostedDomain } from "@dokploy/server/services/hosted-domain"
 import {
 	applyMailConfigurations,
 	ensureDkimForMailDomain,
+	readDkimDnsTxtFromDmsMailTxt,
 	syncMailTlsFromTraefikForApex,
 } from "@dokploy/server/services/mail"
 import { getWebServerSettings } from "@dokploy/server/services/web-server-settings"
@@ -117,19 +118,11 @@ export const provisionMailDnsForZone = async (input: {
 
 	await ensureDkimForMailDomain(db, hostedDomainId)
 
-	const p = serverPaths(false)
-	const mailTxtPath = path.join(
-		p.mailDmsConfigDir,
-		"opendkim",
-		"keys",
-		apex,
-		"mail.txt",
-	)
 	let dkimTxt: string
 	try {
-		const raw = await readFile(mailTxtPath, "utf8")
-		dkimTxt = parseDkimTxtFromMailDotTxt(raw)
+		dkimTxt = await readDkimDnsTxtFromDmsMailTxt({ domain: apex })
 	} catch {
+		const p = serverPaths(false)
 		const publicPath = path.join(
 			p.dkimKeysDir,
 			`${apex}.${MAIL_DKIM_SELECTOR}.public.pem`,

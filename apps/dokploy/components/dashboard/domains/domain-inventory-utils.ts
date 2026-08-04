@@ -181,3 +181,70 @@ export const isPreviewableDnsRecordType = (type: string) => {
 	const normalized = type.trim().toUpperCase();
 	return normalized === "A" || normalized === "AAAA" || normalized === "CNAME";
 };
+
+export type InventoryWarningKind =
+	| "redeploy_traefik"
+	| "host_publish_port"
+	| "cert_pending";
+
+export type InventoryWarning = {
+	kind: InventoryWarningKind;
+	label: string;
+	hint: string;
+};
+
+/**
+ * Actionable inventory warnings that reduce support pain. Aligns with existing
+ * routed / SSL badge heuristics and host-publish port detection from inventory.
+ */
+export const deriveInventoryWarnings = (input: {
+	kind: "application" | "compose" | "preview" | "web-server";
+	createdAt: string;
+	lastSuccessfulDeployAt: string | null;
+	certificateType: "none" | "letsencrypt" | "custom";
+	https: boolean;
+	portLooksLikeHostPublish?: boolean;
+	port?: number | null;
+}): InventoryWarning[] => {
+	const warnings: InventoryWarning[] = [];
+
+	const routed = deriveRoutedStatus({
+		kind: input.kind,
+		createdAt: input.createdAt,
+		lastSuccessfulDeployAt: input.lastSuccessfulDeployAt,
+	});
+	if (routed === "not_routed") {
+		warnings.push({
+			kind: "redeploy_traefik",
+			label: "Redeploy required",
+			hint: "Domain added after last deploy — redeploy to apply Traefik",
+		});
+	}
+
+	if (input.portLooksLikeHostPublish) {
+		const portHint =
+			input.port != null
+				? `Port ${input.port} matches a host publish mapping — use the container listen port instead.`
+				: "Port looks like a host publish port — use the container listen port instead.";
+		warnings.push({
+			kind: "host_publish_port",
+			label: "Host publish port",
+			hint: portHint,
+		});
+	}
+
+	const ssl = inventorySslBadge({
+		certificateType: input.certificateType,
+		https: input.https,
+		createdAt: input.createdAt,
+	});
+	if (ssl === "Pending") {
+		warnings.push({
+			kind: "cert_pending",
+			label: "Cert pending",
+			hint: "Let's Encrypt certificate is still being issued. This usually finishes within a few minutes.",
+		});
+	}
+
+	return warnings;
+};

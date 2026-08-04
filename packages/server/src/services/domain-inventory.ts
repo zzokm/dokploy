@@ -7,6 +7,7 @@ import {
 	deployments,
 	domains,
 	environments,
+	ports,
 	previewDeployments,
 	projects,
 	server,
@@ -35,6 +36,13 @@ export type DomainInventoryItem = {
 	uniqueConfigKey: number | null;
 	certificateType: "none" | "letsencrypt" | "custom";
 	https: boolean;
+	/** Traefik container listen port for this domain. */
+	port: number | null;
+	/**
+	 * True when domain.port matches a host-mode publishedPort on the linked
+	 * application (likely confused with container targetPort).
+	 */
+	portLooksLikeHostPublish: boolean;
 	dnsProvider: "none" | "cloudflare";
 	cfProxied: boolean | null;
 	cfStatus: "synced" | "pending" | "error" | null;
@@ -134,6 +142,33 @@ const loadDnsSyncMap = async (
 	return map;
 };
 
+const loadHostPublishedPortsMap = async (applicationIds: string[]) => {
+	const map = new Map<string, Set<number>>();
+	if (!applicationIds.length) return map;
+
+	const rows = await db
+		.select({
+			applicationId: ports.applicationId,
+			publishedPort: ports.publishedPort,
+			targetPort: ports.targetPort,
+			publishMode: ports.publishMode,
+		})
+		.from(ports)
+		.where(inArray(ports.applicationId, applicationIds));
+
+	for (const row of rows) {
+		if (row.publishMode !== "host") continue;
+		// Domain port should be the container listen/target port. Matching the
+		// host published port (especially when it differs from target) is a
+		// common misconfiguration.
+		if (row.publishedPort === row.targetPort) continue;
+		const set = map.get(row.applicationId) ?? new Set<number>();
+		set.add(row.publishedPort);
+		map.set(row.applicationId, set);
+	}
+	return map;
+};
+
 /**
  * Org-scoped inventory of every provisioned hostname (apps, compose, previews)
  * plus the Dokploy web-server domain when configured. Uses column-selected joins
@@ -148,6 +183,7 @@ export const listDomainsInventory = async (
 			host: domains.host,
 			certificateType: domains.certificateType,
 			https: domains.https,
+			port: domains.port,
 			dnsProvider: domains.dnsProvider,
 			cfProxied: domains.cfProxied,
 			cfStatus: domains.cfStatus,
@@ -183,6 +219,7 @@ export const listDomainsInventory = async (
 			host: domains.host,
 			certificateType: domains.certificateType,
 			https: domains.https,
+			port: domains.port,
 			dnsProvider: domains.dnsProvider,
 			cfProxied: domains.cfProxied,
 			cfStatus: domains.cfStatus,
@@ -215,6 +252,7 @@ export const listDomainsInventory = async (
 			host: domains.host,
 			certificateType: domains.certificateType,
 			https: domains.https,
+			port: domains.port,
 			dnsProvider: domains.dnsProvider,
 			cfProxied: domains.cfProxied,
 			cfStatus: domains.cfStatus,
@@ -264,15 +302,24 @@ export const listDomainsInventory = async (
 		),
 	];
 
-	const [deployMap, syncMap, webSettings] = await Promise.all([
+	const [deployMap, syncMap, hostPublishMap, webSettings] = await Promise.all([
 		loadLastSuccessfulDeployMap(applicationIds, composeIds),
 		loadDnsSyncMap(organizationId, cfRecordIds),
+		loadHostPublishedPortsMap(applicationIds),
 		getWebServerSettings(),
 	]);
 
 	const fallbackIp = webSettings?.serverIp?.trim()
 		? webSettings.serverIp.trim()
 		: null;
+
+	const portLooksLikeHostPublish = (
+		applicationId: string | null | undefined,
+		port: number | null | undefined,
+	) => {
+		if (!applicationId || port == null) return false;
+		return hostPublishMap.get(applicationId)?.has(port) ?? false;
+	};
 
 	const items: DomainInventoryItem[] = [];
 
@@ -293,6 +340,11 @@ export const listDomainsInventory = async (
 			uniqueConfigKey: row.uniqueConfigKey,
 			certificateType: row.certificateType,
 			https: row.https,
+			port: row.port ?? null,
+			portLooksLikeHostPublish: portLooksLikeHostPublish(
+				row.applicationId,
+				row.port,
+			),
 			dnsProvider: row.dnsProvider,
 			cfProxied: row.dnsProvider === "cloudflare" ? row.cfProxied : null,
 			cfStatus: row.dnsProvider === "cloudflare" ? row.cfStatus : null,
@@ -327,6 +379,8 @@ export const listDomainsInventory = async (
 			uniqueConfigKey: row.uniqueConfigKey,
 			certificateType: row.certificateType,
 			https: row.https,
+			port: row.port ?? null,
+			portLooksLikeHostPublish: false,
 			dnsProvider: row.dnsProvider,
 			cfProxied: row.dnsProvider === "cloudflare" ? row.cfProxied : null,
 			cfStatus: row.dnsProvider === "cloudflare" ? row.cfStatus : null,
@@ -359,6 +413,11 @@ export const listDomainsInventory = async (
 			uniqueConfigKey: row.uniqueConfigKey,
 			certificateType: row.certificateType,
 			https: row.https,
+			port: row.port ?? null,
+			portLooksLikeHostPublish: portLooksLikeHostPublish(
+				row.applicationId,
+				row.port,
+			),
 			dnsProvider: row.dnsProvider,
 			cfProxied: row.dnsProvider === "cloudflare" ? row.cfProxied : null,
 			cfStatus: row.dnsProvider === "cloudflare" ? row.cfStatus : null,
@@ -407,6 +466,8 @@ export const listDomainsInventory = async (
 			uniqueConfigKey: null,
 			certificateType: webSettings?.certificateType ?? "none",
 			https: webSettings?.https ?? false,
+			port: null,
+			portLooksLikeHostPublish: false,
 			dnsProvider: webSync ? "cloudflare" : "none",
 			cfProxied: webSync?.proxied ?? null,
 			cfStatus: webSync ? "synced" : null,

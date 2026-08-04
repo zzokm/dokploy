@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { DomainDnsRecordsSheet } from "@/components/dashboard/domains/domain-dns-records-sheet";
 import {
 	buildDomainEditHref,
+	deriveInventoryWarnings,
 	deriveRoutedStatus,
 	inventoryDnsBadgeFromCfStatus,
 	inventoryDnsBadgeFromValidation,
@@ -70,10 +71,16 @@ const healthVariant = (
 	if (label === "Valid" || label === "Routed" || label === "Synced") {
 		return "default";
 	}
-	if (label === "Failed" || label === "Not routed" || label === "Error") {
+	if (
+		label === "Failed" ||
+		label === "Not routed" ||
+		label === "Error" ||
+		label === "Redeploy required" ||
+		label === "Host publish port"
+	) {
 		return "destructive";
 	}
-	if (label === "Pending") return "secondary";
+	if (label === "Pending" || label === "Cert pending") return "secondary";
 	return "outline";
 };
 
@@ -238,32 +245,54 @@ export const DomainsInventoryTable = ({
 			{
 				accessorKey: "host",
 				header: "Host",
-				cell: ({ row }) => (
-					<div className="flex min-w-0 flex-col gap-0.5">
-						<span className="truncate font-mono text-sm">
-							{row.original.host}
-						</span>
-						<span className="text-xs text-muted-foreground">
-							{kindLabel(row.original.kind)}
-						</span>
-						<Button
-							type="button"
-							variant="ghost"
-							size="sm"
-							className="mt-0.5 h-7 w-fit px-2 text-xs md:hidden"
-							onClick={(event) => {
-								event.stopPropagation();
-								setDnsPreview({
-									domainId: row.original.domainId,
-									host: row.original.host,
-								});
-							}}
-						>
-							<ListTree className="mr-1 size-3" aria-hidden />
-							Records
-						</Button>
-					</div>
-				),
+				cell: ({ row }) => {
+					const warnings = deriveInventoryWarnings({
+						kind: row.original.kind,
+						createdAt: row.original.createdAt,
+						lastSuccessfulDeployAt: row.original.lastSuccessfulDeployAt,
+						certificateType: row.original.certificateType,
+						https: row.original.https,
+						portLooksLikeHostPublish: row.original.portLooksLikeHostPublish,
+						port: row.original.port,
+					});
+					return (
+						<div className="flex min-w-0 flex-col gap-0.5">
+							<span className="truncate font-mono text-sm">
+								{row.original.host}
+							</span>
+							<span className="text-xs text-muted-foreground">
+								{kindLabel(row.original.kind)}
+							</span>
+							{warnings.length ? (
+								<div className="mt-1 flex flex-wrap gap-1">
+									{warnings.map((warning) => (
+										<HealthBadgeCell
+											key={warning.kind}
+											label={warning.label}
+											hint={warning.hint}
+										/>
+									))}
+								</div>
+							) : null}
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								className="mt-0.5 h-7 w-fit px-2 text-xs md:hidden"
+								onClick={(event) => {
+									event.stopPropagation();
+									setDnsPreview({
+										domainId: row.original.domainId,
+										host: row.original.host,
+									});
+								}}
+							>
+								<ListTree className="mr-1 size-3" aria-hidden />
+								Records
+							</Button>
+						</div>
+					);
+				},
 			},
 			{
 				accessorKey: "serviceName",
@@ -305,7 +334,17 @@ export const DomainsInventoryTable = ({
 						https: row.original.https,
 						createdAt: row.original.createdAt,
 					});
-					return <HealthBadgeCell label={label} />;
+					const display = label === "Pending" ? "Cert pending" : label;
+					return (
+						<HealthBadgeCell
+							label={display}
+							hint={
+								label === "Pending"
+									? "Let's Encrypt certificate is still being issued. This usually finishes within a few minutes."
+									: undefined
+							}
+						/>
+					);
 				},
 			},
 			{
@@ -323,7 +362,7 @@ export const DomainsInventoryTable = ({
 							label={label}
 							hint={
 								status === "not_routed"
-									? "Domain was added after the last successful deploy. Redeploy to apply Traefik labels."
+									? "Domain added after last deploy — redeploy to apply Traefik"
 									: undefined
 							}
 						/>

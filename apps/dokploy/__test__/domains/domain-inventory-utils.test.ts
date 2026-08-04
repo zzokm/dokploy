@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	buildDomainEditHref,
+	deriveInventoryWarnings,
 	deriveRoutedStatus,
 	dnsRecordManagedByLabel,
 	inventoryDnsBadgeFromCfStatus,
@@ -89,6 +90,16 @@ describe("inventorySslBadge", () => {
 				createdAt: "2020-01-01T00:00:00.000Z",
 			}),
 		).toBe("Valid");
+	});
+
+	it("returns Pending for recently created Let's Encrypt domains", () => {
+		expect(
+			inventorySslBadge({
+				certificateType: "letsencrypt",
+				https: true,
+				createdAt: new Date().toISOString(),
+			}),
+		).toBe("Pending");
 	});
 });
 
@@ -234,5 +245,64 @@ describe("isPreviewableDnsRecordType", () => {
 
 	it("rejects unrelated types", () => {
 		expect(isPreviewableDnsRecordType("TXT")).toBe(false);
+	});
+});
+
+describe("deriveInventoryWarnings", () => {
+	it("warns when compose domain needs Traefik redeploy", () => {
+		const warnings = deriveInventoryWarnings({
+			kind: "compose",
+			createdAt: "2026-08-04T14:00:00.000Z",
+			lastSuccessfulDeployAt: "2026-08-04T12:00:00.000Z",
+			certificateType: "none",
+			https: false,
+		});
+		expect(warnings.some((w) => w.kind === "redeploy_traefik")).toBe(true);
+		expect(
+			warnings.find((w) => w.kind === "redeploy_traefik")?.hint,
+		).toContain("redeploy to apply Traefik");
+	});
+
+	it("warns when domain port matches a host publish port", () => {
+		const warnings = deriveInventoryWarnings({
+			kind: "application",
+			createdAt: "2020-01-01T00:00:00.000Z",
+			lastSuccessfulDeployAt: null,
+			certificateType: "none",
+			https: false,
+			portLooksLikeHostPublish: true,
+			port: 8080,
+		});
+		expect(warnings.some((w) => w.kind === "host_publish_port")).toBe(true);
+		expect(warnings.find((w) => w.kind === "host_publish_port")?.label).toBe(
+			"Host publish port",
+		);
+	});
+
+	it("warns when Let's Encrypt cert is pending", () => {
+		const warnings = deriveInventoryWarnings({
+			kind: "application",
+			createdAt: new Date().toISOString(),
+			lastSuccessfulDeployAt: null,
+			certificateType: "letsencrypt",
+			https: true,
+		});
+		expect(warnings.some((w) => w.kind === "cert_pending")).toBe(true);
+		expect(warnings.find((w) => w.kind === "cert_pending")?.label).toBe(
+			"Cert pending",
+		);
+	});
+
+	it("returns no warnings for a healthy established application domain", () => {
+		expect(
+			deriveInventoryWarnings({
+				kind: "application",
+				createdAt: "2020-01-01T00:00:00.000Z",
+				lastSuccessfulDeployAt: "2026-08-04T12:00:00.000Z",
+				certificateType: "letsencrypt",
+				https: true,
+				portLooksLikeHostPublish: false,
+			}),
+		).toEqual([]);
 	});
 });

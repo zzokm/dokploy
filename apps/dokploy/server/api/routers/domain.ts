@@ -1,5 +1,6 @@
 import {
 	createDomain,
+	dumpDomainCreateDebug,
 	findApplicationById,
 	findDomainById,
 	findDomainsByApplicationId,
@@ -9,6 +10,7 @@ import {
 	generateTraefikMeDomain,
 	getConnectionInstructionsForDomain,
 	getDomainConnectionStatus,
+	getUnderlyingErrorMessage,
 	getWebServerSettings,
 	manageDomain,
 	prepareEnvironmentVariables,
@@ -16,6 +18,7 @@ import {
 	readPorts,
 	removeDomain,
 	removeDomainById,
+	snapshotDomainCreateInput,
 	updateDomainById,
 	validateDomain,
 	verifyDomainConnection,
@@ -48,6 +51,7 @@ export const domainRouter = createTRPCRouter({
 	create: protectedProcedure
 		.input(apiCreateDomain)
 		.mutation(async ({ input, ctx }) => {
+			let createdDomainId: string | undefined
 			try {
 				if (input.domainType === "compose" && input.composeId) {
 					await checkServicePermissionAndAccess(ctx, input.composeId, {
@@ -59,6 +63,7 @@ export const domainRouter = createTRPCRouter({
 					});
 				}
 				const domain = await createDomain(input);
+				createdDomainId = domain.domainId
 				await audit(ctx, {
 					action: "create",
 					resourceType: "domain",
@@ -100,12 +105,21 @@ export const domainRouter = createTRPCRouter({
 
 				return await findDomainById(domain.domainId)
 			} catch (error) {
+				const { termbinUrl } = await dumpDomainCreateDebug({
+					stage: "domain.create",
+					domainId: createdDomainId,
+					error,
+					inputSnapshot: snapshotDomainCreateInput(
+						input as unknown as Record<string, unknown>,
+					),
+				})
+				const underlying = getUnderlyingErrorMessage(error)
+				const message = termbinUrl
+					? `${underlying} | debug=${termbinUrl}`
+					: underlying
 				throw new TRPCError({
 					code: "BAD_REQUEST",
-					message:
-						error instanceof Error
-							? error.message
-							: "Error creating the domain",
+					message: message || "Error creating the domain",
 					cause: error,
 				});
 			}
@@ -375,36 +389,55 @@ export const domainRouter = createTRPCRouter({
 	syncCloudflareDns: protectedProcedure
 		.input(z.object({ domainId: z.string().min(1) }))
 		.mutation(async ({ input, ctx }) => {
-			const domain = await findDomainById(input.domainId);
-			const serviceId = domain.applicationId || domain.composeId;
-			if (serviceId) {
-				await checkServicePermissionAndAccess(ctx, serviceId, {
-					domain: ["create"],
-				});
-			} else if (domain.previewDeploymentId) {
-				const preview = await findPreviewDeploymentById(domain.previewDeploymentId);
-				await checkServicePermissionAndAccess(ctx, preview.applicationId, {
-					domain: ["create"],
-				});
-			}
+			try {
+				const domain = await findDomainById(input.domainId);
+				const serviceId = domain.applicationId || domain.composeId;
+				if (serviceId) {
+					await checkServicePermissionAndAccess(ctx, serviceId, {
+						domain: ["create"],
+					});
+				} else if (domain.previewDeploymentId) {
+					const preview = await findPreviewDeploymentById(
+						domain.previewDeploymentId,
+					);
+					await checkServicePermissionAndAccess(ctx, preview.applicationId, {
+						domain: ["create"],
+					});
+				}
 
-			const [domainRow] = await ctx.db
-				.select({ dnsProvider: domains.dnsProvider })
-				.from(domains)
-				.where(eq(domains.domainId, input.domainId))
-				.limit(1)
+				const [domainRow] = await ctx.db
+					.select({ dnsProvider: domains.dnsProvider })
+					.from(domains)
+					.where(eq(domains.domainId, input.domainId))
+					.limit(1);
 
-			if (domainRow?.dnsProvider !== "cloudflare") {
+				if (domainRow?.dnsProvider !== "cloudflare") {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "Domain is not configured for Cloudflare DNS",
+					});
+				}
+
+				return await ensureCloudflareAppDnsForDomain({
+					organizationId: ctx.session.activeOrganizationId,
+					domainId: input.domainId,
+					proxiedDefault: domain.cfProxied ?? true,
+				});
+			} catch (error) {
+				const { termbinUrl } = await dumpDomainCreateDebug({
+					stage: "domain.syncCloudflareDns",
+					domainId: input.domainId,
+					error,
+					inputSnapshot: { domainId: input.domainId },
+				});
+				const underlying = getUnderlyingErrorMessage(error);
 				throw new TRPCError({
 					code: "BAD_REQUEST",
-					message: "Domain is not configured for Cloudflare DNS",
-				})
+					message: termbinUrl
+						? `${underlying} | debug=${termbinUrl}`
+						: underlying,
+					cause: error,
+				});
 			}
-
-			return await ensureCloudflareAppDnsForDomain({
-				organizationId: ctx.session.activeOrganizationId,
-				domainId: input.domainId,
-				proxiedDefault: domain.cfProxied ?? true,
-			})
 		}),
 });

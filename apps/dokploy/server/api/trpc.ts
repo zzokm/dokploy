@@ -116,12 +116,57 @@ const t = initTRPC
 	.create({
 		transformer: superjson,
 		errorFormatter({ shape, error }) {
+			const cause =
+				error.cause instanceof Error
+					? error.cause
+					: error.cause &&
+							typeof error.cause === "object" &&
+							"message" in error.cause
+						? (error.cause as { message?: string; code?: string | number })
+						: null;
+			const nestedCause =
+				cause instanceof Error
+					? (cause as Error & { cause?: unknown }).cause
+					: null;
+			const nestedMessage =
+				nestedCause instanceof Error
+					? nestedCause.message
+					: nestedCause &&
+							typeof nestedCause === "object" &&
+							nestedCause !== null &&
+							"message" in nestedCause
+						? String((nestedCause as { message: unknown }).message)
+						: null;
+			const causeMessage =
+				cause instanceof Error
+					? cause.message
+					: cause && "message" in cause
+						? String(cause.message)
+						: null;
+			const causeCode =
+				cause instanceof Error
+					? (cause as Error & { code?: string | number }).code
+					: cause && "code" in cause
+						? cause.code
+						: undefined;
+			const enrichedMessage =
+				nestedMessage && !shape.message.includes(nestedMessage)
+					? `${shape.message} | cause: ${nestedMessage}${causeCode !== undefined ? ` (code=${causeCode})` : ""}`
+					: causeMessage &&
+							causeMessage !== shape.message &&
+							!shape.message.includes(causeMessage)
+						? `${shape.message} | cause: ${causeMessage}${causeCode !== undefined ? ` (code=${causeCode})` : ""}`
+						: shape.message;
+
 			return {
 				...shape,
+				message: enrichedMessage,
 				data: {
 					...shape.data,
 					zodError:
 						error.cause instanceof ZodError ? error.cause.flatten() : null,
+					causeMessage: nestedMessage || causeMessage || null,
+					causeCode: causeCode ?? null,
 				},
 			};
 		},

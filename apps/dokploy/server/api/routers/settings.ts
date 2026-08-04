@@ -48,6 +48,7 @@ import {
 } from "@dokploy/server";
 import { db } from "@dokploy/server/db";
 import { checkPermission } from "@dokploy/server/services/permission";
+import { resolveServerDomainCertResolver } from "@dokploy/server/services/cloudflare/server-domain-dns";
 import { generateOpenApiDocument } from "@dokploy/trpc-openapi";
 import { TRPCError } from "@trpc/server";
 import { eq, sql } from "drizzle-orm";
@@ -299,7 +300,16 @@ export const settingsRouter = createTRPCRouter({
 				});
 			}
 
-			updateServerTraefik(settings, input.host);
+			const certResolver = await resolveServerDomainCertResolver(
+				ctx.session.activeOrganizationId,
+				input.host,
+			);
+
+			updateServerTraefik(
+				settings,
+				input.host,
+				certResolver ? { certResolver } : undefined,
+			);
 			if (input.letsEncryptEmail) {
 				updateLetsEncryptEmail(input.letsEncryptEmail);
 			}

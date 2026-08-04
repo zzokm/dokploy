@@ -23,6 +23,10 @@ import {
 	previewCloudflareAppDnsForDomain,
 	previewCloudflareAppDnsForOrg,
 } from "@dokploy/server/services/cloudflare/dns-preview"
+import {
+	applyServerDomainDns,
+	previewServerDomainDns,
+} from "@dokploy/server/services/cloudflare/server-domain-dns"
 import { listCloudflareZones } from "@dokploy/server/services/cloudflare/zones"
 import { syncCloudflareZonesForOrg } from "@dokploy/server/services/cloudflare/sync-zones"
 import { createTRPCRouter, protectedProcedure } from "../trpc"
@@ -291,6 +295,42 @@ export const cloudflareSettingsRouter = createTRPCRouter({
 			ok: true as const,
 			appDns: appliedRes,
 		}
+	}),
+
+	previewServerDomainDns: protectedProcedure.query(async ({ ctx }) => {
+		return await previewServerDomainDns(ctx.session.activeOrganizationId)
+	}),
+
+	applyServerDomainDns: protectedProcedure
+		.input(
+			z
+				.object({
+					proxied: z.boolean().optional(),
+				})
+				.optional(),
+		)
+		.mutation(async ({ ctx, input }) => {
+			try {
+				return await applyServerDomainDns({
+					organizationId: ctx.session.activeOrganizationId,
+					proxied: input?.proxied,
+				})
+			} catch (e) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: e instanceof Error ? e.message : "Failed to sync server domain DNS",
+				})
+			}
+		}),
+
+	disconnect: protectedProcedure.mutation(async ({ ctx }) => {
+		await ctx.db
+			.delete(cloudflareSettings)
+			.where(
+				eq(cloudflareSettings.organizationId, ctx.session.activeOrganizationId),
+			)
+
+		return { connected: false as const }
 	}),
 })
 

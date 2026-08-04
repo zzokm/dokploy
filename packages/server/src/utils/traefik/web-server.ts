@@ -11,9 +11,15 @@ import {
 import type { FileConfig } from "./file-types";
 import type { MainTraefikConfig } from "./types";
 
+export type UpdateServerTraefikOptions = {
+	/** Prefer DNS-01 when the server domain is Cloudflare-proxied. */
+	certResolver?: "letsencrypt" | "letsencrypt-cloudflare";
+};
+
 export const updateServerTraefik = (
 	settings: typeof webServerSettings.$inferSelect | null,
 	newHost: string | null,
+	options?: UpdateServerTraefikOptions,
 ) => {
 	const { https, certificateType } = settings || {};
 	const appName = "dokploy";
@@ -55,11 +61,12 @@ export const updateServerTraefik = (
 		currentRouterConfig.middlewares = ["redirect-to-https"];
 
 		if (certificateType === "letsencrypt") {
+			const certResolver = options?.certResolver ?? "letsencrypt";
 			config.http.routers[`${appName}-router-app-secure`] = {
 				rule: `Host(\`${newHost}\`)`,
 				service: `${appName}-service-app`,
 				entryPoints: ["websecure"],
-				tls: { certResolver: "letsencrypt" },
+				tls: { certResolver },
 			};
 		} else {
 			config.http.routers[`${appName}-router-app-secure`] = {

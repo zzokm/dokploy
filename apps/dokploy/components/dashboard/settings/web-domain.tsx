@@ -303,17 +303,12 @@ export const WebDomain = () => {
 										<CloudflareHostnameLabelField
 											value={cfHostnameLabel}
 											onChange={setCfHostnameLabel}
-											placeholder="@ or panel"
+											placeholder="@ or dokploy"
 											ariaLabel="Hostname label"
 											disabled={!selectedZone}
 											inputClassName="text-sm"
 											suffix={
-												selectedZone
-													? cfHostnameLabel.trim() === "@" ||
-														!cfHostnameLabel.trim()
-														? selectedZone.name
-														: `.${selectedZone.name}`
-													: ".your-zone.com"
+												selectedZone ? `.${selectedZone.name}` : ".domain.com"
 											}
 										/>
 									</div>

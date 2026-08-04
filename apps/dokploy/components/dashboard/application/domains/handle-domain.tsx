@@ -701,16 +701,12 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 										<CloudflareHostnameLabelField
 											value={subdomainLabel}
 											onChange={setSubdomainLabel}
-											placeholder="app or www"
+											placeholder="@ or dokploy"
 											ariaLabel="Subdomain or hostname prefix"
 											disabled={!selectedCfZoneId}
 											inputClassName="text-sm"
 											suffix={
-												selectedZone
-													? subdomainLabel.trim()
-														? `.${selectedZone.name}`
-														: selectedZone.name
-													: ".your-zone.com"
+												selectedZone ? `.${selectedZone.name}` : ".domain.com"
 											}
 										/>
 										<FormField

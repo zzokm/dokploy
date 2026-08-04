@@ -25,12 +25,6 @@ export const domainType = pgEnum("domainType", [
 
 export const domainDnsProvider = pgEnum("domainDnsProvider", ["none", "cloudflare"]);
 
-export const cloudflareDnsRecordType = pgEnum("cloudflareDnsRecordType", [
-	"A",
-	"AAAA",
-	"CNAME",
-]);
-
 export const cloudflareDomainStatus = pgEnum("cloudflareDomainStatus", [
 	"synced",
 	"pending",
@@ -72,11 +66,6 @@ export const domains = pgTable("domain", {
 	forwardAuthEnabled: boolean("forwardAuthEnabled").notNull().default(false),
 
 	dnsProvider: domainDnsProvider("dnsProvider").notNull().default("none"),
-	cloudflareZoneId: text("cloudflare_zone_id"),
-	cloudflareRecordId: text("cloudflare_record_id"),
-	cloudflareProxied: boolean("cloudflare_proxied").notNull().default(true),
-	cloudflareRecordType: cloudflareDnsRecordType("cloudflare_record_type"),
-
 	cfZoneId: text("cf_zone_id"),
 	cfZoneName: text("cf_zone_name"),
 	cfDnsRecordId: text("cf_dns_record_id"),
@@ -103,6 +92,8 @@ const createSchema = createInsertSchema(domains, {
 	...domain.shape,
 	// Override pgEnum so Zod 4 infers only string literals, not numeric enum index
 	domainType: z.enum(["compose", "application", "preview"]).optional(),
+	dnsProvider: z.enum(["none", "cloudflare"]).optional(),
+	cfStatus: z.enum(["synced", "pending", "error"]).optional(),
 });
 
 export const apiCreateDomain = createSchema.pick({
@@ -124,7 +115,6 @@ export const apiCreateDomain = createSchema.pick({
 	forwardAuthEnabled: true,
 	dnsProvider: true,
 	cfProxied: true,
-	cloudflareProxied: true,
 });
 
 export const apiFindDomain = z.object({
@@ -160,6 +150,5 @@ export const apiUpdateDomain = createSchema
 		forwardAuthEnabled: true,
 		dnsProvider: true,
 		cfProxied: true,
-		cloudflareProxied: true,
 	})
 	.merge(createSchema.pick({ domainId: true }).required());

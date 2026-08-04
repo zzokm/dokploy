@@ -25,6 +25,7 @@ import {
 	XCircle,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { DialogAction } from "@/components/shared/dialog-action";
@@ -113,6 +114,9 @@ interface Props {
 }
 
 export const ShowDomains = ({ id, type }: Props) => {
+	const router = useRouter();
+	const deepLinkDomainId =
+		typeof router.query.domainId === "string" ? router.query.domainId : "";
 	const { data: permissions } = api.user.getPermissions.useQuery();
 	const canCreateDomain = permissions?.domain.create ?? false;
 	const canDeleteDomain = permissions?.domain.delete ?? false;
@@ -311,6 +315,29 @@ export const ShowDomains = ({ id, type }: Props) => {
 
 	return (
 		<div className="flex w-full animate-in fade-in-0 slide-in-from-bottom-2 flex-col gap-5 duration-300">
+			{deepLinkDomainId ? (
+				<AddDomain
+					id={id}
+					type={type}
+					domainId={deepLinkDomainId}
+					defaultOpen
+					onOpenChange={(open) => {
+						if (open) return;
+						const nextQuery = { ...router.query };
+						delete nextQuery.domainId;
+						void router.replace(
+							{
+								pathname: router.pathname,
+								query: nextQuery,
+							},
+							undefined,
+							{ shallow: true },
+						);
+					}}
+				>
+					<span className="sr-only">Edit domain</span>
+				</AddDomain>
+			) : null}
 			<Card className="w-full bg-background">
 				<CardHeader className="flex flex-row flex-wrap items-center justify-between gap-4">
 					<div className="flex min-w-0 flex-col gap-1">

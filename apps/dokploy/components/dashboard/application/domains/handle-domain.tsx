@@ -161,10 +161,19 @@ interface Props {
 	type: "application" | "compose";
 	domainId?: string;
 	children: React.ReactNode;
+	defaultOpen?: boolean;
+	onOpenChange?: (open: boolean) => void;
 }
 
-export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
-	const [isOpen, setIsOpen] = useState(false);
+export const AddDomain = ({
+	id,
+	type,
+	domainId = "",
+	children,
+	defaultOpen = false,
+	onOpenChange,
+}: Props) => {
+	const [isOpen, setIsOpen] = useState(defaultOpen);
 	const [cacheType, setCacheType] = useState<CacheType>("cache");
 	const [isManualInput, setIsManualInput] = useState(false);
 	const [hostInputMode, setHostInputMode] = useState<HostInputMode>("manual");
@@ -455,7 +464,13 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 			});
 	};
 	return (
-		<Dialog open={isOpen} onOpenChange={setIsOpen}>
+		<Dialog
+			open={isOpen}
+			onOpenChange={(open) => {
+				setIsOpen(open);
+				onOpenChange?.(open);
+			}}
+		>
 			<DialogTrigger className="" asChild>
 				{children}
 			</DialogTrigger>

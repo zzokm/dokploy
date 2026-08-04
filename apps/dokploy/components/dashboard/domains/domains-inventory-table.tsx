@@ -12,9 +12,11 @@ import {
 } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import { Globe2, Loader2, Search } from "lucide-react";
+import { useRouter } from "next/router";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+	buildDomainEditHref,
 	deriveRoutedStatus,
 	inventoryDnsBadgeFromCfStatus,
 	inventoryDnsBadgeFromValidation,
@@ -101,6 +103,7 @@ export const DomainsInventoryTable = ({
 }: {
 	emptyContent?: ReactNode;
 }) => {
+	const router = useRouter();
 	const { data, isPending } = api.domain.listInventory.useQuery();
 	const { mutateAsync: validateDomain } =
 		api.domain.validateDomain.useMutation();
@@ -110,6 +113,19 @@ export const DomainsInventoryTable = ({
 	const [hostFilter, setHostFilter] = useState("");
 	const [dnsHealth, setDnsHealth] = useState<DnsHealthMap>({});
 	const validatedKeyRef = useRef<string>("");
+
+	const openDomain = (row: InventoryRow) => {
+		const href = buildDomainEditHref({
+			kind: row.kind,
+			projectId: row.projectId,
+			environmentId: row.environmentId,
+			applicationId: row.applicationId,
+			composeId: row.composeId,
+			domainId: row.domainId,
+		});
+		if (!href) return;
+		void router.push(href);
+	};
 
 	useEffect(() => {
 		if (!data?.length) {
@@ -386,9 +402,18 @@ export const DomainsInventoryTable = ({
 								table.getRowModel().rows.map((row, index) => (
 									<TableRow
 										key={row.id}
-										className="animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both duration-300"
+										role="link"
+										tabIndex={0}
+										className="cursor-pointer animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both duration-300 hover:bg-muted/40"
 										style={{
 											animationDelay: `${Math.min(index, 8) * 30}ms`,
+										}}
+										onClick={() => openDomain(row.original)}
+										onKeyDown={(event) => {
+											if (event.key === "Enter" || event.key === " ") {
+												event.preventDefault();
+												openDomain(row.original);
+											}
 										}}
 									>
 										{row.getVisibleCells().map((cell) => (

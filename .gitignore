@@ -40,6 +40,8 @@ yarn-error.log*
 
 # Cursor
 /.cursor/
+!.cursor/skills/
+!.cursor/skills/**/
 .cursorignore
 
 # Misc

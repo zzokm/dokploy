@@ -23,7 +23,10 @@ import {
 import type { RouterOutputs } from "@/utils/api";
 import { DnsHelperModal } from "./dns-helper-modal";
 import { AddDomain } from "./handle-domain";
-import type { ValidationStates } from "./show-domains";
+import {
+	sanitizeDnsValidationError,
+	type ValidationStates,
+} from "./show-domains";
 
 export type Domain =
 	| RouterOutputs["domain"]["byApplicationId"][0]
@@ -33,7 +36,7 @@ interface ColumnsProps {
 	id: string;
 	type: "application" | "compose";
 	validationStates: ValidationStates;
-	handleValidateDomain: (host: string) => Promise<void>;
+	handleValidateDomain: (host: string, createdAt?: string) => Promise<void>;
 	handleDeleteDomain: (domainId: string) => Promise<void>;
 	isDeleting: boolean;
 	serverIp?: string;
@@ -181,7 +184,9 @@ export const createColumns = ({
 													? "bg-red-500/10 text-red-500 cursor-pointer"
 													: "bg-yellow-500/10 text-yellow-500 cursor-pointer"
 										}
-										onClick={() => handleValidateDomain(domain.host)}
+										onClick={() =>
+											handleValidateDomain(domain.host, domain.createdAt)
+										}
 									>
 										{validationState?.isLoading ? (
 											<>
@@ -198,7 +203,7 @@ export const createColumns = ({
 										) : validationState?.error ? (
 											<>
 												<XCircle className="size-3 mr-1" />
-												Invalid
+												Failed
 											</>
 										) : (
 											<>
@@ -213,8 +218,10 @@ export const createColumns = ({
 										<p>{validationState.message}</p>
 									) : validationState?.error ? (
 										<div className="flex flex-col gap-1">
-											<p className="font-medium text-red-500">Error:</p>
-											<p>{validationState.error}</p>
+											<p className="font-medium text-red-500">Failed</p>
+											<p>
+												{sanitizeDnsValidationError(validationState.error)}
+											</p>
 										</div>
 									) : (
 										"Click to validate DNS configuration"

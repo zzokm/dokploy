@@ -152,6 +152,38 @@ export const getDomainHost = (domain: Domain) => {
 
 const resolveDns = promisify(dns.resolve4);
 
+const DNS_LOOKUP_ERROR_CODES = new Set([
+	"ENOTFOUND",
+	"ENODATA",
+	"EAI_AGAIN",
+	"ESERVFAIL",
+	"ETIMEOUT",
+	"ETIMEDOUT",
+	"ENOTIMP",
+	"EREFUSED",
+]);
+
+const DNS_LOOKUP_FAILURE_MESSAGE =
+	"DNS records not found yet. Propagation can take a few minutes.";
+
+const getDnsErrorCode = (error: unknown): string | undefined => {
+	if (error && typeof error === "object" && "code" in error) {
+		const code = (error as { code?: unknown }).code;
+		if (typeof code === "string") {
+			return code;
+		}
+	}
+
+	if (error instanceof Error) {
+		const match = error.message.match(
+			/\b(ENOTFOUND|ENODATA|EAI_AGAIN|ESERVFAIL|ETIMEOUT|ETIMEDOUT|ENOTIMP|EREFUSED)\b/,
+		);
+		return match?.[1];
+	}
+
+	return undefined;
+};
+
 export const validateDomain = async (
 	domain: string,
 	expectedIp?: string,
@@ -161,6 +193,7 @@ export const validateDomain = async (
 	error?: string;
 	isCloudflare?: boolean;
 	cdnProvider?: string;
+	isLookupFailure?: boolean;
 }> => {
 	try {
 		// Remove protocol and path if present
@@ -203,10 +236,18 @@ export const validateDomain = async (
 			resolvedIp: resolvedIps.join(", "),
 		};
 	} catch (error) {
+		const code = getDnsErrorCode(error);
+		if (code && DNS_LOOKUP_ERROR_CODES.has(code)) {
+			return {
+				isValid: false,
+				error: DNS_LOOKUP_FAILURE_MESSAGE,
+				isLookupFailure: true,
+			};
+		}
+
 		return {
 			isValid: false,
-			error:
-				error instanceof Error ? error.message : "Failed to resolve domain",
+			error: "Failed to resolve domain",
 		};
 	}
 };

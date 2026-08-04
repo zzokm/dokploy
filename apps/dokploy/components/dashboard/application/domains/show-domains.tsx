@@ -76,6 +76,37 @@ export type ValidationState = {
 
 export type ValidationStates = Record<string, ValidationState>;
 
+const RECENT_DOMAIN_WINDOW_MS = 10 * 60 * 1000;
+const DNS_RETRY_DELAYS_MS = [0, 2_000, 4_000, 6_000, 8_000];
+const DNS_ERRNO_PATTERN =
+	/\b(ENOTFOUND|ENODATA|EAI_AGAIN|ESERVFAIL|ETIMEOUT|ETIMEDOUT|ENOTIMP|EREFUSED)\b/i;
+
+const sleep = (ms: number) =>
+	new Promise<void>((resolve) => {
+		setTimeout(resolve, ms);
+	});
+
+const isRecentlyCreatedDomain = (createdAt?: string) => {
+	if (!createdAt) {
+		return false;
+	}
+	const createdAtMs = new Date(createdAt).getTime();
+	if (Number.isNaN(createdAtMs)) {
+		return false;
+	}
+	return Date.now() - createdAtMs < RECENT_DOMAIN_WINDOW_MS;
+};
+
+export const sanitizeDnsValidationError = (error?: string) => {
+	if (!error) {
+		return "DNS validation failed";
+	}
+	if (DNS_ERRNO_PATTERN.test(error) || /^query[A-Z]?\s/i.test(error)) {
+		return "DNS records not found yet. Propagation can take a few minutes.";
+	}
+	return error;
+};
+
 interface Props {
 	id: string;
 	type: "application" | "compose";
@@ -158,28 +189,78 @@ export const ShowDomains = ({ id, type }: Props) => {
 		}
 	};
 
-	const handleValidateDomain = async (host: string) => {
+	const handleValidateDomain = async (host: string, createdAt?: string) => {
 		setValidationStates((prev) => ({
 			...prev,
 			[host]: { isLoading: true },
 		}));
 
+		const serverIp =
+			application?.server?.ipAddress?.toString() || ip?.toString() || "";
+		const shouldRetry = isRecentlyCreatedDomain(createdAt);
+		const maxAttempts = shouldRetry ? DNS_RETRY_DELAYS_MS.length : 1;
+
+		let lastError = "DNS validation failed";
+
 		try {
-			const result = await validateDomain({
-				domain: host,
-				serverIp:
-					application?.server?.ipAddress?.toString() || ip?.toString() || "",
-			});
+			for (let attempt = 0; attempt < maxAttempts; attempt++) {
+				const delayMs = DNS_RETRY_DELAYS_MS[attempt] ?? 0;
+				if (delayMs > 0) {
+					await sleep(delayMs);
+				}
+
+				try {
+					const result = await validateDomain({
+						domain: host,
+						serverIp,
+					});
+
+					if (result.isValid) {
+						setValidationStates((prev) => ({
+							...prev,
+							[host]: {
+								isLoading: false,
+								isValid: true,
+								error: result.error,
+								resolvedIp: result.resolvedIp,
+								cdnProvider: result.cdnProvider,
+								message:
+									result.error && result.isValid ? result.error : undefined,
+							},
+						}));
+						return;
+					}
+
+					lastError = sanitizeDnsValidationError(result.error);
+
+					const canRetryLookup =
+						shouldRetry &&
+						attempt < maxAttempts - 1 &&
+						(result.isLookupFailure ||
+							!result.resolvedIp ||
+							DNS_ERRNO_PATTERN.test(result.error || ""));
+
+					if (!canRetryLookup) {
+						break;
+					}
+				} catch (err) {
+					const error = err as Error;
+					lastError = sanitizeDnsValidationError(
+						error.message || "Failed to validate domain",
+					);
+
+					if (!shouldRetry || attempt >= maxAttempts - 1) {
+						break;
+					}
+				}
+			}
 
 			setValidationStates((prev) => ({
 				...prev,
 				[host]: {
 					isLoading: false,
-					isValid: result.isValid,
-					error: result.error,
-					resolvedIp: result.resolvedIp,
-					cdnProvider: result.cdnProvider,
-					message: result.error && result.isValid ? result.error : undefined,
+					isValid: false,
+					error: lastError,
 				},
 			}));
 		} catch (err) {
@@ -189,7 +270,9 @@ export const ShowDomains = ({ id, type }: Props) => {
 				[host]: {
 					isLoading: false,
 					isValid: false,
-					error: error.message || "Failed to validate domain",
+					error: sanitizeDnsValidationError(
+						error.message || "Failed to validate domain",
+					),
 				},
 			}));
 		}
@@ -608,7 +691,10 @@ export const ShowDomains = ({ id, type }: Props) => {
 																				: "bg-yellow-500/10 text-yellow-500 cursor-pointer"
 																	}
 																	onClick={() =>
-																		handleValidateDomain(item.host)
+																		handleValidateDomain(
+																			item.host,
+																			item.createdAt,
+																		)
 																	}
 																>
 																	{validationState?.isLoading ? (
@@ -627,7 +713,7 @@ export const ShowDomains = ({ id, type }: Props) => {
 																	) : validationState?.error ? (
 																		<>
 																			<XCircle className="size-3 mr-1" />
-																			{validationState.error}
+																			Failed
 																		</>
 																	) : (
 																		<>
@@ -644,9 +730,13 @@ export const ShowDomains = ({ id, type }: Props) => {
 																) : validationState?.error ? (
 																	<div className="flex flex-col gap-1">
 																		<p className="font-medium text-red-500">
-																			Error:
+																			Failed
 																		</p>
-																		<p>{validationState.error}</p>
+																		<p>
+																			{sanitizeDnsValidationError(
+																				validationState.error,
+																			)}
+																		</p>
 																	</div>
 																) : (
 																	"Click to validate DNS configuration"

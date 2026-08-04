@@ -1,13 +1,7 @@
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import {
-	afterEach,
-	describe,
-	expect,
-	it,
-	vi,
-} from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 describe("dokploy encryption key bootstrap", () => {
 	afterEach(() => {

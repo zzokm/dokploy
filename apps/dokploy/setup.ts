@@ -21,7 +21,7 @@ import { ensureDokployEncryptionKey } from "@dokploy/server/utils/crypto/dokploy
 
 (async () => {
 	try {
-		await ensureDokployEncryptionKey({ allowGenerate: true })
+		await ensureDokployEncryptionKey({ allowGenerate: true });
 		setupDirectories();
 		createDefaultMiddlewares();
 		await initializeSwarm();

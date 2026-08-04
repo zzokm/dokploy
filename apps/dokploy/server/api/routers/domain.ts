@@ -12,6 +12,7 @@ import {
 	getDomainConnectionStatus,
 	getUnderlyingErrorMessage,
 	getWebServerSettings,
+	listDomainDnsRecords,
 	listDomainsInventory,
 	manageDomain,
 	prepareEnvironmentVariables,
@@ -144,6 +145,25 @@ export const domainRouter = createTRPCRouter({
 	listInventory: withPermission("domain", "read").query(async ({ ctx }) => {
 		return await listDomainsInventory(ctx.session.activeOrganizationId);
 	}),
+	listDnsRecords: withPermission("domain", "read")
+		.input(z.object({ domainId: z.string().min(1) }))
+		.query(async ({ ctx, input }) => {
+			try {
+				return await listDomainDnsRecords(
+					ctx.session.activeOrganizationId,
+					input.domainId,
+				);
+			} catch (error) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message:
+						error instanceof Error
+							? error.message
+							: "Domain DNS records not found",
+					cause: error,
+				});
+			}
+		}),
 	generateDomain: withPermission("domain", "create")
 		.input(z.object({ appName: z.string(), serverId: z.string().optional() }))
 		.mutation(async ({ input, ctx }) => {

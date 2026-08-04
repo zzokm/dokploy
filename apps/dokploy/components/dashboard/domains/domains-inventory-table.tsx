@@ -11,11 +11,12 @@ import {
 	useReactTable,
 } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { Globe2, Loader2, RefreshCw, Search } from "lucide-react";
+import { Globe2, ListTree, Loader2, RefreshCw, Search } from "lucide-react";
 import { useRouter } from "next/router";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { DomainDnsRecordsSheet } from "@/components/dashboard/domains/domain-dns-records-sheet";
 import {
 	buildDomainEditHref,
 	deriveRoutedStatus,
@@ -127,6 +128,10 @@ export const DomainsInventoryTable = ({
 	const [hostFilter, setHostFilter] = useState("");
 	const [dnsHealth, setDnsHealth] = useState<DnsHealthMap>({});
 	const [syncingDomainId, setSyncingDomainId] = useState<string | null>(null);
+	const [dnsPreview, setDnsPreview] = useState<{
+		domainId: string;
+		host: string;
+	} | null>(null);
 	const validatedKeyRef = useRef<string>("");
 
 	const openDomain = (row: InventoryRow) => {
@@ -241,6 +246,22 @@ export const DomainsInventoryTable = ({
 						<span className="text-xs text-muted-foreground">
 							{kindLabel(row.original.kind)}
 						</span>
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							className="mt-0.5 h-7 w-fit px-2 text-xs md:hidden"
+							onClick={(event) => {
+								event.stopPropagation();
+								setDnsPreview({
+									domainId: row.original.domainId,
+									host: row.original.host,
+								});
+							}}
+						>
+							<ListTree className="mr-1 size-3" aria-hidden />
+							Records
+						</Button>
 					</div>
 				),
 			},
@@ -346,22 +367,40 @@ export const DomainsInventoryTable = ({
 									{formatRelative(row.original.lastSyncedAt)}
 								</span>
 							</div>
-							{canSync ? (
+							<div className="flex flex-wrap items-center gap-1">
 								<Button
 									type="button"
 									variant="ghost"
 									size="sm"
 									className="h-7 px-2 text-xs"
-									isLoading={syncingDomainId === row.original.domainId}
 									onClick={(event) => {
 										event.stopPropagation();
-										void handleRowSync(row.original);
+										setDnsPreview({
+											domainId: row.original.domainId,
+											host: row.original.host,
+										});
 									}}
 								>
-									<RefreshCw className="mr-1 size-3" aria-hidden />
-									Sync
+									<ListTree className="mr-1 size-3" aria-hidden />
+									Records
 								</Button>
-							) : null}
+								{canSync ? (
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										className="h-7 px-2 text-xs"
+										isLoading={syncingDomainId === row.original.domainId}
+										onClick={(event) => {
+											event.stopPropagation();
+											void handleRowSync(row.original);
+										}}
+									>
+										<RefreshCw className="mr-1 size-3" aria-hidden />
+										Sync
+									</Button>
+								) : null}
+							</div>
 						</div>
 					);
 				},
@@ -534,6 +573,14 @@ export const DomainsInventoryTable = ({
 					</div>
 				) : null}
 			</div>
+			<DomainDnsRecordsSheet
+				domainId={dnsPreview?.domainId ?? null}
+				host={dnsPreview?.host}
+				open={!!dnsPreview}
+				onOpenChange={(nextOpen) => {
+					if (!nextOpen) setDnsPreview(null);
+				}}
+			/>
 		</TooltipProvider>
 	);
 };

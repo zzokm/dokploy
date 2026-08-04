@@ -423,3 +423,230 @@ export const listDomainsInventory = async (
 	items.sort((a, b) => a.host.localeCompare(b.host));
 	return items;
 };
+
+export type DomainDnsRecordPreview = {
+	cfRecordId: string;
+	type: string;
+	name: string;
+	content: string;
+	proxied: boolean;
+	ttl: number;
+	priority: number | null;
+	managedBy: "app_domain" | "mail_stack" | "manual";
+	lastSyncedAt: string | null;
+};
+
+export type DomainDnsRecordsResult = {
+	domainId: string;
+	host: string;
+	zoneName: string | null;
+	dnsProvider: "none" | "cloudflare";
+	records: DomainDnsRecordPreview[];
+};
+
+const normalizeHostFqdn = (host: string) =>
+	host.trim().toLowerCase().replace(/\.$/, "");
+
+const mapDnsRecordPreview = (row: {
+	cfRecordId: string;
+	type: string;
+	name: string;
+	content: string;
+	proxied: boolean;
+	ttl: number;
+	priority: number | null;
+	managedBy: "app_domain" | "mail_stack" | "manual";
+	lastSyncedAt: Date | string | null;
+}): DomainDnsRecordPreview => ({
+	cfRecordId: row.cfRecordId,
+	type: row.type,
+	name: row.name,
+	content: row.content,
+	proxied: row.proxied,
+	ttl: row.ttl,
+	priority: row.priority,
+	managedBy: row.managedBy,
+	lastSyncedAt: mapSyncIso(row.lastSyncedAt),
+});
+
+const dnsRecordSelect = {
+	cfRecordId: cloudflareDnsRecord.cfRecordId,
+	type: cloudflareDnsRecord.type,
+	name: cloudflareDnsRecord.name,
+	content: cloudflareDnsRecord.content,
+	proxied: cloudflareDnsRecord.proxied,
+	ttl: cloudflareDnsRecord.ttl,
+	priority: cloudflareDnsRecord.priority,
+	managedBy: cloudflareDnsRecord.managedBy,
+	lastSyncedAt: cloudflareDnsRecord.lastSyncedAt,
+} as const;
+
+const loadMirroredDnsRecords = async (
+	organizationId: string,
+	host: string,
+	cfDnsRecordId: string | null,
+) => {
+	const normalized = normalizeHostFqdn(host);
+	const byName = await db
+		.select(dnsRecordSelect)
+		.from(cloudflareDnsRecord)
+		.where(
+			and(
+				eq(cloudflareDnsRecord.organizationId, organizationId),
+				eq(cloudflareDnsRecord.name, normalized),
+			),
+		);
+
+	const byId =
+		cfDnsRecordId &&
+		!byName.some((row) => row.cfRecordId === cfDnsRecordId)
+			? await db
+					.select(dnsRecordSelect)
+					.from(cloudflareDnsRecord)
+					.where(
+						and(
+							eq(cloudflareDnsRecord.organizationId, organizationId),
+							eq(cloudflareDnsRecord.cfRecordId, cfDnsRecordId),
+						),
+					)
+			: [];
+
+	const records = [...byName, ...byId].map(mapDnsRecordPreview);
+	records.sort((a, b) => {
+		const typeCmp = a.type.localeCompare(b.type);
+		if (typeCmp !== 0) return typeCmp;
+		return a.name.localeCompare(b.name);
+	});
+	return records;
+};
+
+/**
+ * Read-only Cloudflare DNS mirror rows for a domain (A/CNAME + sync metadata).
+ * Prefers `cloudflare_dns_record` — no parallel store.
+ */
+export const listDomainDnsRecords = async (
+	organizationId: string,
+	domainId: string,
+): Promise<DomainDnsRecordsResult> => {
+	if (domainId === "web-server") {
+		const webSettings = await getWebServerSettings();
+		const host = webSettings?.host?.trim() || "";
+		const records = host
+			? await loadMirroredDnsRecords(organizationId, host, null)
+			: [];
+
+		return {
+			domainId,
+			host,
+			zoneName: null,
+			dnsProvider: records.length ? "cloudflare" : "none",
+			records,
+		};
+	}
+
+	const [appOwned] = await db
+		.select({
+			domainId: domains.domainId,
+			host: domains.host,
+			dnsProvider: domains.dnsProvider,
+			cfZoneName: domains.cfZoneName,
+			cfDnsRecordId: domains.cfDnsRecordId,
+		})
+		.from(domains)
+		.innerJoin(
+			applications,
+			eq(domains.applicationId, applications.applicationId),
+		)
+		.innerJoin(
+			environments,
+			eq(applications.environmentId, environments.environmentId),
+		)
+		.innerJoin(projects, eq(environments.projectId, projects.projectId))
+		.where(
+			and(
+				eq(domains.domainId, domainId),
+				eq(projects.organizationId, organizationId),
+			),
+		)
+		.limit(1);
+
+	const [composeOwned] = appOwned
+		? [undefined]
+		: await db
+				.select({
+					domainId: domains.domainId,
+					host: domains.host,
+					dnsProvider: domains.dnsProvider,
+					cfZoneName: domains.cfZoneName,
+					cfDnsRecordId: domains.cfDnsRecordId,
+				})
+				.from(domains)
+				.innerJoin(compose, eq(domains.composeId, compose.composeId))
+				.innerJoin(
+					environments,
+					eq(compose.environmentId, environments.environmentId),
+				)
+				.innerJoin(projects, eq(environments.projectId, projects.projectId))
+				.where(
+					and(
+						eq(domains.domainId, domainId),
+						eq(projects.organizationId, organizationId),
+					),
+				)
+				.limit(1);
+
+	const [previewOwned] =
+		appOwned || composeOwned
+			? [undefined]
+			: await db
+					.select({
+						domainId: domains.domainId,
+						host: domains.host,
+						dnsProvider: domains.dnsProvider,
+						cfZoneName: domains.cfZoneName,
+						cfDnsRecordId: domains.cfDnsRecordId,
+					})
+					.from(domains)
+					.innerJoin(
+						previewDeployments,
+						eq(
+							domains.previewDeploymentId,
+							previewDeployments.previewDeploymentId,
+						),
+					)
+					.innerJoin(
+						applications,
+						eq(previewDeployments.applicationId, applications.applicationId),
+					)
+					.innerJoin(
+						environments,
+						eq(applications.environmentId, environments.environmentId),
+					)
+					.innerJoin(projects, eq(environments.projectId, projects.projectId))
+					.where(
+						and(
+							eq(domains.domainId, domainId),
+							eq(projects.organizationId, organizationId),
+						),
+					)
+					.limit(1);
+
+	const owned = appOwned ?? composeOwned ?? previewOwned;
+	if (!owned) {
+		throw new Error("Domain not found in organization inventory");
+	}
+
+	const records = await loadMirroredDnsRecords(
+		organizationId,
+		owned.host,
+		owned.cfDnsRecordId,
+	);
+
+	return {
+		domainId: owned.domainId,
+		host: owned.host,
+		zoneName: owned.cfZoneName,
+		dnsProvider: owned.dnsProvider,
+		records,
+	};
+};

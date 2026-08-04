@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
 	buildDomainEditHref,
 	deriveRoutedStatus,
+	dnsRecordManagedByLabel,
 	inventoryDnsBadgeFromCfStatus,
 	inventoryDnsBadgeFromValidation,
 	inventoryRoutedBadge,
 	inventorySslBadge,
 	inventorySslLabel,
 	inventorySyncBadge,
+	isPreviewableDnsRecordType,
 	latestSyncIso,
 	sanitizeDnsValidationError,
 } from "@/components/dashboard/domains/domain-inventory-utils";
@@ -211,5 +213,26 @@ describe("buildDomainEditHref", () => {
 		).toBe(
 			"/dashboard/project/p1/environment/e1/services/application/a1?tab=domains&domainId=d1",
 		);
+	});
+});
+
+describe("dnsRecordManagedByLabel", () => {
+	it("maps app_domain to App domain", () => {
+		expect(dnsRecordManagedByLabel("app_domain")).toBe("App domain");
+	});
+
+	it("maps manual to Manual", () => {
+		expect(dnsRecordManagedByLabel("manual")).toBe("Manual");
+	});
+});
+
+describe("isPreviewableDnsRecordType", () => {
+	it("accepts A and CNAME", () => {
+		expect(isPreviewableDnsRecordType("A")).toBe(true);
+		expect(isPreviewableDnsRecordType("cname")).toBe(true);
+	});
+
+	it("rejects unrelated types", () => {
+		expect(isPreviewableDnsRecordType("TXT")).toBe(false);
 	});
 });

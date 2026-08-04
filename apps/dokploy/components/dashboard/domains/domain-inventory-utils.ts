@@ -169,3 +169,15 @@ export const buildDomainEditHref = (input: {
 	}
 	return null;
 };
+
+export const dnsRecordManagedByLabel = (managedBy: string) => {
+	if (managedBy === "app_domain") return "App domain";
+	if (managedBy === "manual") return "Manual";
+	if (managedBy === "mail_stack") return "Legacy";
+	return managedBy;
+};
+
+export const isPreviewableDnsRecordType = (type: string) => {
+	const normalized = type.trim().toUpperCase();
+	return normalized === "A" || normalized === "AAAA" || normalized === "CNAME";
+};

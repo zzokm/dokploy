@@ -1,6 +1,12 @@
 import { eq } from "drizzle-orm"
 import { db } from "@dokploy/server/db"
-import { domains } from "@dokploy/server/db/schema"
+import {
+	applications,
+	compose,
+	domains,
+	previewDeployments,
+	server,
+} from "@dokploy/server/db/schema"
 import { getWebServerSettings } from "./web-server-settings"
 
 export type DomainTarget = {
@@ -11,53 +17,85 @@ export type DomainTarget = {
 	expectedAAAA: string | null
 }
 
+/**
+ * Resolve the expected public A record for a domain without loading full
+ * application/compose graphs. Drizzle relational `with: { ...: true }` builds
+ * `json_build_array(...)` over every column; application has >100 columns, which
+ * hits Postgres error 54023 ("cannot pass more than 100 arguments to a function").
+ */
 export const resolveDomainTargetById = async (
 	domainId: string,
 ): Promise<DomainTarget> => {
-	const row = await db.query.domains.findFirst({
-		where: eq(domains.domainId, domainId),
-		with: {
-			application: {
-				with: {
-					server: true,
-				},
-			},
-			compose: {
-				with: {
-					server: true,
-				},
-			},
-			previewDeployment: {
-				with: {
-					application: {
-						with: {
-							server: true,
-						},
-					},
-				},
-			},
-		},
-	})
+	const [row] = await db
+		.select({
+			domainId: domains.domainId,
+			host: domains.host,
+			applicationId: domains.applicationId,
+			composeId: domains.composeId,
+			previewDeploymentId: domains.previewDeploymentId,
+		})
+		.from(domains)
+		.where(eq(domains.domainId, domainId))
+		.limit(1)
 
 	if (!row) {
 		throw new Error("Domain not found")
 	}
 
-	const targetServer =
-		row.application?.server ??
-		row.compose?.server ??
-		row.previewDeployment?.application?.server ??
-		null
+	let targetServerId: string | null = null
 
-	const expectedA = targetServer?.ipAddress?.trim()
-		? targetServer.ipAddress.trim()
-		: null
+	if (row.applicationId) {
+		const [app] = await db
+			.select({ serverId: applications.serverId })
+			.from(applications)
+			.where(eq(applications.applicationId, row.applicationId))
+			.limit(1)
+		targetServerId = app?.serverId ?? null
+	} else if (row.composeId) {
+		const [composeRow] = await db
+			.select({ serverId: compose.serverId })
+			.from(compose)
+			.where(eq(compose.composeId, row.composeId))
+			.limit(1)
+		targetServerId = composeRow?.serverId ?? null
+	} else if (row.previewDeploymentId) {
+		const [preview] = await db
+			.select({ applicationId: previewDeployments.applicationId })
+			.from(previewDeployments)
+			.where(
+				eq(previewDeployments.previewDeploymentId, row.previewDeploymentId),
+			)
+			.limit(1)
+		if (preview?.applicationId) {
+			const [app] = await db
+				.select({ serverId: applications.serverId })
+				.from(applications)
+				.where(eq(applications.applicationId, preview.applicationId))
+				.limit(1)
+			targetServerId = app?.serverId ?? null
+		}
+	}
+
+	let expectedA: string | null = null
+	if (targetServerId) {
+		const [targetServer] = await db
+			.select({
+				serverId: server.serverId,
+				ipAddress: server.ipAddress,
+			})
+			.from(server)
+			.where(eq(server.serverId, targetServerId))
+			.limit(1)
+		expectedA = targetServer?.ipAddress?.trim()
+			? targetServer.ipAddress.trim()
+			: null
+	}
 
 	if (expectedA) {
 		return {
 			domainId: row.domainId,
 			host: row.host,
-			targetServerId: targetServer?.serverId ?? null,
+			targetServerId,
 			expectedA,
 			expectedAAAA: null,
 		}
@@ -69,9 +107,8 @@ export const resolveDomainTargetById = async (
 	return {
 		domainId: row.domainId,
 		host: row.host,
-		targetServerId: targetServer?.serverId ?? null,
+		targetServerId,
 		expectedA: fallbackIp,
 		expectedAAAA: null,
 	}
 }
-

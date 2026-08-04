@@ -72,7 +72,7 @@ export const cloudflareSettingsRouter = createTRPCRouter({
 				throw new TRPCError({
 					code: "BAD_REQUEST",
 					message:
-						"DOKPLOY_ENCRYPTION_KEY is invalid. Provide a 32-byte (64 hex chars) key.",
+						"DOKPLOY_ENCRYPTION_KEY is invalid. Provide a base64-encoded 32-byte key.",
 				})
 			}
 

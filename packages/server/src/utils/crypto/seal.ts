@@ -1,6 +1,9 @@
 import crypto from "node:crypto"
+import {
+	assertDokployEncryptionKey,
+	loadDokployEncryptionKeySync,
+} from "./dokploy-encryption-key"
 
-const KEY_BYTES = 32
 const IV_BYTES = 12
 
 export const canSealSecrets = () => {
@@ -14,27 +17,8 @@ export const canSealSecrets = () => {
 }
 
 const getEncryptionKey = () => {
-	const raw = process.env.DOKPLOY_ENCRYPTION_KEY
-	if (!raw) {
-		throw new Error(
-			"DOKPLOY_ENCRYPTION_KEY is required to store sensitive tokens securely",
-		)
-	}
-
-	let key: Buffer
-	try {
-		key = Buffer.from(raw, "base64")
-	} catch {
-		throw new Error("DOKPLOY_ENCRYPTION_KEY must be base64-encoded")
-	}
-
-	if (key.length !== KEY_BYTES) {
-		throw new Error(
-			`DOKPLOY_ENCRYPTION_KEY must decode to ${KEY_BYTES} bytes (base64 of 32 bytes)`,
-		)
-	}
-
-	return key
+	const raw = loadDokployEncryptionKeySync()
+	return assertDokployEncryptionKey(raw)
 }
 
 export const sealString = (plain: string) => {

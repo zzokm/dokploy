@@ -1,7 +1,4 @@
 import http from "node:http";
-import crypto from "node:crypto";
-import { access, appendFile, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
 import {
 	createDefaultMiddlewares,
 	createDefaultServerTraefikConfig,
@@ -16,6 +13,7 @@ import {
 	sendDokployRestartNotifications,
 	setupDirectories,
 } from "@dokploy/server";
+import { ensureDokployEncryptionKey } from "@dokploy/server/utils/crypto/dokploy-encryption-key";
 import { config } from "dotenv";
 import next from "next";
 import packageInfo from "../package.json";
@@ -27,29 +25,9 @@ import { setupDeploymentLogsWebSocketServer } from "./wss/listen-deployment";
 import { setupTerminalWebSocketServer } from "./wss/terminal";
 
 config({ path: ".env" });
-
-const ensureEncryptionKey = async () => {
-	if (process.env.DOKPLOY_ENCRYPTION_KEY) return
-
-	const key = crypto.randomBytes(32).toString("base64")
-	process.env.DOKPLOY_ENCRYPTION_KEY = key
-
-	const envPath = path.join(process.cwd(), ".env")
-	try {
-		await access(envPath)
-		const current = await readFile(envPath, "utf8").catch(() => "")
-		if (current.includes("DOKPLOY_ENCRYPTION_KEY=")) return
-		await appendFile(envPath, `\nDOKPLOY_ENCRYPTION_KEY="${key}"\n`, "utf8")
-	} catch {
-		try {
-			await writeFile(envPath, `DOKPLOY_ENCRYPTION_KEY="${key}"\n`, "utf8")
-		} catch {
-			// ignore: runtime env var is still set for this process
-		}
-	}
-}
-
-await ensureEncryptionKey()
+await ensureDokployEncryptionKey({
+	allowGenerate: process.env.NODE_ENV !== "production",
+})
 const PORT = Number.parseInt(process.env.PORT || "3000", 10);
 const HOST = process.env.HOST || "0.0.0.0";
 const dev = process.env.NODE_ENV !== "production";

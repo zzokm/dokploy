@@ -33,7 +33,7 @@ export const CloudflareZonesGrid = () => {
 
 	const setToken = api.cloudflareSettings.setToken.useMutation({
 		onSuccess: async () => {
-			toast.success("Cloudflare connected — syncing zones…")
+			toast.success("Cloudflare connected — syncing domains…")
 			setTokenInput("")
 			await utils.cloudflareSettings.get.invalidate()
 			await utils.cloudflareSettings.listZones.invalidate()
@@ -44,7 +44,7 @@ export const CloudflareZonesGrid = () => {
 
 	const syncZones = api.cloudflareSettings.syncZones.useMutation({
 		onSuccess: async () => {
-			toast.success("Zones synced")
+			toast.success("Domains synced")
 			await refetch()
 		},
 		onError: (e) => toast.error(e.message),
@@ -93,7 +93,7 @@ export const CloudflareZonesGrid = () => {
 								Domains
 							</CardTitle>
 							<CardDescription>
-								Connect Cloudflare to import zones and automate DNS for your
+								Connect Cloudflare to import domains and automate DNS for your
 								applications.
 							</CardDescription>
 						</CardHeader>
@@ -111,7 +111,7 @@ export const CloudflareZonesGrid = () => {
 											Connect Cloudflare
 										</p>
 										<p className="text-xs leading-relaxed text-muted-foreground">
-											Paste a scoped API token. Zones sync after connect; app
+											Paste a scoped API token. Domains sync after connect; app
 											domains can then update A records automatically.
 										</p>
 									</div>
@@ -190,7 +190,7 @@ export const CloudflareZonesGrid = () => {
 								onClick={() => syncZones.mutate()}
 							>
 								<RefreshCw className="mr-2 size-4" aria-hidden />
-								Sync zones
+								Sync domains
 							</Button>
 						</div>
 					</CardHeader>
@@ -198,13 +198,13 @@ export const CloudflareZonesGrid = () => {
 						{isPending ? (
 							<div className="flex min-h-[25vh] w-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground sm:flex-row">
 								<Loader2 className="size-5 animate-spin" aria-hidden />
-								<span>Loading zones…</span>
+								<span>Loading domains…</span>
 							</div>
 						) : !zones?.length ? (
 							<div className="flex min-h-[25vh] w-full flex-col items-center justify-center gap-3 px-2 text-center">
 								<Cloud className="size-8 text-muted-foreground" aria-hidden />
 								<span className="max-w-md text-base text-muted-foreground">
-									No zones imported yet. Sync zones from your Cloudflare account
+									No domains imported yet. Sync domains from your Cloudflare account
 									to get started.
 								</span>
 								<Button
@@ -214,7 +214,7 @@ export const CloudflareZonesGrid = () => {
 									onClick={() => syncZones.mutate()}
 								>
 									<RefreshCw className="mr-2 size-4" aria-hidden />
-									Sync zones
+									Sync domains
 								</Button>
 							</div>
 						) : (

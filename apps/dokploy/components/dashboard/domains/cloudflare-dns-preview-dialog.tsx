@@ -57,7 +57,7 @@ const stateLabel = (state: PreviewRow["state"]) => {
 		case "drift":
 			return "Different target"
 		case "no_zone":
-			return "No matching zone"
+			return "No matching domain"
 		case "no_target":
 			return "No server IP"
 		case "error":
@@ -247,7 +247,7 @@ export const CloudflareDnsPreviewDialog = ({
 															{r.host}
 															{r.zoneName ? (
 																<div className="text-xs font-normal text-muted-foreground">
-																	Zone: {r.zoneName}
+																	Domain: {r.zoneName}
 																</div>
 															) : null}
 														</TableCell>

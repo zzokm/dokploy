@@ -112,7 +112,7 @@ export const cloudflareSettingsRouter = createTRPCRouter({
 			} catch (e) {
 				throw new TRPCError({
 					code: "BAD_REQUEST",
-					message: e instanceof Error ? e.message : "Failed to sync zones",
+					message: e instanceof Error ? e.message : "Failed to sync domains",
 				})
 			}
 

@@ -380,7 +380,7 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 				return;
 			}
 			if (!selectedZone) {
-				toast.error("Select a Cloudflare zone");
+				toast.error("Select a Cloudflare domain");
 				return;
 			}
 			const sub = subdomainLabel.trim();
@@ -485,7 +485,7 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 								Cloudflare managed domain
 							</p>
 							<p className="text-xs text-muted-foreground">
-								Build the hostname from a synced zone.
+								Build the hostname from a synced domain.
 							</p>
 						</div>
 						<Switch
@@ -675,14 +675,14 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 								cfSettings?.connected ? (
 									<div className="animate-in fade-in-0 slide-in-from-bottom-1 space-y-4 duration-300">
 										<div className="space-y-2">
-											<p className="text-sm font-medium">Zone</p>
+											<p className="text-sm font-medium">Domain</p>
 											<Select
 												value={selectedCfZoneId}
 												onValueChange={setSelectedCfZoneId}
 												disabled={!enabledCfZones.length}
 											>
-												<SelectTrigger aria-label="Cloudflare zone">
-													<SelectValue placeholder="Select a zone" />
+												<SelectTrigger aria-label="Cloudflare domain">
+													<SelectValue placeholder="Select a domain" />
 												</SelectTrigger>
 												<SelectContent>
 													{enabledCfZones.map((z) => (
@@ -694,7 +694,7 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 											</Select>
 											{!enabledCfZones.length ? (
 												<p className="text-xs text-muted-foreground">
-													No zones yet. Open Domains and click Sync zones.
+													No domains yet. Open Domains and click Sync domains.
 												</p>
 											) : null}
 										</div>
@@ -728,7 +728,7 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 														/>
 													</FormControl>
 													<FormDescription>
-														Filled from the zone and label above.
+														Filled from the domain and label above.
 													</FormDescription>
 													<FormMessage />
 												</FormItem>

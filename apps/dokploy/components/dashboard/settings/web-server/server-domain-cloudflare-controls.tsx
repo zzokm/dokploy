@@ -83,7 +83,7 @@ export const ServerDomainCloudflareControls = ({
 				: previewQuery.data?.state === "ok"
 					? "DNS up to date"
 					: previewQuery.data?.state === "no_zone"
-						? "No matching zone"
+						? "No matching domain"
 						: previewQuery.data?.state === "missing" ||
 								previewQuery.data?.state === "drift"
 							? "DNS needs sync"
@@ -234,13 +234,13 @@ const ServerDomainCloudflareSyncDialog = ({
 										<p>Save a server domain before syncing DNS.</p>
 									) : preview.state === "no_zone" ? (
 										<p>
-											No synced Cloudflare zone matches{" "}
+											No synced Cloudflare domain matches{" "}
 											<span className="font-mono text-foreground">
 												{preview.host}
 											</span>
 											. Open Domains and run{" "}
 											<span className="font-medium text-foreground">
-												Sync zones
+												Sync domains
 											</span>
 											.
 										</p>

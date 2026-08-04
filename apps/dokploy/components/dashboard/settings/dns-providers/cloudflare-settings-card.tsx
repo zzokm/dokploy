@@ -41,7 +41,7 @@ export const CloudflareSettingsCard = () => {
 
 	const syncZonesMutation = api.cloudflareSettings.syncZones.useMutation({
 		onSuccess: async () => {
-			toast.success("Zones synced")
+			toast.success("Domains synced")
 			await utils.cloudflareSettings.listZones.invalidate()
 		},
 		onError: (e) => toast.error(e.message),
@@ -168,7 +168,7 @@ export const CloudflareSettingsCard = () => {
 										onClick={() => syncZonesMutation.mutate()}
 										className="w-full sm:w-auto"
 									>
-										Sync zones
+										Sync domains
 									</Button>
 								</div>
 								<div className="space-y-2 border-t border-border/60 pt-4">

@@ -252,7 +252,7 @@ export const WebDomain = () => {
 												Cloudflare managed domain
 											</p>
 											<p className="text-xs text-muted-foreground">
-												Build the hostname from a synced zone.
+												Build the hostname from a synced domain.
 											</p>
 										</div>
 										<Switch
@@ -277,14 +277,14 @@ export const WebDomain = () => {
 								{hostInputMode === "cloudflare" && cfSettings?.connected ? (
 									<div className="col-span-2 animate-in fade-in-0 slide-in-from-bottom-1 grid gap-4 duration-300 md:grid-cols-2">
 										<div className="space-y-2">
-											<p className="text-sm font-medium">Zone</p>
+											<p className="text-sm font-medium">Domain</p>
 											<Select
 												value={selectedCfZoneId}
 												onValueChange={setSelectedCfZoneId}
 												disabled={!enabledCfZones.length}
 											>
-												<SelectTrigger aria-label="Cloudflare zone">
-													<SelectValue placeholder="Select a zone" />
+												<SelectTrigger aria-label="Cloudflare domain">
+													<SelectValue placeholder="Select a domain" />
 												</SelectTrigger>
 												<SelectContent>
 													{enabledCfZones.map((z) => (
@@ -296,7 +296,7 @@ export const WebDomain = () => {
 											</Select>
 											{!enabledCfZones.length ? (
 												<p className="text-xs text-muted-foreground">
-													No zones yet. Open Domains and click Sync zones.
+													No domains yet. Open Domains and click Sync domains.
 												</p>
 											) : null}
 										</div>
@@ -337,7 +337,7 @@ export const WebDomain = () => {
 												</FormControl>
 												{hostInputMode === "cloudflare" ? (
 													<FormDescription>
-														Filled from the zone and label above. DNS syncs on
+														Filled from the domain and label above. DNS syncs on
 														save when possible.
 													</FormDescription>
 												) : null}

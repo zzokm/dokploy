@@ -101,15 +101,15 @@ export const CloudflareDomainSyncDialog = ({
 										</p>
 									) : preview.state === "no_zone" ? (
 										<p>
-											No synced Cloudflare zone matches{" "}
+											No synced Cloudflare domain matches{" "}
 											<span className="font-mono text-foreground">
 												{preview.host}
 											</span>
 											. Open Domains and run{" "}
 											<span className="font-medium text-foreground">
-												Sync zones
+												Sync domains
 											</span>
-											, or check that the hostname sits under a zone in this
+											, or check that the hostname sits under a domain in this
 											account.
 										</p>
 									) : preview.state === "no_target" ? (

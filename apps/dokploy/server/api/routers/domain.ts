@@ -80,7 +80,7 @@ export const domainRouter = createTRPCRouter({
 						await removeDomainById(domain.domainId)
 						const msg =
 							cfResult.reason === "no_zone_match"
-								? "No Cloudflare zone matches this hostname. Sync zones on Domains or choose a zone when adding the domain."
+								? "No Cloudflare domain matches this hostname. Sync domains on Domains or choose a domain when adding the domain."
 								: cfResult.reason === "no_cloudflare_settings"
 									? "Connect Cloudflare under Domains first."
 									: cfResult.reason === "token_unseal_failed"

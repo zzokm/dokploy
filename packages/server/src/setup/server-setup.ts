@@ -106,6 +106,21 @@ export const serverSetup = async (
 	}
 };
 
+export const reportDockerVersion = () => `
+if command -v docker >/dev/null 2>&1; then
+	INSTALLED_DOCKER_VERSION=$(docker version --format '{{.Server.Version}}' 2>/dev/null || true)
+	if [ -z "$INSTALLED_DOCKER_VERSION" ]; then
+		INSTALLED_DOCKER_VERSION=$(docker --version 2>/dev/null | awk '{print $3}' | tr -d ',' || true)
+	fi
+	if [ -z "$INSTALLED_DOCKER_VERSION" ]; then
+		INSTALLED_DOCKER_VERSION="unknown"
+	fi
+	DOCKER_VERSION_REPORT="$INSTALLED_DOCKER_VERSION (already installed)"
+else
+	DOCKER_VERSION_REPORT="$DOCKER_VERSION (will be installed)"
+fi
+`;
+
 export const defaultCommand = (isBuildServer = false) => {
 	const bashCommand = `
 set -e;
@@ -174,10 +189,11 @@ arch | ubuntu | debian | raspbian | centos | fedora | rhel | ol | rocky | sles |
 	;;
 esac
 
+${reportDockerVersion()}
 echo -e "---------------------------------------------"
 echo "| CPU Architecture  | $SYS_ARCH"
 echo "| Operating System  | $OS_TYPE $OS_VERSION"
-echo "| Docker            | $DOCKER_VERSION"
+echo "| Docker            | $DOCKER_VERSION_REPORT"
 ${isBuildServer ? 'echo "| Server Type       | Build Server"' : ""}
 echo -e "---------------------------------------------\n"
 echo -e "1. Installing required packages (curl, wget, git, jq, openssl). "
@@ -519,7 +535,7 @@ echo -e "3. Check Docker Installation. "
 if ! [ -x "$(command -v docker)" ]; then
     echo " - Docker is not installed. Installing Docker. It may take a while."
     case "$OS_TYPE" in
-        "almalinux")
+        "almalinux" | "rocky" | "centos" | "rhel" | "ol")
             $SUDO_CMD dnf config-manager --add-repo=https://download.docker.com/linux/centos/docker-ce.repo >/dev/null 2>&1
             $SUDO_CMD dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin >/dev/null 2>&1
             if ! [ -x "$(command -v docker)" ]; then

@@ -259,6 +259,48 @@ export const cleanupSystem = async (serverId?: string) => {
 	}
 };
 
+export interface DockerDiskUsageItem {
+	type: string;
+	totalCount: number;
+	active: number;
+	size: string;
+	reclaimable: string;
+	sizeBytes: number;
+}
+
+const parseSizeToBytes = (size: string): number => {
+	const match = size.match(/^([\d.]+)\s*([KMGT]?B)$/i);
+	if (!match) return 0;
+	const value = Number.parseFloat(match[1] as string);
+	const unit = (match[2] as string).toUpperCase();
+	const multipliers: Record<string, number> = {
+		B: 1,
+		KB: 1024,
+		MB: 1024 ** 2,
+		GB: 1024 ** 3,
+		TB: 1024 ** 4,
+	};
+	return value * (multipliers[unit] || 0);
+};
+
+export const getDockerDiskUsage = async (): Promise<DockerDiskUsageItem[]> => {
+	const command = "docker system df --format '{{json .}}'";
+	const { stdout } = await execAsync(command);
+
+	const lines = stdout.trim().split("\n").filter(Boolean);
+	return lines.map((line) => {
+		const data = JSON.parse(line);
+		return {
+			type: data.Type,
+			totalCount: Number.parseInt(data.TotalCount, 10) || 0,
+			active: Number.parseInt(data.Active, 10) || 0,
+			size: data.Size,
+			reclaimable: data.Reclaimable,
+			sizeBytes: parseSizeToBytes(data.Size),
+		};
+	});
+};
+
 /**
  * Volume cleanup should always be performed manually by the user. The reason is that during automatic cleanup, a volume may be deleted due to a stopped container, which is a dangerous situation.
  *
@@ -434,7 +476,7 @@ export const parseEnvironmentKeyValuePair = (
 	return [key, valueParts.join("=")];
 };
 
-export const getEnviromentVariablesObject = (
+export const getEnvironmentVariablesObject = (
 	input: string | null,
 	projectEnv?: string | null,
 	environmentEnv?: string | null,
@@ -506,16 +548,10 @@ export const generateConfigContainer = (
 		labelsSwarm,
 		replicas,
 		mounts,
-		networkSwarm,
 		stopGracePeriodSwarm,
 		endpointSpecSwarm,
 		ulimitsSwarm,
 	} = application;
-
-	const sanitizedStopGracePeriodSwarm =
-		typeof stopGracePeriodSwarm === "bigint"
-			? Number(stopGracePeriodSwarm)
-			: stopGracePeriodSwarm;
 
 	const haveMounts = mounts && mounts.length > 0;
 
@@ -551,9 +587,15 @@ export const generateConfigContainer = (
 						},
 					},
 				}),
-		...(rollbackConfigSwarm && {
-			RollbackConfig: rollbackConfigSwarm,
-		}),
+		...(rollbackConfigSwarm
+			? { RollbackConfig: rollbackConfigSwarm }
+			: {
+					// default rollback config to match update config
+					RollbackConfig: {
+						Parallelism: 1,
+						Order: "start-first",
+					},
+				}),
 		...(updateConfigSwarm
 			? { UpdateConfig: updateConfigSwarm }
 			: {
@@ -561,19 +603,13 @@ export const generateConfigContainer = (
 					UpdateConfig: {
 						Parallelism: 1,
 						Order: "start-first",
+						FailureAction: "rollback",
 					},
 				}),
-		...(sanitizedStopGracePeriodSwarm !== null &&
-			sanitizedStopGracePeriodSwarm !== undefined && {
-				StopGracePeriod: sanitizedStopGracePeriodSwarm,
+		...(stopGracePeriodSwarm !== null &&
+			stopGracePeriodSwarm !== undefined && {
+				StopGracePeriod: stopGracePeriodSwarm,
 			}),
-		...(networkSwarm
-			? {
-					Networks: networkSwarm,
-				}
-			: {
-					Networks: [{ Target: "dokploy-network" }],
-				}),
 		...(endpointSpecSwarm && {
 			EndpointSpec: {
 				...(endpointSpecSwarm.Mode && { Mode: endpointSpecSwarm.Mode }),
@@ -668,14 +704,14 @@ export const getCreateFileCommand = (
 ) => {
 	const fullPath = path.join(outputPath, filePath);
 	if (fullPath.endsWith(path.sep) || filePath.endsWith("/")) {
-		return `mkdir -p ${fullPath};`;
+		return `mkdir -p ${quote([fullPath])};`;
 	}
 
 	const directory = path.dirname(fullPath);
 	const encodedContent = encodeBase64(content);
 	return `
-		mkdir -p ${directory};
-		echo "${encodedContent}" | base64 -d > "${fullPath}";
+		mkdir -p ${quote([directory])};
+		echo "${encodedContent}" | base64 -d > ${quote([fullPath])};
 	`;
 };
 
@@ -852,50 +888,6 @@ export const checkPostgresHealth = async (): Promise<ServiceHealthStatus> => {
 			status: "unhealthy",
 			message:
 				error instanceof Error ? error.message : "Failed to check PostgreSQL",
-		};
-	}
-};
-
-export const checkRedisHealth = async (): Promise<ServiceHealthStatus> => {
-	const serviceCheck = await checkSwarmServiceRunning("dokploy-redis");
-	if (serviceCheck.status === "unhealthy") {
-		return serviceCheck;
-	}
-
-	// Verify Redis actually responds to PING
-	const containerId = await getSwarmServiceContainerId("dokploy-redis");
-	if (!containerId) {
-		return { status: "unhealthy", message: "Could not find running container" };
-	}
-
-	try {
-		const exec = await docker.getContainer(containerId).exec({
-			Cmd: ["redis-cli", "ping"],
-			AttachStdout: true,
-			AttachStderr: true,
-		});
-		const stream = await exec.start({});
-
-		const output = await new Promise<string>((resolve) => {
-			let data = "";
-			stream.on("data", (chunk: Buffer) => {
-				data += chunk.toString();
-			});
-			stream.on("end", () => resolve(data));
-		});
-
-		if (!output.includes("PONG")) {
-			return {
-				status: "unhealthy",
-				message: `Redis did not respond with PONG: ${output.trim()}`,
-			};
-		}
-
-		return { status: "healthy" };
-	} catch (error) {
-		return {
-			status: "unhealthy",
-			message: error instanceof Error ? error.message : "Failed to check Redis",
 		};
 	}
 };

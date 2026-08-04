@@ -23,7 +23,7 @@ import {
 } from "@dokploy/server/utils/process/execAsync";
 import { TRPCError } from "@trpc/server";
 import { format } from "date-fns";
-import { desc, eq, and, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import type { z } from "zod";
 import {
 	type Application,
@@ -83,7 +83,17 @@ export const findDeploymentById = async (deploymentId: string) => {
 	const deployment = await db.query.deployments.findFirst({
 		where: eq(deployments.deploymentId, deploymentId),
 		with: {
-			application: true,
+			application: {
+				columns: {
+					applicationId: true,
+					appName: true,
+					name: true,
+					serverId: true,
+				},
+			},
+			compose: {
+				columns: { composeId: true, appName: true, name: true, serverId: true },
+			},
 			schedule: true,
 		},
 	});
@@ -177,7 +187,7 @@ export const createDeployment = async (
 				status: "error",
 				logPath: "",
 				description: deployment.description || "",
-				errorMessage: `An error have occured: ${error instanceof Error ? error.message : error}`,
+				errorMessage: `An error have occurred: ${error instanceof Error ? error.message : error}`,
 				startedAt: new Date().toISOString(),
 				finishedAt: new Date().toISOString(),
 			})
@@ -257,7 +267,7 @@ export const createDeploymentPreview = async (
 				status: "error",
 				logPath: "",
 				description: deployment.description || "",
-				errorMessage: `An error have occured: ${error instanceof Error ? error.message : error}`,
+				errorMessage: `An error have occurred: ${error instanceof Error ? error.message : error}`,
 				startedAt: new Date().toISOString(),
 				finishedAt: new Date().toISOString(),
 			})
@@ -334,7 +344,7 @@ echo "Initializing deployment\n" >> ${logFilePath};
 				status: "error",
 				logPath: "",
 				description: deployment.description || "",
-				errorMessage: `An error have occured: ${error instanceof Error ? error.message : error}`,
+				errorMessage: `An error have occurred: ${error instanceof Error ? error.message : error}`,
 				startedAt: new Date().toISOString(),
 				finishedAt: new Date().toISOString(),
 			})
@@ -418,7 +428,7 @@ echo "Initializing backup\n" >> ${logFilePath};
 				status: "error",
 				logPath: "",
 				description: deployment.description || "",
-				errorMessage: `An error have occured: ${error instanceof Error ? error.message : error}`,
+				errorMessage: `An error have occurred: ${error instanceof Error ? error.message : error}`,
 				startedAt: new Date().toISOString(),
 				finishedAt: new Date().toISOString(),
 			})
@@ -493,7 +503,7 @@ export const createDeploymentSchedule = async (
 				status: "error",
 				logPath: "",
 				description: deployment.description || "",
-				errorMessage: `An error have occured: ${error instanceof Error ? error.message : error}`,
+				errorMessage: `An error have occurred: ${error instanceof Error ? error.message : error}`,
 				startedAt: new Date().toISOString(),
 				finishedAt: new Date().toISOString(),
 			})
@@ -578,7 +588,7 @@ export const createDeploymentVolumeBackup = async (
 				status: "error",
 				logPath: "",
 				description: deployment.description || "",
-				errorMessage: `An error have occured: ${error instanceof Error ? error.message : error}`,
+				errorMessage: `An error have occurred: ${error instanceof Error ? error.message : error}`,
 				startedAt: new Date().toISOString(),
 				finishedAt: new Date().toISOString(),
 			})

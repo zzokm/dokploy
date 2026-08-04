@@ -5,8 +5,9 @@ import { findGithubById, type Github } from "@dokploy/server/services/github";
 import type { InferResultType } from "@dokploy/server/types/with";
 import { createAppAuth } from "@octokit/auth-app";
 import { TRPCError } from "@trpc/server";
-import type { z } from "zod";
 import { Octokit } from "octokit";
+import { quote } from "shell-quote";
+import type { z } from "zod";
 
 export const authGithub = (githubProvider: Github): Octokit => {
 	if (!haveGithubRequirements(githubProvider)) {
@@ -166,8 +167,8 @@ export const cloneGithubRepository = async ({
 	command += `mkdir -p ${outputPath};`;
 	const cloneUrl = `https://oauth2:${token}@${repoclone}`;
 
-	command += `echo "Cloning Repo ${repoclone} to ${outputPath}: ✅";`;
-	command += `git clone --branch ${branch} --depth 1 ${enableSubmodules ? "--recurse-submodules" : ""} ${cloneUrl} ${outputPath} --progress;`;
+	command += `echo ${quote([`Cloning Repo ${repoclone} to ${outputPath}: ✅`])};`;
+	command += `git clone --branch ${quote([String(branch ?? "")])} --depth 1 ${enableSubmodules ? "--recurse-submodules" : ""} ${quote([String(cloneUrl ?? "")])} ${quote([String(outputPath ?? "")])} --progress;`;
 
 	return command;
 };

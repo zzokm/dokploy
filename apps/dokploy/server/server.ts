@@ -83,6 +83,8 @@ void app.prepare().then(async () => {
 			setupDockerStatsMonitoringSocketServer(server);
 		}
 
+		server.listen(PORT, HOST);
+		console.log(`Server Started on: http://${HOST}:${PORT}`);
 		if (process.env.NODE_ENV === "production" && !IS_CLOUD) {
 			createDefaultMiddlewares();
 			await initializeNetwork();
@@ -94,15 +96,12 @@ void app.prepare().then(async () => {
 			await initVolumeBackupsCronJobs();
 			await sendDokployRestartNotifications();
 		}
-
-		server.listen(PORT, HOST);
-		console.log(`Server Started on: http://${HOST}:${PORT}`);
 		await initEnterpriseBackupCronJobs();
 
 		if (!IS_CLOUD) {
 			console.log("Starting Deployment Worker");
-			const { deploymentWorker } = await import("./queues/deployments-queue");
-			await deploymentWorker.run();
+			const { startDeploymentWorker } = await import("./queues/queueSetup");
+			await startDeploymentWorker();
 		}
 	} catch (e) {
 		console.error("Main Server Error", e);

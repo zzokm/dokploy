@@ -1,6 +1,5 @@
 import { relations } from "drizzle-orm";
 import { boolean, integer, pgTable, text } from "drizzle-orm/pg-core";
-import { serviceType } from "./mount";
 import { createInsertSchema } from "drizzle-zod";
 import { nanoid } from "nanoid";
 import { z } from "zod";
@@ -11,10 +10,15 @@ import { destinations } from "./destination";
 import { libsql } from "./libsql";
 import { mariadb } from "./mariadb";
 import { mongo } from "./mongo";
+import { serviceType } from "./mount";
 import { mysql } from "./mysql";
 import { postgres } from "./postgres";
 import { redis } from "./redis";
-import { generateAppName } from "./utils";
+import {
+	generateAppName,
+	VOLUME_NAME_MESSAGE,
+	VOLUME_NAME_REGEX,
+} from "./utils";
 
 export const volumeBackups = pgTable("volume_backup", {
 	volumeBackupId: text("volumeBackupId")
@@ -113,7 +117,9 @@ export const volumeBackupsRelations = relations(
 	}),
 );
 
-export const createVolumeBackupSchema = createInsertSchema(volumeBackups).omit({
+export const createVolumeBackupSchema = createInsertSchema(volumeBackups, {
+	volumeName: z.string().regex(VOLUME_NAME_REGEX, VOLUME_NAME_MESSAGE),
+}).omit({
 	volumeBackupId: true,
 });
 

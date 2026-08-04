@@ -95,6 +95,31 @@ export const inventoryRoutedBadge = (status: "routed" | "not_routed" | "pending"
 	return "Pending";
 };
 
+export type InventorySyncBadge = "Synced" | "Pending" | "Error" | "—";
+
+export const inventorySyncBadge = (input: {
+	dnsProvider: "none" | "cloudflare";
+	cfStatus: "synced" | "pending" | "error" | null;
+}): InventorySyncBadge => {
+	if (input.dnsProvider !== "cloudflare") {
+		return "—";
+	}
+	if (input.cfStatus === "synced") return "Synced";
+	if (input.cfStatus === "error") return "Error";
+	return "Pending";
+};
+
+export const latestSyncIso = (timestamps: Array<string | null | undefined>) => {
+	let latest: number | null = null;
+	for (const value of timestamps) {
+		if (!value) continue;
+		const ms = new Date(value).getTime();
+		if (Number.isNaN(ms)) continue;
+		if (latest === null || ms > latest) latest = ms;
+	}
+	return latest === null ? null : new Date(latest).toISOString();
+};
+
 /**
  * Compose domains only get Traefik labels on deploy (GPA: domain in DB without
  * labels until redeploy). Application domains write Traefik file config on create.

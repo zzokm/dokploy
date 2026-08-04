@@ -7,6 +7,8 @@ import {
 	inventoryRoutedBadge,
 	inventorySslBadge,
 	inventorySslLabel,
+	inventorySyncBadge,
+	latestSyncIso,
 	sanitizeDnsValidationError,
 } from "@/components/dashboard/domains/domain-inventory-utils";
 
@@ -147,6 +149,38 @@ describe("deriveRoutedStatus", () => {
 describe("inventoryRoutedBadge", () => {
 	it("maps not_routed to Not routed", () => {
 		expect(inventoryRoutedBadge("not_routed")).toBe("Not routed");
+	});
+});
+
+describe("inventorySyncBadge", () => {
+	it("maps cloudflare error to Error", () => {
+		expect(
+			inventorySyncBadge({
+				dnsProvider: "cloudflare",
+				cfStatus: "error",
+			}),
+		).toBe("Error");
+	});
+
+	it("returns dash for non-cloudflare rows", () => {
+		expect(
+			inventorySyncBadge({
+				dnsProvider: "none",
+				cfStatus: null,
+			}),
+		).toBe("—");
+	});
+});
+
+describe("latestSyncIso", () => {
+	it("picks the newest timestamp", () => {
+		expect(
+			latestSyncIso([
+				"2026-08-01T00:00:00.000Z",
+				null,
+				"2026-08-04T12:00:00.000Z",
+			]),
+		).toBe("2026-08-04T12:00:00.000Z");
 	});
 });
 

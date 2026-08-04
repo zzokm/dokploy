@@ -1,10 +1,12 @@
 "use client";
 
+import { formatDistanceToNow } from "date-fns";
 import { Cloud, FolderOpen, Globe2, KeyRound, Link2, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DomainsInventoryTable } from "@/components/dashboard/domains/domains-inventory-table";
+import { latestSyncIso } from "@/components/dashboard/domains/domain-inventory-utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -213,6 +215,24 @@ export const DomainsHub = () => {
 	const showConnectedThinEmpty =
 		!inventoryPending && provisionedCount === 0 && zoneCount > 0;
 
+	const lastSyncedAt = useMemo(() => {
+		return latestSyncIso([
+			settings?.updatedAt ?? null,
+			...(zones?.map((z) =>
+				z.lastSyncedAt
+					? z.lastSyncedAt instanceof Date
+						? z.lastSyncedAt.toISOString()
+						: String(z.lastSyncedAt)
+					: null,
+			) ?? []),
+			...(inventory?.map((row) => row.lastSyncedAt) ?? []),
+		]);
+	}, [settings?.updatedAt, zones, inventory]);
+
+	const lastSyncedLabel = lastSyncedAt
+		? `Last synced ${formatDistanceToNow(new Date(lastSyncedAt), { addSuffix: true })}`
+		: "Not synced yet";
+
 	if (!settings?.connected) {
 		return (
 			<div className="flex w-full flex-col gap-4">
@@ -273,6 +293,7 @@ export const DomainsHub = () => {
 							<CardDescription className="break-words">
 								All hostnames across apps, compose, and the web server ·
 								Cloudflare ****{settings.apiTokenLast4}
+								<span className="text-muted-foreground"> · {lastSyncedLabel}</span>
 							</CardDescription>
 						</div>
 						<div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
@@ -284,7 +305,7 @@ export const DomainsHub = () => {
 								onClick={() => syncDns.mutate()}
 							>
 								<ShieldCheck className="mr-2 size-4" aria-hidden />
-								Sync DNS
+								Sync all
 							</Button>
 							<Button
 								type="button"

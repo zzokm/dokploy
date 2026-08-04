@@ -11,10 +11,11 @@ import {
 	useReactTable,
 } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { Globe2, Loader2, Search } from "lucide-react";
+import { Globe2, Loader2, RefreshCw, Search } from "lucide-react";
 import { useRouter } from "next/router";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
 	buildDomainEditHref,
 	deriveRoutedStatus,
@@ -22,6 +23,7 @@ import {
 	inventoryDnsBadgeFromValidation,
 	inventoryRoutedBadge,
 	inventorySslBadge,
+	inventorySyncBadge,
 	sanitizeDnsValidationError,
 } from "@/components/dashboard/domains/domain-inventory-utils";
 import { Badge } from "@/components/ui/badge";
@@ -64,8 +66,12 @@ const formatRelative = (iso: string | null) => {
 const healthVariant = (
 	label: string,
 ): "default" | "secondary" | "destructive" | "outline" => {
-	if (label === "Valid" || label === "Routed") return "default";
-	if (label === "Failed" || label === "Not routed") return "destructive";
+	if (label === "Valid" || label === "Routed" || label === "Synced") {
+		return "default";
+	}
+	if (label === "Failed" || label === "Not routed" || label === "Error") {
+		return "destructive";
+	}
 	if (label === "Pending") return "secondary";
 	return "outline";
 };
@@ -104,14 +110,23 @@ export const DomainsInventoryTable = ({
 	emptyContent?: ReactNode;
 }) => {
 	const router = useRouter();
+	const utils = api.useUtils();
 	const { data, isPending } = api.domain.listInventory.useQuery();
 	const { mutateAsync: validateDomain } =
 		api.domain.validateDomain.useMutation();
+	const syncDomain = api.domain.syncCloudflareDns.useMutation({
+		onSuccess: async () => {
+			toast.success("Domain DNS synced");
+			await utils.domain.listInventory.invalidate();
+		},
+		onError: (e) => toast.error(e.message),
+	});
 	const [sorting, setSorting] = useState<SortingState>([
 		{ id: "host", desc: false },
 	]);
 	const [hostFilter, setHostFilter] = useState("");
 	const [dnsHealth, setDnsHealth] = useState<DnsHealthMap>({});
+	const [syncingDomainId, setSyncingDomainId] = useState<string | null>(null);
 	const validatedKeyRef = useRef<string>("");
 
 	const openDomain = (row: InventoryRow) => {
@@ -125,6 +140,18 @@ export const DomainsInventoryTable = ({
 		});
 		if (!href) return;
 		void router.push(href);
+	};
+
+	const handleRowSync = async (row: InventoryRow) => {
+		if (row.dnsProvider !== "cloudflare" || row.kind === "web-server") {
+			return;
+		}
+		setSyncingDomainId(row.domainId);
+		try {
+			await syncDomain.mutateAsync({ domainId: row.domainId });
+		} finally {
+			setSyncingDomainId(null);
+		}
 	};
 
 	useEffect(() => {
@@ -299,14 +326,48 @@ export const DomainsInventoryTable = ({
 			{
 				id: "lastSync",
 				header: "Last sync",
-				cell: ({ row }) => (
-					<span className="whitespace-nowrap text-sm text-muted-foreground">
-						{formatRelative(row.original.lastSyncedAt)}
-					</span>
-				),
+				cell: ({ row }) => {
+					const syncLabel = inventorySyncBadge({
+						dnsProvider: row.original.dnsProvider,
+						cfStatus: row.original.cfStatus,
+					});
+					const canSync =
+						row.original.dnsProvider === "cloudflare" &&
+						row.original.kind !== "web-server";
+					return (
+						<div className="flex min-w-[9rem] flex-col items-start gap-1.5">
+							<div className="flex flex-wrap items-center gap-1.5">
+								{syncLabel !== "—" ? (
+									<Badge variant={healthVariant(syncLabel)}>{syncLabel}</Badge>
+								) : (
+									<span className="text-sm text-muted-foreground">—</span>
+								)}
+								<span className="whitespace-nowrap text-xs text-muted-foreground">
+									{formatRelative(row.original.lastSyncedAt)}
+								</span>
+							</div>
+							{canSync ? (
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									className="h-7 px-2 text-xs"
+									isLoading={syncingDomainId === row.original.domainId}
+									onClick={(event) => {
+										event.stopPropagation();
+										void handleRowSync(row.original);
+									}}
+								>
+									<RefreshCw className="mr-1 size-3" aria-hidden />
+									Sync
+								</Button>
+							) : null}
+						</div>
+					);
+				},
 			},
 		],
-		[dnsHealth],
+		[dnsHealth, syncingDomainId],
 	);
 
 	const filtered = useMemo(() => {

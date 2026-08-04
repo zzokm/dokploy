@@ -30,7 +30,7 @@ export const CloudflareHostnameLabelField = ({
 	inputClassName,
 }: CloudflareHostnameLabelFieldProps) => {
 	return (
-		<div className="space-y-2">
+		<div className="w-full space-y-2">
 			<div className="flex items-center gap-2">
 				<p className="text-sm font-medium">{label}</p>
 				<TooltipProvider delayDuration={0}>
@@ -59,18 +59,18 @@ export const CloudflareHostnameLabelField = ({
 					</Tooltip>
 				</TooltipProvider>
 			</div>
-			<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-				<div className="flex w-full min-w-0 items-stretch sm:max-w-[320px]">
+			<div className="w-full">
+				<div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-stretch">
 					<Input
 						value={value}
 						onChange={(e) => onChange(e.target.value)}
 						placeholder={placeholder}
 						disabled={disabled}
 						aria-label={ariaLabel}
-						className={`rounded-r-none border-r-0 ${inputClassName ?? ""}`.trim()}
+						className={`min-w-0 rounded-r-none border-r-0 ${inputClassName ?? ""}`.trim()}
 					/>
-					<div className="flex min-w-0 items-center rounded-r-lg border border-l border-input bg-muted/40 px-3 text-sm text-muted-foreground">
-						<span className="truncate">{suffix}</span>
+					<div className="flex min-w-0 items-center justify-end rounded-r-lg border border-l border-input bg-muted/40 px-3 text-sm text-muted-foreground">
+						<span className="max-w-full truncate text-right">{suffix}</span>
 					</div>
 				</div>
 			</div>

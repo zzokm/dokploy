@@ -1,43 +1,16 @@
 {
 	"version": "2.0.0",
+	"options": {
+		"cwd": "${workspaceFolder}",
+		"env": {
+			"NODE_OPTIONS": "--use-system-ca"
+		}
+	},
 	"tasks": [
 		{
-			"label": "Dokploy: Install dependencies",
+			"label": "Dokploy: Setup",
 			"type": "shell",
-			"command": "pnpm install",
-			"options": {
-				"cwd": "${workspaceFolder}"
-			},
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"showReuseMessage": false
-			},
-			"group": "none",
-			"problemMatcher": []
-		},
-		{
-			"label": "Dokploy: Setup (Docker — Postgres, Redis, Traefik, Swarm)",
-			"type": "shell",
-			"command": "pnpm run dokploy:setup",
-			"options": {
-				"cwd": "${workspaceFolder}"
-			},
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"showReuseMessage": false
-			},
-			"group": "build",
-			"problemMatcher": []
-		},
-		{
-			"label": "Dokploy: Switch @dokploy/server to dev sources",
-			"type": "shell",
-			"command": "pnpm run server:script",
-			"options": {
-				"cwd": "${workspaceFolder}"
-			},
+			"command": "corepack pnpm run dokploy:setup",
 			"presentation": {
 				"reveal": "always",
 				"panel": "shared",
@@ -49,10 +22,7 @@
 		{
 			"label": "Dokploy: Dev server",
 			"type": "shell",
-			"command": "pnpm run dokploy:dev",
-			"options": {
-				"cwd": "${workspaceFolder}"
-			},
+			"command": "corepack pnpm run dokploy:dev",
 			"isBackground": true,
 			"presentation": {
 				"reveal": "always",
@@ -77,15 +47,84 @@
 			}
 		},
 		{
-			"label": "Dokploy: Full stack (setup → switch → data plane → dev)",
-			"dependsOn": [
-				"Dokploy: Setup (Docker — Postgres, Redis, Traefik, Swarm)",
-				"Dokploy: Switch @dokploy/server to dev sources",
-				"Dokploy: Core services (data plane — mail)",
-				"Dokploy: Dev server"
-			],
-			"dependsOrder": "sequence",
+			"label": "Dokploy: Build",
+			"type": "shell",
+			"command": "corepack pnpm run dokploy:build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"showReuseMessage": false
+			},
 			"group": "build",
+			"problemMatcher": []
+		},
+		{
+			"label": "Dokploy: Start",
+			"type": "shell",
+			"command": "corepack pnpm run dokploy:start",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"showReuseMessage": false
+			},
+			"group": "build",
+			"problemMatcher": []
+		},
+		{
+			"label": "Dokploy: Test",
+			"type": "shell",
+			"command": "corepack pnpm run test",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"showReuseMessage": false
+			},
+			"group": "test",
+			"problemMatcher": []
+		},
+		{
+			"label": "Dokploy: Typecheck",
+			"type": "shell",
+			"command": "corepack pnpm run typecheck",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"showReuseMessage": false
+			},
+			"group": "test",
+			"problemMatcher": []
+		},
+		{
+			"label": "Dokploy: Generate OpenAPI",
+			"type": "shell",
+			"command": "corepack pnpm run generate:openapi",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"showReuseMessage": false
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "Server: Switch to src/dev exports",
+			"type": "shell",
+			"command": "corepack pnpm run server:script",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"showReuseMessage": false
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "Server: Build",
+			"type": "shell",
+			"command": "corepack pnpm run server:build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"showReuseMessage": false
+			},
 			"problemMatcher": []
 		}
 	]

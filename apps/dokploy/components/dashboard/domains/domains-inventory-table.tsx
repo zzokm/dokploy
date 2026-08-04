@@ -12,14 +12,24 @@ import {
 } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import { Globe2, Loader2, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+	deriveRoutedStatus,
 	inventoryDnsBadgeFromCfStatus,
-	inventorySslLabel,
+	inventoryDnsBadgeFromValidation,
+	inventoryRoutedBadge,
+	inventorySslBadge,
+	sanitizeDnsValidationError,
 } from "@/components/dashboard/domains/domain-inventory-utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipProvider,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
 	Table,
 	TableBody,
@@ -33,6 +43,14 @@ import { api, type RouterOutputs } from "@/utils/api";
 export type InventoryRow =
 	RouterOutputs["domain"]["listInventory"][number];
 
+type DnsHealthState = {
+	isLoading: boolean;
+	isValid?: boolean;
+	error?: string;
+};
+
+type DnsHealthMap = Record<string, DnsHealthState>;
+
 const formatRelative = (iso: string | null) => {
 	if (!iso) return "—";
 	const date = new Date(iso);
@@ -40,24 +58,11 @@ const formatRelative = (iso: string | null) => {
 	return formatDistanceToNow(date, { addSuffix: true });
 };
 
-const sslLabel = (row: InventoryRow) =>
-	inventorySslLabel({
-		certificateType: row.certificateType,
-		https: row.https,
-	});
-
-const dnsLabel = (row: InventoryRow) =>
-	inventoryDnsBadgeFromCfStatus({
-		dnsProvider: row.dnsProvider,
-		cfStatus: row.cfStatus,
-	});
-
-const dnsVariant = (
-	row: InventoryRow,
+const healthVariant = (
+	label: string,
 ): "default" | "secondary" | "destructive" | "outline" => {
-	const label = dnsLabel(row);
-	if (label === "Valid") return "default";
-	if (label === "Failed") return "destructive";
+	if (label === "Valid" || label === "Routed") return "default";
+	if (label === "Failed" || label === "Not routed") return "destructive";
 	if (label === "Pending") return "secondary";
 	return "outline";
 };
@@ -69,12 +74,111 @@ const kindLabel = (kind: InventoryRow["kind"]) => {
 	return "Application";
 };
 
+const HealthBadgeCell = ({
+	label,
+	hint,
+}: {
+	label: string;
+	hint?: string;
+}) => {
+	const badge = <Badge variant={healthVariant(label)}>{label}</Badge>;
+	if (!hint) return badge;
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<span className="inline-flex cursor-default">{badge}</span>
+			</TooltipTrigger>
+			<TooltipContent className="max-w-xs">
+				<p className="text-xs">{hint}</p>
+			</TooltipContent>
+		</Tooltip>
+	);
+};
+
 export const DomainsInventoryTable = () => {
 	const { data, isPending } = api.domain.listInventory.useQuery();
+	const { mutateAsync: validateDomain } =
+		api.domain.validateDomain.useMutation();
 	const [sorting, setSorting] = useState<SortingState>([
 		{ id: "host", desc: false },
 	]);
 	const [hostFilter, setHostFilter] = useState("");
+	const [dnsHealth, setDnsHealth] = useState<DnsHealthMap>({});
+	const validatedKeyRef = useRef<string>("");
+
+	useEffect(() => {
+		if (!data?.length) {
+			setDnsHealth({});
+			validatedKeyRef.current = "";
+			return;
+		}
+
+		const key = data.map((row) => `${row.domainId}:${row.host}`).join("|");
+		if (key === validatedKeyRef.current) {
+			return;
+		}
+		validatedKeyRef.current = key;
+
+		let cancelled = false;
+		const initial: DnsHealthMap = {};
+		for (const row of data) {
+			initial[row.domainId] = { isLoading: true };
+		}
+		setDnsHealth(initial);
+
+		const run = async () => {
+			const concurrency = 4;
+			let index = 0;
+
+			const worker = async () => {
+				while (index < data.length && !cancelled) {
+					const current = index++;
+					const row = data[current];
+					if (!row) continue;
+					try {
+						const result = await validateDomain({
+							domain: row.host,
+							serverIp: row.expectedServerIp || undefined,
+						});
+						if (cancelled) return;
+						setDnsHealth((prev) => ({
+							...prev,
+							[row.domainId]: {
+								isLoading: false,
+								isValid: result.isValid,
+								error: result.isValid
+									? undefined
+									: sanitizeDnsValidationError(result.error),
+							},
+						}));
+					} catch (err) {
+						if (cancelled) return;
+						const message =
+							err instanceof Error ? err.message : "Failed to validate domain";
+						setDnsHealth((prev) => ({
+							...prev,
+							[row.domainId]: {
+								isLoading: false,
+								isValid: false,
+								error: sanitizeDnsValidationError(message),
+							},
+						}));
+					}
+				}
+			};
+
+			await Promise.all(
+				Array.from({ length: Math.min(concurrency, data.length) }, () =>
+					worker(),
+				),
+			);
+		};
+
+		void run();
+		return () => {
+			cancelled = true;
+		};
+	}, [data, validateDomain]);
 
 	const columns = useMemo<ColumnDef<InventoryRow>[]>(
 		() => [
@@ -102,20 +206,60 @@ export const DomainsInventoryTable = () => {
 			{
 				id: "dns",
 				header: "DNS",
-				cell: ({ row }) => (
-					<Badge variant={dnsVariant(row.original)}>
-						{dnsLabel(row.original)}
-					</Badge>
-				),
+				cell: ({ row }) => {
+					const health = dnsHealth[row.original.domainId];
+					const label = health
+						? inventoryDnsBadgeFromValidation(health)
+						: inventoryDnsBadgeFromCfStatus({
+								dnsProvider: row.original.dnsProvider,
+								cfStatus: row.original.cfStatus,
+							});
+					return (
+						<HealthBadgeCell
+							label={label}
+							hint={
+								health?.error ||
+								(label === "Manual"
+									? "Not using Cloudflare DNS automation"
+									: undefined)
+							}
+						/>
+					);
+				},
 			},
 			{
 				id: "ssl",
 				header: "SSL",
-				cell: ({ row }) => (
-					<span className="text-sm text-muted-foreground">
-						{sslLabel(row.original)}
-					</span>
-				),
+				cell: ({ row }) => {
+					const label = inventorySslBadge({
+						certificateType: row.original.certificateType,
+						https: row.original.https,
+						createdAt: row.original.createdAt,
+					});
+					return <HealthBadgeCell label={label} />;
+				},
+			},
+			{
+				id: "routed",
+				header: "Routed",
+				cell: ({ row }) => {
+					const status = deriveRoutedStatus({
+						kind: row.original.kind,
+						createdAt: row.original.createdAt,
+						lastSuccessfulDeployAt: row.original.lastSuccessfulDeployAt,
+					});
+					const label = inventoryRoutedBadge(status);
+					return (
+						<HealthBadgeCell
+							label={label}
+							hint={
+								status === "not_routed"
+									? "Domain was added after the last successful deploy. Redeploy to apply Traefik labels."
+									: undefined
+							}
+						/>
+					);
+				},
 			},
 			{
 				id: "proxy",
@@ -141,7 +285,7 @@ export const DomainsInventoryTable = () => {
 				),
 			},
 		],
-		[],
+		[dnsHealth],
 	);
 
 	const filtered = useMemo(() => {
@@ -188,111 +332,114 @@ export const DomainsInventoryTable = () => {
 	}
 
 	return (
-		<div className="flex w-full flex-col gap-4">
-			<div className="relative max-w-sm">
-				<Search
-					className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-					aria-hidden
-				/>
-				<Input
-					value={hostFilter}
-					onChange={(e) => setHostFilter(e.target.value)}
-					placeholder="Filter by host or service…"
-					className="pl-8"
-				/>
-			</div>
-			<div className="w-full overflow-auto rounded-lg border">
-				<Table>
-					<TableHeader>
-						{table.getHeaderGroups().map((headerGroup) => (
-							<TableRow key={headerGroup.id}>
-								{headerGroup.headers.map((header) => (
-									<TableHead
-										key={header.id}
-										className={
-											header.id === "proxy" || header.id === "lastSync"
-												? "hidden md:table-cell"
-												: header.id === "ssl"
-													? "hidden sm:table-cell"
-													: undefined
-										}
-									>
-										{header.isPlaceholder
-											? null
-											: flexRender(
-													header.column.columnDef.header,
-													header.getContext(),
-												)}
-									</TableHead>
-								))}
-							</TableRow>
-						))}
-					</TableHeader>
-					<TableBody>
-						{table.getRowModel().rows.length ? (
-							table.getRowModel().rows.map((row, index) => (
-								<TableRow
-									key={row.id}
-									className="animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both duration-300"
-									style={{
-										animationDelay: `${Math.min(index, 8) * 30}ms`,
-									}}
-								>
-									{row.getVisibleCells().map((cell) => (
-										<TableCell
-											key={cell.id}
+		<TooltipProvider>
+			<div className="flex w-full flex-col gap-4">
+				<div className="relative max-w-sm">
+					<Search
+						className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+						aria-hidden
+					/>
+					<Input
+						value={hostFilter}
+						onChange={(e) => setHostFilter(e.target.value)}
+						placeholder="Filter by host or service…"
+						className="pl-8"
+					/>
+				</div>
+				<div className="w-full overflow-auto rounded-lg border">
+					<Table>
+						<TableHeader>
+							{table.getHeaderGroups().map((headerGroup) => (
+								<TableRow key={headerGroup.id}>
+									{headerGroup.headers.map((header) => (
+										<TableHead
+											key={header.id}
 											className={
-												cell.column.id === "proxy" ||
-												cell.column.id === "lastSync"
+												header.id === "proxy" || header.id === "lastSync"
 													? "hidden md:table-cell"
-													: cell.column.id === "ssl"
+													: header.id === "ssl" || header.id === "routed"
 														? "hidden sm:table-cell"
 														: undefined
 											}
 										>
-											{flexRender(
-												cell.column.columnDef.cell,
-												cell.getContext(),
-											)}
-										</TableCell>
+											{header.isPlaceholder
+												? null
+												: flexRender(
+														header.column.columnDef.header,
+														header.getContext(),
+													)}
+										</TableHead>
 									))}
 								</TableRow>
-							))
-						) : (
-							<TableRow>
-								<TableCell
-									colSpan={columns.length}
-									className="h-24 text-center text-muted-foreground"
-								>
-									No domains match this filter.
-								</TableCell>
-							</TableRow>
-						)}
-					</TableBody>
-				</Table>
-			</div>
-			{filtered.length > 12 ? (
-				<div className="flex items-center justify-end gap-2">
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						onClick={() => table.previousPage()}
-						disabled={!table.getCanPreviousPage()}
-					>
-						Previous
-					</Button>
-					<Button
-						type="button"
-						variant="outline"
-						size="sm"
-						onClick={() => table.nextPage()}
-						disabled={!table.getCanNextPage()}
-					>
-						Next
-					</Button>
+							))}
+						</TableHeader>
+						<TableBody>
+							{table.getRowModel().rows.length ? (
+								table.getRowModel().rows.map((row, index) => (
+									<TableRow
+										key={row.id}
+										className="animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both duration-300"
+										style={{
+											animationDelay: `${Math.min(index, 8) * 30}ms`,
+										}}
+									>
+										{row.getVisibleCells().map((cell) => (
+											<TableCell
+												key={cell.id}
+												className={
+													cell.column.id === "proxy" ||
+													cell.column.id === "lastSync"
+														? "hidden md:table-cell"
+														: cell.column.id === "ssl" ||
+																cell.column.id === "routed"
+															? "hidden sm:table-cell"
+															: undefined
+												}
+											>
+												{flexRender(
+													cell.column.columnDef.cell,
+													cell.getContext(),
+												)}
+											</TableCell>
+										))}
+									</TableRow>
+								))
+							) : (
+								<TableRow>
+									<TableCell
+										colSpan={columns.length}
+										className="h-24 text-center text-muted-foreground"
+									>
+										No domains match this filter.
+									</TableCell>
+								</TableRow>
+							)}
+						</TableBody>
+					</Table>
 				</div>
-			) : null}
-		</div>
+				{filtered.length > 12 ? (
+					<div className="flex items-center justify-end gap-2">
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							onClick={() => table.previousPage()}
+							disabled={!table.getCanPreviousPage()}
+						>
+							Previous
+						</Button>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							onClick={() => table.nextPage()}
+							disabled={!table.getCanNextPage()}
+						>
+							Next
+						</Button>
+					</div>
+				) : null}
+			</div>
+		</TooltipProvider>
 	);
 };

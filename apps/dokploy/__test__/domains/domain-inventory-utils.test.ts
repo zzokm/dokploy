@@ -3,7 +3,11 @@ import {
 	buildDomainEditHref,
 	deriveRoutedStatus,
 	inventoryDnsBadgeFromCfStatus,
+	inventoryDnsBadgeFromValidation,
+	inventoryRoutedBadge,
+	inventorySslBadge,
 	inventorySslLabel,
+	sanitizeDnsValidationError,
 } from "@/components/dashboard/domains/domain-inventory-utils";
 
 describe("inventoryDnsBadgeFromCfStatus", () => {
@@ -32,6 +36,55 @@ describe("inventoryDnsBadgeFromCfStatus", () => {
 				cfStatus: null,
 			}),
 		).toBe("Manual");
+	});
+});
+
+describe("inventoryDnsBadgeFromValidation", () => {
+	it("returns Pending while loading", () => {
+		expect(
+			inventoryDnsBadgeFromValidation({ isLoading: true }),
+		).toBe("Pending");
+	});
+
+	it("returns Valid when resolution succeeds", () => {
+		expect(
+			inventoryDnsBadgeFromValidation({ isLoading: false, isValid: true }),
+		).toBe("Valid");
+	});
+
+	it("returns Failed when resolution fails", () => {
+		expect(
+			inventoryDnsBadgeFromValidation({ isLoading: false, isValid: false }),
+		).toBe("Failed");
+	});
+});
+
+describe("sanitizeDnsValidationError", () => {
+	it("never surfaces raw DNS errno codes", () => {
+		expect(sanitizeDnsValidationError("queryA ENOTFOUND example.com")).toBe(
+			"DNS records not found yet. Propagation can take a few minutes.",
+		);
+	});
+});
+
+describe("inventorySslBadge", () => {
+	it("returns None when https is off", () => {
+		expect(
+			inventorySslBadge({
+				certificateType: "letsencrypt",
+				https: false,
+			}),
+		).toBe("None");
+	});
+
+	it("returns Valid for established Let's Encrypt", () => {
+		expect(
+			inventorySslBadge({
+				certificateType: "letsencrypt",
+				https: true,
+				createdAt: "2020-01-01T00:00:00.000Z",
+			}),
+		).toBe("Valid");
 	});
 });
 
@@ -88,6 +141,12 @@ describe("deriveRoutedStatus", () => {
 				lastSuccessfulDeployAt: null,
 			}),
 		).toBe("not_routed");
+	});
+});
+
+describe("inventoryRoutedBadge", () => {
+	it("maps not_routed to Not routed", () => {
+		expect(inventoryRoutedBadge("not_routed")).toBe("Not routed");
 	});
 });
 

@@ -1,6 +1,34 @@
-export type InventoryDnsBadge = "Valid" | "Failed" | "Pending" | "Manual";
+export type HealthBadge = "Valid" | "Failed" | "Pending";
 
-/** Map stored Cloudflare sync status to a friendly DNS column badge (inventory). */
+export type InventoryDnsBadge = HealthBadge | "Manual";
+
+export type InventorySslBadge = HealthBadge | "None" | "Custom";
+
+export type InventoryRoutedBadge = "Routed" | "Not routed" | "Pending";
+
+const DNS_ERRNO_PATTERN =
+	/\b(ENOTFOUND|ENODATA|EAI_AGAIN|ESERVFAIL|ETIMEOUT|ETIMEDOUT|ENOTIMP|EREFUSED)\b/i;
+
+const RECENT_DOMAIN_WINDOW_MS = 10 * 60 * 1000;
+
+export const sanitizeDnsValidationError = (error?: string) => {
+	if (!error) {
+		return "DNS validation failed";
+	}
+	if (DNS_ERRNO_PATTERN.test(error) || /^query[A-Z]?\s/i.test(error)) {
+		return "DNS records not found yet. Propagation can take a few minutes.";
+	}
+	return error;
+};
+
+export const isRecentlyCreatedDomain = (createdAt?: string) => {
+	if (!createdAt) return false;
+	const createdAtMs = new Date(createdAt).getTime();
+	if (Number.isNaN(createdAtMs)) return false;
+	return Date.now() - createdAtMs < RECENT_DOMAIN_WINDOW_MS;
+};
+
+/** Fallback DNS badge from Cloudflare sync fields before live validation finishes. */
 export const inventoryDnsBadgeFromCfStatus = (input: {
 	dnsProvider: "none" | "cloudflare";
 	cfStatus: "synced" | "pending" | "error" | null;
@@ -17,6 +45,37 @@ export const inventoryDnsBadgeFromCfStatus = (input: {
 	return "Pending";
 };
 
+export const inventoryDnsBadgeFromValidation = (input: {
+	isLoading: boolean;
+	isValid?: boolean;
+}): HealthBadge => {
+	if (input.isLoading || input.isValid === undefined) {
+		return "Pending";
+	}
+	return input.isValid ? "Valid" : "Failed";
+};
+
+/**
+ * SSL health without live ACME inspection: configured cert type + recent create window.
+ * Let's Encrypt stays Pending briefly after create, then Valid.
+ */
+export const inventorySslBadge = (input: {
+	certificateType: "none" | "letsencrypt" | "custom";
+	https: boolean;
+	createdAt?: string;
+}): InventorySslBadge => {
+	if (input.certificateType === "none" || !input.https) {
+		return "None";
+	}
+	if (input.certificateType === "custom") {
+		return "Custom";
+	}
+	if (isRecentlyCreatedDomain(input.createdAt)) {
+		return "Pending";
+	}
+	return "Valid";
+};
+
 export const inventorySslLabel = (input: {
 	certificateType: "none" | "letsencrypt" | "custom";
 	https: boolean;
@@ -30,20 +89,26 @@ export const inventorySslLabel = (input: {
 	return "Let's Encrypt";
 };
 
+export const inventoryRoutedBadge = (status: "routed" | "not_routed" | "pending"): InventoryRoutedBadge => {
+	if (status === "routed") return "Routed";
+	if (status === "not_routed") return "Not routed";
+	return "Pending";
+};
+
 /**
- * Compose domains only get Traefik labels on deploy. If the domain was created
- * after the last successful deploy (or never deployed), treat as not routed.
- * Application domains write Traefik file config on create → routed.
+ * Compose domains only get Traefik labels on deploy (GPA: domain in DB without
+ * labels until redeploy). Application domains write Traefik file config on create.
  */
 export const deriveRoutedStatus = (input: {
 	kind: "application" | "compose" | "preview" | "web-server";
 	createdAt: string;
 	lastSuccessfulDeployAt: string | null;
 }): "routed" | "not_routed" | "pending" => {
-	if (input.kind === "web-server" || input.kind === "application") {
-		return "routed";
-	}
-	if (input.kind === "preview") {
+	if (
+		input.kind === "web-server" ||
+		input.kind === "application" ||
+		input.kind === "preview"
+	) {
 		return "routed";
 	}
 	if (!input.lastSuccessfulDeployAt) {

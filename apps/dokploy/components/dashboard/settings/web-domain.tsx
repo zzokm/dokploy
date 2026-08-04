@@ -143,9 +143,14 @@ export const WebDomain = () => {
 		() => isHostInCloudflareZones(host, enabledCfZones),
 		[host, enabledCfZones],
 	);
-	const shouldShowCloudflareControls =
+	const trimmedSavedHost = host.trim().toLowerCase();
+	const trimmedFormHost = domain.trim().toLowerCase();
+	const hasActionableSavedCloudflareHost =
 		!!cfSettings?.connected &&
-		(hostInputMode === "cloudflare" || hasSavedCloudflareManagedHost);
+		!!trimmedSavedHost &&
+		hasSavedCloudflareManagedHost &&
+		trimmedFormHost === trimmedSavedHost;
+	const shouldShowCloudflareControls = hasActionableSavedCloudflareHost;
 
 	useEffect(() => {
 		if (data) {

@@ -1,13 +1,16 @@
 {
 	"version": "2.0.0",
+	"options": {
+		"cwd": "${workspaceFolder}",
+		"env": {
+			"NODE_OPTIONS": "--use-system-ca"
+		}
+	},
 	"tasks": [
 		{
 			"label": "Dokploy: Install dependencies",
 			"type": "shell",
-			"command": "pnpm install",
-			"options": {
-				"cwd": "${workspaceFolder}"
-			},
+			"command": "corepack pnpm install",
 			"presentation": {
 				"reveal": "always",
 				"panel": "shared",
@@ -17,27 +20,9 @@
 			"problemMatcher": []
 		},
 		{
-			"label": "Dokploy: Setup (Docker — Postgres, Redis, Traefik, Swarm)",
+			"label": "Dokploy: Setup",
 			"type": "shell",
-			"command": "pnpm run dokploy:setup",
-			"options": {
-				"cwd": "${workspaceFolder}"
-			},
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"showReuseMessage": false
-			},
-			"group": "build",
-			"problemMatcher": []
-		},
-		{
-			"label": "Dokploy: Switch @dokploy/server to dev sources",
-			"type": "shell",
-			"command": "pnpm run server:script",
-			"options": {
-				"cwd": "${workspaceFolder}"
-			},
+			"command": "corepack pnpm --filter=dokploy exec tsx -r dotenv/config setup.ts; if ($?) { node -e \"setTimeout(function(){process.exit(0)},5000)\" }; if ($?) { corepack pnpm --filter=dokploy exec tsx -r dotenv/config migration.ts }",
 			"presentation": {
 				"reveal": "always",
 				"panel": "shared",
@@ -49,10 +34,7 @@
 		{
 			"label": "Dokploy: Dev server",
 			"type": "shell",
-			"command": "pnpm run dokploy:dev",
-			"options": {
-				"cwd": "${workspaceFolder}"
-			},
+			"command": "corepack pnpm --filter=dokploy run dev",
 			"isBackground": true,
 			"presentation": {
 				"reveal": "always",
@@ -77,11 +59,93 @@
 			}
 		},
 		{
-			"label": "Dokploy: Full stack (setup → switch → data plane → dev)",
+			"label": "Dokploy: Build",
+			"type": "shell",
+			"command": "corepack pnpm --filter=dokploy run build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"showReuseMessage": false
+			},
+			"group": "build",
+			"problemMatcher": []
+		},
+		{
+			"label": "Dokploy: Start",
+			"type": "shell",
+			"command": "corepack pnpm --filter=dokploy run start",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"showReuseMessage": false
+			},
+			"group": "build",
+			"problemMatcher": []
+		},
+		{
+			"label": "Dokploy: Test",
+			"type": "shell",
+			"command": "corepack pnpm --filter=dokploy run test",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"showReuseMessage": false
+			},
+			"group": "test",
+			"problemMatcher": []
+		},
+		{
+			"label": "Dokploy: Typecheck",
+			"type": "shell",
+			"command": "corepack pnpm -r run typecheck",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"showReuseMessage": false
+			},
+			"group": "test",
+			"problemMatcher": []
+		},
+		{
+			"label": "Dokploy: Generate OpenAPI",
+			"type": "shell",
+			"command": "corepack pnpm --filter=dokploy run generate:openapi",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"showReuseMessage": false
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "Server: Switch to src/dev exports",
+			"type": "shell",
+			"command": "corepack pnpm --filter=server run switch:dev",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"showReuseMessage": false
+			},
+			"group": "build",
+			"problemMatcher": []
+		},
+		{
+			"label": "Server: Build",
+			"type": "shell",
+			"command": "corepack pnpm --filter=server run build",
+			"presentation": {
+				"reveal": "always",
+				"panel": "shared",
+				"showReuseMessage": false
+			},
+			"group": "build",
+			"problemMatcher": []
+		},
+		{
+			"label": "Dokploy: Full stack (setup → switch → dev)",
 			"dependsOn": [
-				"Dokploy: Setup (Docker — Postgres, Redis, Traefik, Swarm)",
-				"Dokploy: Switch @dokploy/server to dev sources",
-				"Dokploy: Core services (data plane — mail)",
+				"Dokploy: Setup",
+				"Server: Switch to src/dev exports",
 				"Dokploy: Dev server"
 			],
 			"dependsOrder": "sequence",

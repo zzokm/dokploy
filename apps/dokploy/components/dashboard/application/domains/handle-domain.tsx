@@ -412,7 +412,6 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 				? {
 						dnsProvider: "cloudflare" as const,
 						cfProxied: cfProxiedOnCreate,
-						cloudflareProxied: cfProxiedOnCreate,
 						https: true,
 						certificateType: "letsencrypt" as const,
 						customCertResolver: undefined,

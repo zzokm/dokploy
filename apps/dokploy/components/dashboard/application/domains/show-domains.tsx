@@ -667,7 +667,7 @@ export const ShowDomains = ({ id, type }: Props) => {
 														domainId={item.domainId}
 														currentDnsProvider={item.dnsProvider}
 														currentProxied={
-															item.cfProxied ?? item.cloudflareProxied ?? true
+															item.cfProxied ?? true
 														}
 													/>
 												) : null}

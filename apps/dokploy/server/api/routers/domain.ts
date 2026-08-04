@@ -70,7 +70,7 @@ export const domainRouter = createTRPCRouter({
 					const cfResult = await ensureCloudflareAppDnsForDomain({
 						organizationId: ctx.session.activeOrganizationId,
 						domainId: domain.domainId,
-						proxiedDefault: input.cfProxied ?? input.cloudflareProxied ?? true,
+						proxiedDefault: input.cfProxied ?? true,
 					})
 					if (cfResult.skipped) {
 						if (domain.applicationId) {
@@ -190,7 +190,7 @@ export const domainRouter = createTRPCRouter({
 				await ensureCloudflareAppDnsForDomain({
 					organizationId: ctx.session.activeOrganizationId,
 					domainId: input.domainId,
-					proxiedDefault: true,
+					proxiedDefault: domain.cfProxied ?? true,
 				}).catch(() => {})
 			}
 			return result;
@@ -404,7 +404,7 @@ export const domainRouter = createTRPCRouter({
 			return await ensureCloudflareAppDnsForDomain({
 				organizationId: ctx.session.activeOrganizationId,
 				domainId: input.domainId,
-				proxiedDefault: true,
+				proxiedDefault: domain.cfProxied ?? true,
 			})
 		}),
 });

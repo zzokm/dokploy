@@ -3,14 +3,14 @@ import {
 	VALID_HOSTNAME_REGEX,
 } from "@dokploy/server/utils/hostname-validation";
 import { standardSchemaResolver as zodResolver } from "@hookform/resolvers/standard-schema";
-import { Cloud, GlobeIcon } from "lucide-react";
-import Link from "next/link";
+import { GlobeIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
-import { AlertBlock } from "@/components/shared/alert-block";
+import { CloudflareHostnameLabelField } from "@/components/dashboard/domains/cloudflare-hostname-label-field";
 import { ServerDomainCloudflareControls } from "@/components/dashboard/settings/web-server/server-domain-cloudflare-controls";
+import { AlertBlock } from "@/components/shared/alert-block";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -40,6 +40,23 @@ import { Switch } from "@/components/ui/switch";
 import { api } from "@/utils/api";
 
 type HostInputMode = "manual" | "cloudflare";
+
+const isHostInCloudflareZones = (
+	host: string,
+	zones: Array<{ name: string }> = [],
+) => {
+	const normalizedHost = host.trim().toLowerCase();
+	if (!normalizedHost) {
+		return false;
+	}
+
+	return zones.some((zone) => {
+		const zoneName = zone.name.trim().toLowerCase();
+		return (
+			normalizedHost === zoneName || normalizedHost.endsWith(`.${zoneName}`)
+		);
+	});
+};
 
 const addServerDomain = z
 	.object({
@@ -94,7 +111,7 @@ export const WebDomain = () => {
 	const [hostInputMode, setHostInputMode] = useState<HostInputMode>("manual");
 	const [selectedCfZoneId, setSelectedCfZoneId] = useState("");
 	const [cfHostnameLabel, setCfHostnameLabel] = useState("@");
-	const [syncDnsAfterSave, setSyncDnsAfterSave] = useState(true);
+	const syncDnsAfterSave = true;
 
 	const form = useForm<AddServerDomain>({
 		defaultValues: {
@@ -122,6 +139,13 @@ export const WebDomain = () => {
 		() => enabledCfZones.find((z) => z.cfZoneId === selectedCfZoneId) ?? null,
 		[enabledCfZones, selectedCfZoneId],
 	);
+	const hasSavedCloudflareManagedHost = useMemo(
+		() => isHostInCloudflareZones(host, enabledCfZones),
+		[host, enabledCfZones],
+	);
+	const shouldShowCloudflareControls =
+		!!cfSettings?.connected &&
+		(hostInputMode === "cloudflare" || hasSavedCloudflareManagedHost);
 
 	useEffect(() => {
 		if (data) {
@@ -143,7 +167,10 @@ export const WebDomain = () => {
 			!label || label === "@"
 				? selectedZone.name.toLowerCase()
 				: `${label}.${selectedZone.name.toLowerCase()}`;
-		form.setValue("domain", nextHost, { shouldValidate: true, shouldDirty: true });
+		form.setValue("domain", nextHost, {
+			shouldValidate: true,
+			shouldDirty: true,
+		});
 	}, [hostInputMode, selectedZone, cfHostnameLabel, form]);
 
 	const applyDns = api.cloudflareSettings.applyServerDomainDns.useMutation();
@@ -218,122 +245,77 @@ export const WebDomain = () => {
 								onSubmit={form.handleSubmit(onSubmit)}
 								className="grid w-full gap-4 grid-cols-2"
 							>
-								<div className="col-span-2 mb-1 animate-in fade-in-0 slide-in-from-bottom-1 space-y-3 rounded-xl border border-border bg-muted/40 p-4 duration-300">
-									<div className="space-y-1">
-										<div className="text-sm font-medium">Hostname</div>
-										<p className="text-xs text-muted-foreground">
-											Enter a custom hostname or pick a Cloudflare zone.
-										</p>
+								{cfSettings?.connected ? (
+									<div className="col-span-2 flex flex-row items-center justify-between gap-4 rounded-lg border p-3 shadow-xs">
+										<div className="min-w-0 space-y-0.5">
+											<p className="text-sm font-medium leading-none">
+												Cloudflare managed domain
+											</p>
+											<p className="text-xs text-muted-foreground">
+												Build the hostname from a synced zone.
+											</p>
+										</div>
+										<Switch
+											checked={hostInputMode === "cloudflare"}
+											onCheckedChange={(checked) => {
+												const next: HostInputMode = checked
+													? "cloudflare"
+													: "manual";
+												setHostInputMode(next);
+												if (!checked) {
+													form.setValue("domain", host || "", {
+														shouldValidate: true,
+													});
+												}
+											}}
+											aria-label="Cloudflare managed domain"
+											className="shrink-0"
+										/>
 									</div>
-									<Select
-										value={hostInputMode}
-										onValueChange={(v) => {
-											const next = v as HostInputMode;
-											setHostInputMode(next);
-											if (next === "manual") {
-												form.setValue("domain", host || "", {
-													shouldValidate: true,
-												});
-											}
-										}}
-									>
-										<SelectTrigger aria-label="How to enter hostname">
-											<SelectValue />
-										</SelectTrigger>
-										<SelectContent>
-											<SelectItem value="manual">
-												Custom hostname (full domain)
-											</SelectItem>
-											<SelectItem value="cloudflare">
-												Cloudflare zone (managed DNS)
-											</SelectItem>
-										</SelectContent>
-									</Select>
-								</div>
+								) : null}
 
-								{hostInputMode === "cloudflare" ? (
-									<div className="col-span-2 animate-in fade-in-0 slide-in-from-bottom-1 space-y-4 duration-300">
-										{!cfSettings?.connected ? (
-											<AlertBlock type="warning">
-												Connect your Cloudflare API token in DNS providers
-												below or on the{" "}
-												<Link
-													href="/dashboard/domains"
-													className="text-primary underline"
-												>
-													Domains
-												</Link>{" "}
-												page, then sync zones.
-											</AlertBlock>
-										) : null}
-										<div className="grid gap-4 md:grid-cols-2">
-											<div className="space-y-2">
-												<div className="flex items-center gap-2 text-sm font-medium">
-													<Cloud
-														className="size-4 text-muted-foreground"
-														aria-hidden
-													/>
-													Cloudflare zone
-												</div>
-												<Select
-													value={selectedCfZoneId}
-													onValueChange={setSelectedCfZoneId}
-													disabled={!enabledCfZones.length}
-												>
-													<SelectTrigger aria-label="Cloudflare zone">
-														<SelectValue placeholder="Select a zone" />
-													</SelectTrigger>
-													<SelectContent>
-														{enabledCfZones.map((z) => (
-															<SelectItem key={z.cfZoneId} value={z.cfZoneId}>
-																{z.name}
-															</SelectItem>
-														))}
-													</SelectContent>
-												</Select>
-												{!enabledCfZones.length && cfSettings?.connected ? (
-													<p className="text-xs text-muted-foreground">
-														No zones yet. Open Domains and click Sync zones.
-													</p>
-												) : null}
-											</div>
-											<div className="space-y-2">
-												<div className="text-sm font-medium">Hostname label</div>
-												<Input
-													value={cfHostnameLabel}
-													onChange={(e) => setCfHostnameLabel(e.target.value)}
-													placeholder="@ or panel"
-													className="font-mono text-sm"
-													disabled={!selectedZone}
-												/>
+								{hostInputMode === "cloudflare" && cfSettings?.connected ? (
+									<div className="col-span-2 animate-in fade-in-0 slide-in-from-bottom-1 grid gap-4 duration-300 md:grid-cols-2">
+										<div className="space-y-2">
+											<p className="text-sm font-medium">Zone</p>
+											<Select
+												value={selectedCfZoneId}
+												onValueChange={setSelectedCfZoneId}
+												disabled={!enabledCfZones.length}
+											>
+												<SelectTrigger aria-label="Cloudflare zone">
+													<SelectValue placeholder="Select a zone" />
+												</SelectTrigger>
+												<SelectContent>
+													{enabledCfZones.map((z) => (
+														<SelectItem key={z.cfZoneId} value={z.cfZoneId}>
+															{z.name}
+														</SelectItem>
+													))}
+												</SelectContent>
+											</Select>
+											{!enabledCfZones.length ? (
 												<p className="text-xs text-muted-foreground">
-													Use{" "}
-													<span className="font-mono text-foreground">@</span>{" "}
-													for the apex, or a label like{" "}
-													<span className="font-mono text-foreground">
-														panel
-													</span>
-													.
+													No zones yet. Open Domains and click Sync zones.
 												</p>
-											</div>
+											) : null}
 										</div>
-										<div className="flex flex-col gap-3 rounded-md border border-border bg-background px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-											<div className="min-w-0 space-y-0.5">
-												<p className="text-sm font-medium">
-													Sync DNS after save
-												</p>
-												<p className="text-xs text-muted-foreground">
-													Create/update the A record to this server&apos;s IP
-													(proxied).
-												</p>
-											</div>
-											<Switch
-												checked={syncDnsAfterSave}
-												onCheckedChange={setSyncDnsAfterSave}
-												disabled={!cfSettings?.connected}
-												aria-label="Sync DNS after save"
-											/>
-										</div>
+										<CloudflareHostnameLabelField
+											value={cfHostnameLabel}
+											onChange={setCfHostnameLabel}
+											placeholder="@ or panel"
+											ariaLabel="Hostname label"
+											disabled={!selectedZone}
+											inputClassName="text-sm"
+											suffix={
+												selectedZone
+													? cfHostnameLabel.trim() === "@" ||
+														!cfHostnameLabel.trim()
+														? selectedZone.name
+														: `.${selectedZone.name}`
+													: ".your-zone.com"
+											}
+										/>
 									</div>
 								) : null}
 
@@ -353,6 +335,12 @@ export const WebDomain = () => {
 														readOnly={hostInputMode === "cloudflare"}
 													/>
 												</FormControl>
+												{hostInputMode === "cloudflare" ? (
+													<FormDescription>
+														Filled from the zone and label above. DNS syncs on
+														save when possible.
+													</FormDescription>
+												) : null}
 												<FormMessage />
 											</FormItem>
 										);
@@ -430,10 +418,12 @@ export const WebDomain = () => {
 									/>
 								)}
 
-								<ServerDomainCloudflareControls
-									savedHost={host}
-									formHost={domain}
-								/>
+								{shouldShowCloudflareControls ? (
+									<ServerDomainCloudflareControls
+										savedHost={host}
+										formHost={domain}
+									/>
+								) : null}
 
 								<div className="flex w-full justify-end col-span-2">
 									<Button

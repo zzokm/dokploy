@@ -1,17 +1,10 @@
 "use client"
 
-import { Cloud, Loader2, RefreshCw } from "lucide-react"
-import { useEffect, useState } from "react"
+import { Cloud, Globe2, Loader2, RefreshCw, ShieldCheck } from "lucide-react"
+import { useState } from "react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select"
 import {
 	Card,
 	CardContent,
@@ -21,14 +14,6 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@/components/ui/table"
 import { api } from "@/utils/api"
 
 const statusVariant = (status: "active" | "pending" | "disabled") => {
@@ -45,15 +30,6 @@ export const CloudflareZonesGrid = () => {
 		api.cloudflareSettings.listZones.useQuery(undefined, {
 			enabled: !!settings?.connected,
 		})
-	const { data: hostedDomains } = api.mail.listDomains.useQuery(undefined, {
-		enabled: !!settings?.connected,
-	})
-
-	const { data: previewRows, isFetching: previewLoading } =
-		api.cloudflareSettings.previewAppDns.useQuery(undefined, {
-			enabled: !!settings?.connected,
-		})
-	void previewRows
 
 	const setToken = api.cloudflareSettings.setToken.useMutation({
 		onSuccess: async () => {
@@ -79,29 +55,20 @@ export const CloudflareZonesGrid = () => {
 			const applied = data.appDns.applied.length
 			const errors = data.appDns.errors.length
 			if (applied) {
-				toast.success(`Updated DNS for ${applied} domain${applied === 1 ? "" : "s"}`)
+				toast.success(
+					`Updated DNS for ${applied} domain${applied === 1 ? "" : "s"}`,
+				)
 			} else {
 				toast.success("DNS already up to date")
 			}
 			if (errors) {
 				toast.error(`${errors} domain(s) could not be updated`)
 			}
-			const mailFailures = data.mail.filter((m) => !m.ok).length
-			if (mailFailures) {
-				toast.error(`${mailFailures} zone(s) could not be provisioned for mail DNS`)
-			}
 			await utils.cloudflareSettings.previewAppDns.invalidate()
 			await utils.cloudflareSettings.previewAppDnsForDomain.invalidate()
 			await utils.cloudflareSettings.listZones.invalidate()
 			await utils.domain.byApplicationId.invalidate()
 			await utils.domain.byComposeId.invalidate()
-		},
-		onError: (e) => toast.error(e.message),
-	})
-
-	const setEmailHosting = api.mail.setEmailHosting.useMutation({
-		onSuccess: async () => {
-			await utils.mail.listDomains.invalidate()
 		},
 		onError: (e) => toast.error(e.message),
 	})
@@ -117,169 +84,172 @@ export const CloudflareZonesGrid = () => {
 
 	if (!settings?.connected) {
 		return (
-			<Card className="h-full w-full bg-sidebar p-2.5 rounded-xl">
-				<div className="rounded-xl bg-background shadow-md">
-					<CardHeader>
-						<CardTitle className="text-xl flex flex-row gap-2">
-							<Cloud className="size-6 text-muted-foreground shrink-0 self-center" />
-							Domains (Cloudflare)
-						</CardTitle>
-						<CardDescription>
-							Connect Cloudflare to import your zones and manage DNS automatically
-							for applications and mail.
-						</CardDescription>
-					</CardHeader>
-					<CardContent className="border-t py-6 sm:py-8">
-						<div className="flex flex-col gap-4 max-w-md">
-							<div className="space-y-2">
-								<Label htmlFor="cf-token">Cloudflare API token</Label>
-								<Input
-									id="cf-token"
-									value={tokenInput}
-									onChange={(e) => setTokenInput(e.target.value)}
-									placeholder="Paste API token"
-									autoComplete="off"
-									className="font-mono text-sm"
-								/>
+			<div className="w-full">
+				<Card className="mx-auto h-full w-full max-w-5xl rounded-xl bg-sidebar p-2.5">
+					<div className="animate-in fade-in-0 slide-in-from-bottom-2 rounded-xl bg-background shadow-md duration-300">
+						<CardHeader className="space-y-3">
+							<CardTitle className="flex flex-row gap-2 text-xl">
+								<Globe2 className="size-6 shrink-0 self-center text-muted-foreground" />
+								Domains
+							</CardTitle>
+							<CardDescription>
+								Connect Cloudflare to import zones and automate DNS for your
+								applications.
+							</CardDescription>
+						</CardHeader>
+						<CardContent className="border-t py-8 sm:py-10">
+							<div className="mx-auto flex w-full max-w-md flex-col gap-6">
+								<div className="flex flex-col items-center gap-3 text-center">
+									<div className="flex size-12 items-center justify-center rounded-xl border border-border bg-muted/40">
+										<Cloud
+											className="size-6 text-muted-foreground"
+											aria-hidden
+										/>
+									</div>
+									<div className="space-y-1">
+										<p className="text-sm font-medium text-foreground">
+											Connect Cloudflare
+										</p>
+										<p className="text-xs leading-relaxed text-muted-foreground">
+											Paste a scoped API token. Zones sync after connect; app
+											domains can then update A records automatically.
+										</p>
+									</div>
+								</div>
+
+								<div className="space-y-2">
+									<Label htmlFor="cf-token">Cloudflare API token</Label>
+									<Input
+										id="cf-token"
+										value={tokenInput}
+										onChange={(e) => setTokenInput(e.target.value)}
+										placeholder="Paste API token"
+										autoComplete="off"
+										className="font-mono text-sm"
+									/>
+								</div>
+								<Button
+									type="button"
+									isLoading={setToken.isPending}
+									onClick={handleConnect}
+									className="w-full sm:w-auto"
+								>
+									Connect Cloudflare
+								</Button>
+								<p className="text-xs leading-relaxed text-muted-foreground">
+									Required permissions:{" "}
+									<span className="font-medium text-foreground">
+										Zone Read
+									</span>{" "}
+									and{" "}
+									<span className="font-medium text-foreground">
+										DNS Write
+									</span>
+								</p>
 							</div>
-							<Button
-								type="button"
-								isLoading={setToken.isPending}
-								onClick={handleConnect}
-								className="w-full sm:w-auto"
-							>
-								Connect Cloudflare
-							</Button>
-							<p className="text-xs text-muted-foreground leading-relaxed">
-								Required permissions:{" "}
-								<span className="font-mono text-foreground">Zone.Zone:Read</span> and{" "}
-								<span className="font-mono text-foreground">Zone.DNS:Edit</span>
-							</p>
-						</div>
-					</CardContent>
-				</div>
-			</Card>
+						</CardContent>
+					</div>
+				</Card>
+			</div>
 		)
 	}
 
-	const handleSyncDns = () => {
-		syncDns.mutate()
-	}
-
 	return (
-		<>
-			<Card className="h-full w-full bg-sidebar p-2.5 rounded-xl">
-			<div className="rounded-xl bg-background shadow-md">
-				<CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-					<div className="space-y-1 min-w-0">
-						<CardTitle className="text-xl flex flex-row gap-2">
-							<Cloud className="size-6 text-muted-foreground shrink-0 self-center" />
-							Domains (Cloudflare)
-						</CardTitle>
-						<CardDescription className="break-words">
-							Connected with token ending in{" "}
-							<span className="font-mono">****{settings.apiTokenLast4}</span>
-						</CardDescription>
-					</div>
-					<div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto shrink-0">
-						<Button
-							type="button"
-							variant="default"
-							size="default"
-							className="w-full sm:w-auto"
-							isLoading={syncDns.isPending || previewLoading}
-							onClick={handleSyncDns}
-						>
-							Sync DNS
-						</Button>
-						<Button
-							type="button"
-							variant="secondary"
-							size="default"
-							className="w-full sm:w-auto"
-							isLoading={syncZones.isPending}
-							onClick={() => syncZones.mutate()}
-						>
-							<RefreshCw className="size-4 mr-2" aria-hidden />
-							Sync zones
-						</Button>
-					</div>
-				</CardHeader>
-				<CardContent className="border-t py-6">
-					{isPending ? (
-						<div className="flex flex-col sm:flex-row items-center justify-center gap-3 min-h-[12rem] text-sm text-muted-foreground">
-							<Loader2 className="size-5 animate-spin" aria-hidden />
-							<span>Loading zones…</span>
+		<div className="w-full">
+			<Card className="mx-auto h-full w-full max-w-5xl rounded-xl bg-sidebar p-2.5">
+				<div className="animate-in fade-in-0 slide-in-from-bottom-2 rounded-xl bg-background shadow-md duration-300">
+					<CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+						<div className="min-w-0 space-y-1">
+							<CardTitle className="flex flex-row gap-2 text-xl">
+								<Globe2 className="size-6 shrink-0 self-center text-muted-foreground" />
+								Domains
+							</CardTitle>
+							<CardDescription className="break-words">
+								Cloudflare connected · token ending in{" "}
+								<span className="font-mono text-foreground">
+									****{settings.apiTokenLast4}
+								</span>
+							</CardDescription>
 						</div>
-					) : !zones?.length ? (
-						<div className="flex flex-col items-center justify-center gap-2 min-h-[12rem] text-center px-2">
-							<Cloud className="size-8 text-muted-foreground" aria-hidden />
-							<p className="text-sm text-muted-foreground max-w-md">
-								No zones found. Click <span className="font-medium text-foreground">Sync now</span>{" "}
-								to import zones from Cloudflare.
-							</p>
+						<div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
+							<Button
+								type="button"
+								variant="default"
+								className="w-full sm:w-auto"
+								isLoading={syncDns.isPending}
+								onClick={() => syncDns.mutate()}
+							>
+								<ShieldCheck className="mr-2 size-4" aria-hidden />
+								Sync DNS
+							</Button>
+							<Button
+								type="button"
+								variant="secondary"
+								className="w-full sm:w-auto"
+								isLoading={syncZones.isPending}
+								onClick={() => syncZones.mutate()}
+							>
+								<RefreshCw className="mr-2 size-4" aria-hidden />
+								Sync zones
+							</Button>
 						</div>
-					) : (
-						<div className="rounded-lg border overflow-hidden">
-							<Table>
-								<TableHeader>
-									<TableRow>
-										<TableHead>Zone</TableHead>
-										<TableHead>Status</TableHead>
-										<TableHead>Email hosted</TableHead>
-										<TableHead className="hidden sm:table-cell">Proxy</TableHead>
-									</TableRow>
-								</TableHeader>
-								<TableBody>
-									{zones.map((z) => (
-										<TableRow key={z.cfZoneId}>
-											<TableCell className="font-medium align-top">{z.name}</TableCell>
-											<TableCell>
-												<div className="flex flex-wrap items-center gap-2">
-													<Badge variant={statusVariant(z.status)}>{z.status}</Badge>
-													{z.paused && <Badge variant="outline">paused</Badge>}
-												</div>
-											</TableCell>
-											<TableCell className="align-top">
-												<Select
-													value={
-														hostedDomains?.find(
-															(d) => d.name.trim().toLowerCase() === z.name.trim().toLowerCase(),
-														)?.emailHosting ?? "none"
-													}
-													onValueChange={(v) => {
-														setEmailHosting.mutate({
-															apex: z.name,
-															emailHosting: v as "dokploy" | "external" | "none",
-														})
-													}}
-												>
-													<SelectTrigger
-														className="h-9 w-[180px]"
-														aria-label={`Where email is hosted for ${z.name}`}
-														disabled={setEmailHosting.isPending}
-													>
-														<SelectValue />
-													</SelectTrigger>
-													<SelectContent>
-														<SelectItem value="dokploy">Dokploy</SelectItem>
-														<SelectItem value="external">External</SelectItem>
-														<SelectItem value="none">None</SelectItem>
-													</SelectContent>
-												</Select>
-											</TableCell>
-											<TableCell className="hidden sm:table-cell text-sm text-muted-foreground">
-												Managed per domain
-											</TableCell>
-										</TableRow>
-									))}
-								</TableBody>
-							</Table>
-						</div>
-					)}
-				</CardContent>
-			</div>
-		</Card>
-		</>
+					</CardHeader>
+					<CardContent className="space-y-2 border-t py-8">
+						{isPending ? (
+							<div className="flex min-h-[25vh] w-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground sm:flex-row">
+								<Loader2 className="size-5 animate-spin" aria-hidden />
+								<span>Loading zones…</span>
+							</div>
+						) : !zones?.length ? (
+							<div className="flex min-h-[25vh] w-full flex-col items-center justify-center gap-3 px-2 text-center">
+								<Cloud className="size-8 text-muted-foreground" aria-hidden />
+								<span className="max-w-md text-base text-muted-foreground">
+									No zones imported yet. Sync zones from your Cloudflare account
+									to get started.
+								</span>
+								<Button
+									type="button"
+									variant="secondary"
+									isLoading={syncZones.isPending}
+									onClick={() => syncZones.mutate()}
+								>
+									<RefreshCw className="mr-2 size-4" aria-hidden />
+									Sync zones
+								</Button>
+							</div>
+						) : (
+							<div className="flex min-h-[25vh] w-full flex-col gap-3">
+								{zones.map((z, index) => (
+									<div
+										key={z.cfZoneId}
+										className="flex w-full animate-in fade-in-0 slide-in-from-bottom-1 items-center justify-between rounded-lg bg-sidebar p-1 duration-300 fill-mode-both"
+										style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
+									>
+										<div className="flex w-full items-center justify-between rounded-lg border bg-background p-3.5 transition-colors hover:bg-muted/20">
+											<div className="flex min-w-0 flex-col gap-1.5">
+												<span className="truncate text-sm font-medium">
+													{z.name}
+												</span>
+												<span className="text-xs text-muted-foreground">
+													Proxy managed per application domain
+												</span>
+											</div>
+											<div className="ml-3 flex shrink-0 flex-wrap items-center justify-end gap-2">
+												<Badge variant={statusVariant(z.status)}>
+													{z.status}
+												</Badge>
+												{z.paused ? (
+													<Badge variant="outline">paused</Badge>
+												) : null}
+											</div>
+										</div>
+									</div>
+								))}
+							</div>
+						)}
+					</CardContent>
+				</div>
+			</Card>
+		</div>
 	)
 }

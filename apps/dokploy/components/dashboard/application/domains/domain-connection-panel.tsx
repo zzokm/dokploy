@@ -30,17 +30,17 @@ const copyToClipboard = async (text: string) => {
 const badgeClassForStatus = (status: string | null | undefined) => {
 	switch (status) {
 		case "active":
-			return "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20"
+			return "bg-green-500/10 text-green-700 border-green-500/20 dark:text-green-400"
 		case "checking":
-			return "bg-yellow-500/10 text-yellow-800 dark:text-yellow-300 border-yellow-500/20"
+			return "bg-yellow-500/10 text-yellow-800 border-yellow-500/20 dark:text-yellow-300"
 		case "dns_mismatch":
 		case "dns_no_answer":
 		case "error":
-			return "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20"
+			return "bg-red-500/10 text-red-700 border-red-500/20 dark:text-red-400"
 		case "server_unreachable":
-			return "bg-amber-500/10 text-amber-800 dark:text-amber-300 border-amber-500/20"
+			return "bg-amber-500/10 text-amber-800 border-amber-500/20 dark:text-amber-300"
 		default:
-			return "bg-muted text-muted-foreground border-transparent"
+			return "border-transparent bg-muted text-muted-foreground"
 	}
 }
 
@@ -63,9 +63,13 @@ const labelForStatus = (status: string | null | undefined) => {
 	}
 }
 
-export const DomainConnectionPanel = ({ domainId }: DomainConnectionPanelProps) => {
+export const DomainConnectionPanel = ({
+	domainId,
+}: DomainConnectionPanelProps) => {
 	const utils = api.useUtils()
-	const instructions = api.domain.getConnectionInstructions.useQuery({ domainId })
+	const instructions = api.domain.getConnectionInstructions.useQuery({
+		domainId,
+	})
 	const status = api.domain.getConnectionStatus.useQuery({ domainId })
 
 	const verify = api.domain.verifyConnection.useMutation({
@@ -80,21 +84,24 @@ export const DomainConnectionPanel = ({ domainId }: DomainConnectionPanelProps) 
 	const statusMessage = status.data?.message ?? null
 
 	return (
-		<div className="flex w-full flex-col gap-3 rounded-lg border p-3 transition-colors bg-muted/50 sm:flex-row sm:items-start">
-			<div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/5">
-				<Globe className="size-4 text-primary/70" aria-hidden />
+		<div className="flex w-full animate-in fade-in-0 slide-in-from-bottom-1 flex-col gap-3 rounded-lg border border-border bg-muted/40 p-3.5 duration-300 sm:flex-row sm:items-start">
+			<div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-background">
+				<Globe className="size-4 text-muted-foreground" aria-hidden />
 			</div>
 			<div className="min-w-0 flex-1 space-y-3">
 				<div className="space-y-1">
 					<p className="text-sm font-medium leading-none">Connection &amp; DNS</p>
-					<p className="text-xs text-muted-foreground">
-						Point DNS at your server, then verify. Copy values into your DNS provider if you are not using
-						Cloudflare automation.
+					<p className="text-xs leading-relaxed text-muted-foreground">
+						Point DNS at your server, then verify. Copy values into your DNS
+						provider if you are not using Cloudflare automation.
 					</p>
 				</div>
 
 				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-					<Badge variant="outline" className={`w-fit text-[11px] ${badgeClassForStatus(currentStatus)}`}>
+					<Badge
+						variant="outline"
+						className={`w-fit text-[11px] ${badgeClassForStatus(currentStatus)}`}
+					>
 						{verify.isPending || status.isFetching ? (
 							<>
 								<Loader2 className="mr-1 size-3 animate-spin" aria-hidden />
@@ -108,7 +115,7 @@ export const DomainConnectionPanel = ({ domainId }: DomainConnectionPanelProps) 
 						type="button"
 						variant="outline"
 						size="sm"
-						className="w-full shrink-0 sm:w-auto"
+						className="w-full shrink-0 transition-colors sm:w-auto"
 						isLoading={verify.isPending}
 						onClick={() => verify.mutate({ domainId })}
 					>
@@ -127,41 +134,47 @@ export const DomainConnectionPanel = ({ domainId }: DomainConnectionPanelProps) 
 						<span>Loading DNS instructions…</span>
 					</div>
 				) : instructions.data?.records?.length ? (
-					<div className="overflow-hidden rounded-md border bg-background">
-						<Table>
-						<TableHeader>
-							<TableRow>
-								<TableHead className="w-[72px] sm:w-[90px]">Type</TableHead>
-								<TableHead className="w-[100px] sm:w-[140px]">Name</TableHead>
-								<TableHead>Value</TableHead>
-								<TableHead className="text-right w-12 sm:w-14"> </TableHead>
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{instructions.data.records.map((r) => (
-								<TableRow key={`${r.type}-${r.name}-${r.value}`}>
-									<TableCell className="font-medium align-top">{r.type}</TableCell>
-									<TableCell className="align-top">{r.name}</TableCell>
-									<TableCell className="font-mono text-xs break-all align-top">
-										{r.value}
-									</TableCell>
-									<TableCell className="text-right align-top">
-										<Button
-											type="button"
-											variant="ghost"
-											size="icon"
-											className="shrink-0"
-											onClick={() => copyToClipboard(r.value)}
-											aria-label="Copy DNS value"
-										>
-											<Copy className="size-4" aria-hidden />
-										</Button>
-									</TableCell>
-								</TableRow>
-							))}
-						</TableBody>
-					</Table>
-				</div>
+					<div className="overflow-hidden rounded-md border border-border bg-background">
+						<div className="overflow-x-auto">
+							<Table>
+								<TableHeader>
+									<TableRow>
+										<TableHead className="w-[72px] sm:w-[90px]">Type</TableHead>
+										<TableHead className="w-[100px] sm:w-[140px]">
+											Name
+										</TableHead>
+										<TableHead>Value</TableHead>
+										<TableHead className="w-12 text-right sm:w-14"> </TableHead>
+									</TableRow>
+								</TableHeader>
+								<TableBody>
+									{instructions.data.records.map((r) => (
+										<TableRow key={`${r.type}-${r.name}-${r.value}`}>
+											<TableCell className="align-top font-medium">
+												{r.type}
+											</TableCell>
+											<TableCell className="align-top">{r.name}</TableCell>
+											<TableCell className="break-all align-top font-mono text-xs">
+												{r.value}
+											</TableCell>
+											<TableCell className="align-top text-right">
+												<Button
+													type="button"
+													variant="ghost"
+													size="icon"
+													className="shrink-0 transition-colors"
+													onClick={() => copyToClipboard(r.value)}
+													aria-label="Copy DNS value"
+												>
+													<Copy className="size-4" aria-hidden />
+												</Button>
+											</TableCell>
+										</TableRow>
+									))}
+								</TableBody>
+							</Table>
+						</div>
+					</div>
 				) : (
 					<p className="text-xs text-muted-foreground">
 						No DNS instructions available for this domain yet.

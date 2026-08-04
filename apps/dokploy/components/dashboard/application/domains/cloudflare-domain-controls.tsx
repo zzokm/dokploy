@@ -71,16 +71,16 @@ export const CloudflareDomainControls = ({
 				open={syncDialogOpen}
 				onOpenChange={setSyncDialogOpen}
 			/>
-			<div className="flex flex-col sm:flex-row sm:items-start gap-3 rounded-lg border p-3 transition-colors bg-muted/50 w-full">
-				<div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/5">
-					<Cloud className="size-4 text-primary/70" aria-hidden />
+			<div className="flex w-full animate-in fade-in-0 slide-in-from-bottom-1 flex-col gap-3 rounded-lg border border-border bg-muted/40 p-3.5 duration-300 sm:flex-row sm:items-start">
+				<div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-background">
+					<Cloud className="size-4 text-muted-foreground" aria-hidden />
 				</div>
 				<div className="min-w-0 flex-1 space-y-3">
 					<div className="space-y-1">
 						<p className="text-sm font-medium leading-none">Cloudflare DNS</p>
-						<p className="text-xs text-muted-foreground">
-							Sync A records to this node and control orange-cloud proxying when your account is
-							connected.
+						<p className="text-xs leading-relaxed text-muted-foreground">
+							Sync A records to this node and control orange-cloud proxying when
+							your account is connected.
 						</p>
 					</div>
 
@@ -92,7 +92,7 @@ export const CloudflareDomainControls = ({
 							type="button"
 							variant="outline"
 							size="sm"
-							className="w-full shrink-0 sm:w-auto"
+							className="w-full shrink-0 transition-colors sm:w-auto"
 							disabled={!isCloudflare}
 							onClick={() => setSyncDialogOpen(true)}
 						>
@@ -105,11 +105,12 @@ export const CloudflareDomainControls = ({
 							Connect Cloudflare on the Domains page to automate records.
 						</p>
 					) : (
-						<div className="flex flex-col gap-3 rounded-md border bg-background/80 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+						<div className="flex flex-col gap-3 rounded-md border border-border bg-background px-3 py-3 transition-colors sm:flex-row sm:items-center sm:justify-between">
 							<div className="min-w-0 space-y-0.5">
 								<p className="text-sm font-medium">Proxy (orange cloud)</p>
 								<p className="text-xs text-muted-foreground">
-									Recommended for HTTPS at the edge. Saves DNS and certificate settings.
+									Recommended for HTTPS at the edge. Saves DNS and certificate
+									settings.
 								</p>
 							</div>
 							<div className="flex items-center justify-between gap-3 sm:min-w-[9rem] sm:justify-end">

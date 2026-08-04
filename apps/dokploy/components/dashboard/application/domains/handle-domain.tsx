@@ -454,13 +454,18 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 			<DialogTrigger className="" asChild>
 				{children}
 			</DialogTrigger>
-			<DialogContent className="sm:max-w-2xl">
+			<DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2 text-xl">
-						<Globe className="size-5 text-muted-foreground shrink-0" aria-hidden />
+						<Globe
+							className="size-5 shrink-0 text-muted-foreground"
+							aria-hidden
+						/>
 						Domain
 					</DialogTitle>
-					<DialogDescription>{dictionary.dialogDescription}</DialogDescription>
+					<DialogDescription className="leading-relaxed">
+						{dictionary.dialogDescription}
+					</DialogDescription>
 				</DialogHeader>
 				{isError && <AlertBlock type="error">{error?.message}</AlertBlock>}
 
@@ -472,8 +477,13 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 				)}
 
 				{!domainId && (
-					<div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3 mb-2">
-						<div className="text-sm font-medium">Hostname</div>
+					<div className="mb-2 animate-in fade-in-0 slide-in-from-bottom-1 space-y-3 rounded-xl border border-border bg-muted/40 p-4 duration-300">
+						<div className="space-y-1">
+							<div className="text-sm font-medium">Hostname</div>
+							<p className="text-xs text-muted-foreground">
+								Choose how this domain is created.
+							</p>
+						</div>
 						<Select
 							value={hostInputMode}
 							onValueChange={(v) => {
@@ -488,13 +498,15 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value="manual">Custom hostname (full domain)</SelectItem>
+								<SelectItem value="manual">
+									Custom hostname (full domain)
+								</SelectItem>
 								<SelectItem value="cloudflare">
 									Cloudflare zone (managed DNS and SSL)
 								</SelectItem>
 							</SelectContent>
 						</Select>
-						<p className="text-xs text-muted-foreground">
+						<p className="text-xs leading-relaxed text-muted-foreground">
 							{hostInputMode === "cloudflare"
 								? "Pick a synced zone and a label (e.g. app → app.example.com). DNS and certificates are handled for you."
 								: "Enter any hostname. You can use Cloudflare or another DNS provider yourself."}
@@ -670,19 +682,25 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 									)}
 								</div>
 								{!domainId && hostInputMode === "cloudflare" ? (
-									<div className="space-y-3">
+									<div className="animate-in fade-in-0 slide-in-from-bottom-1 space-y-4 duration-300">
 										{!cfSettings?.connected ? (
 											<AlertBlock type="warning">
 												Connect your Cloudflare API token on the{" "}
-												<Link href="/dashboard/domains" className="text-primary underline">
+												<Link
+													href="/dashboard/domains"
+													className="text-primary underline"
+												>
 													Domains
 												</Link>{" "}
 												page, then sync zones.
 											</AlertBlock>
 										) : null}
 										<div className="space-y-2">
-											<div className="text-sm font-medium flex items-center gap-2">
-												<Cloud className="size-4 text-muted-foreground" aria-hidden />
+											<div className="flex items-center gap-2 text-sm font-medium">
+												<Cloud
+													className="size-4 text-muted-foreground"
+													aria-hidden
+												/>
 												Cloudflare zone
 											</div>
 											<Select
@@ -703,13 +721,13 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 											</Select>
 											{!enabledCfZones.length && cfSettings?.connected ? (
 												<p className="text-xs text-muted-foreground">
-													No zones yet. Open Domains and click Sync now.
+													No zones yet. Open Domains and click Sync zones.
 												</p>
 											) : null}
 										</div>
 										<div className="space-y-2">
-											<div className="text-sm font-medium">Hostname</div>
-											<div className="flex flex-col sm:flex-row sm:items-center gap-2">
+											<div className="text-sm font-medium">Hostname label</div>
+											<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
 												<Input
 													placeholder="app or www"
 													value={subdomainLabel}
@@ -718,21 +736,24 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 													disabled={!selectedCfZoneId}
 													className="sm:max-w-[240px]"
 												/>
-												<span className="text-sm text-muted-foreground font-mono sm:pt-0">
-													{selectedZone ? `.${selectedZone.name}` : ".your-zone.com"}
+												<span className="font-mono text-sm text-muted-foreground sm:pt-0">
+													{selectedZone
+														? `.${selectedZone.name}`
+														: ".your-zone.com"}
 												</span>
 											</div>
-											<p className="text-xs text-muted-foreground">
-												Leave empty for the zone apex ({selectedZone?.name ?? "example.com"}).
-												Traefik routes by Host header; your container port is set below.
+											<p className="text-xs leading-relaxed text-muted-foreground">
+												Leave empty for the zone apex (
+												{selectedZone?.name ?? "example.com"}). Traefik routes
+												by Host header; your container port is set below.
 											</p>
 										</div>
-										<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 border border-border rounded-xl bg-background/80">
-											<div className="space-y-0.5 min-w-0">
+										<div className="flex flex-col gap-4 rounded-xl border border-border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
+											<div className="min-w-0 space-y-0.5">
 												<FormLabel>Cloudflare proxy (orange cloud)</FormLabel>
 												<FormDescription>
-													Recommended. Traffic hits your server on 80/443; Traefik forwards to
-													the container port you configure.
+													Recommended. Traffic hits your server on 80/443;
+													Traefik forwards to the container port you configure.
 												</FormDescription>
 											</div>
 											<Switch
@@ -755,7 +776,7 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 											)}
 										/>
 										{selectedZone ? (
-											<div className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm font-mono break-all">
+											<div className="break-all rounded-lg border border-border bg-muted/40 px-3 py-2.5 font-mono text-sm transition-colors">
 												{host}
 											</div>
 										) : null}
@@ -834,13 +855,13 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 								)}
 
 								{showManualCloudflareProxyRow ? (
-									<div className="flex flex-col gap-4 rounded-xl border border-border bg-background/80 p-4 sm:flex-row sm:items-center sm:justify-between">
+									<div className="flex animate-in fade-in-0 slide-in-from-bottom-1 flex-col gap-4 rounded-xl border border-border bg-background p-4 duration-300 sm:flex-row sm:items-center sm:justify-between">
 										<div className="min-w-0 space-y-0.5">
 											<FormLabel>Cloudflare proxy (orange cloud)</FormLabel>
 											<FormDescription>
-												With Cloudflare connected, new domains use managed DNS by default. Traffic
-												hits your server on 80/443; Traefik forwards to the container port you set
-												below.
+												With Cloudflare connected, new domains use managed DNS
+												by default. Traffic hits your server on 80/443; Traefik
+												forwards to the container port you set below.
 											</FormDescription>
 										</div>
 										<Switch
@@ -933,76 +954,81 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 								/>
 
 								{!hideHttpsForCloudflareAutomation ? (
-								<FormField
-									control={form.control}
-									name="useCustomEntrypoint"
-									render={({ field }) => (
-										<FormItem className="flex flex-row items-center justify-between p-3 mt-4 border rounded-lg shadow-xs">
-											<div className="space-y-0.5">
-												<FormLabel>Custom Entrypoint</FormLabel>
-												<FormDescription>
-													Use custom entrypoint for domain
-													<br />
-													"web" and/or "websecure" is used by default.
-												</FormDescription>
-												<FormMessage />
-											</div>
-											<FormControl>
-												<Switch
-													checked={field.value}
-													onCheckedChange={(checked) => {
-														field.onChange(checked);
-														if (!checked) {
-															form.setValue("customEntrypoint", undefined);
-														}
-													}}
-												/>
-											</FormControl>
-										</FormItem>
-									)}
-								/>
+									<>
+										<FormField
+											control={form.control}
+											name="useCustomEntrypoint"
+											render={({ field }) => (
+												<FormItem className="flex flex-row items-center justify-between p-3 mt-4 border rounded-lg shadow-xs">
+													<div className="space-y-0.5">
+														<FormLabel>Custom Entrypoint</FormLabel>
+														<FormDescription>
+															Use custom entrypoint for domain
+															<br />
+															"web" and/or "websecure" is used by default.
+														</FormDescription>
+														<FormMessage />
+													</div>
+													<FormControl>
+														<Switch
+															checked={field.value}
+															onCheckedChange={(checked) => {
+																field.onChange(checked);
+																if (!checked) {
+																	form.setValue(
+																		"customEntrypoint",
+																		undefined,
+																	);
+																}
+															}}
+														/>
+													</FormControl>
+												</FormItem>
+											)}
+										/>
 
-								{useCustomEntrypoint && (
-									<FormField
-										control={form.control}
-										name="customEntrypoint"
-										render={({ field }) => (
-											<FormItem className="w-full">
-												<FormLabel>Entrypoint Name</FormLabel>
-												<FormControl>
-													<Input
-														placeholder="Enter entrypoint name manually"
-														{...field}
-														className="w-full"
-													/>
-												</FormControl>
-												<FormMessage />
-											</FormItem>
+										{useCustomEntrypoint && (
+											<FormField
+												control={form.control}
+												name="customEntrypoint"
+												render={({ field }) => (
+													<FormItem className="w-full">
+														<FormLabel>Entrypoint Name</FormLabel>
+														<FormControl>
+															<Input
+																placeholder="Enter entrypoint name manually"
+																{...field}
+																className="w-full"
+															/>
+														</FormControl>
+														<FormMessage />
+													</FormItem>
+												)}
+											/>
 										)}
-									/>
-								)}
 
-								<FormField
-									control={form.control}
-									name="https"
-									render={({ field }) => (
-										<FormItem className="flex flex-row items-center justify-between p-3 mt-4 border rounded-lg shadow-xs">
-											<div className="space-y-0.5">
-												<FormLabel>HTTPS</FormLabel>
-												<FormDescription>
-													Automatically provision SSL Certificate.
-												</FormDescription>
-												<FormMessage />
-											</div>
-											<FormControl>
-												<Switch
-													checked={field.value}
-													onCheckedChange={field.onChange}
-												/>
-											</FormControl>
-										</FormItem>
-									)}
-								/>
+										<FormField
+											control={form.control}
+											name="https"
+											render={({ field }) => (
+												<FormItem className="flex flex-row items-center justify-between p-3 mt-4 border rounded-lg shadow-xs">
+													<div className="space-y-0.5">
+														<FormLabel>HTTPS</FormLabel>
+														<FormDescription>
+															Automatically provision SSL Certificate.
+														</FormDescription>
+														<FormMessage />
+													</div>
+													<FormControl>
+														<Switch
+															checked={field.value}
+															onCheckedChange={field.onChange}
+														/>
+													</FormControl>
+												</FormItem>
+											)}
+										/>
+									</>
 								) : null}
 
 								{https && !hideHttpsForCloudflareAutomation && (

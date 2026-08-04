@@ -100,7 +100,9 @@ export const CloudflareDnsPreviewDialog = ({
 				)
 			}
 			if (errCount) {
-				toast.error(`${errCount} domain(s) could not be updated — see details in the table.`)
+				toast.error(
+					`${errCount} domain(s) could not be updated — see details in the table.`,
+				)
 			}
 			await utils.cloudflareSettings.previewAppDns.invalidate()
 			await utils.cloudflareSettings.previewAppDnsForDomain.invalidate()
@@ -149,7 +151,9 @@ export const CloudflareDnsPreviewDialog = ({
 			apply: applyIds[r.domainId] ?? false,
 		}))
 		if (!selections.some((s) => s.apply)) {
-			toast.message("Select at least one domain to update, or close this dialog.")
+			toast.message(
+				"Select at least one domain to update, or close this dialog.",
+			)
 			return
 		}
 		apply.mutate({ selections })
@@ -157,132 +161,150 @@ export const CloudflareDnsPreviewDialog = ({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+			<DialogContent className="max-h-[90vh] w-full overflow-y-auto sm:max-w-3xl">
 				<DialogHeader>
 					<DialogTitle>Review Cloudflare DNS targets</DialogTitle>
 					<DialogDescription>
-						Compare existing A records with this Dokploy server&apos;s IP. When you move
-						or restore a panel, DNS may still point at another machine. Select which
-						hostnames to update; the A record for each app domain is required for traffic
-						to reach this node unless you keep another server as the target.
+						Compare existing A records with this Dokploy server&apos;s IP.
+						Select which hostnames to update so traffic reaches this node.
 					</DialogDescription>
 				</DialogHeader>
 
 				{isLoading ? (
-					<div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
+					<div className="flex min-h-[10rem] items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
 						<Loader2 className="size-5 animate-spin" aria-hidden />
 						<span>Checking Cloudflare records…</span>
 					</div>
 				) : !rows?.length ? (
-					<p className="text-sm text-muted-foreground py-4">
-						No Cloudflare-managed application domains in this organization yet.
-					</p>
+					<div className="flex min-h-[8rem] flex-col items-center justify-center gap-2 py-6 text-center">
+						<p className="text-sm text-muted-foreground">
+							No Cloudflare-managed application domains in this organization
+							yet.
+						</p>
+					</div>
 				) : (
-					<div className="space-y-4">
+					<div className="animate-in fade-in-0 slide-in-from-bottom-2 space-y-4 duration-300">
 						{okCount > 0 ? (
 							<p className="text-sm text-muted-foreground">
-								<span className="font-medium text-foreground">{okCount}</span> hostname
-								{okCount === 1 ? "" : "s"} already match this server&apos;s target.
+								<span className="font-medium text-foreground">{okCount}</span>{" "}
+								hostname{okCount === 1 ? "" : "s"} already match this
+								server&apos;s target.
 							</p>
 						) : null}
 
 						{actionable.length > 0 ? (
-							<div className="rounded-lg border overflow-hidden">
-								<Table>
-									<TableHeader>
-										<TableRow>
-											<TableHead className="w-[52px]"> </TableHead>
-											<TableHead>Hostname</TableHead>
-											<TableHead>A record target</TableHead>
-											<TableHead>Proxy</TableHead>
-											<TableHead>Status</TableHead>
-										</TableRow>
-									</TableHeader>
-									<TableBody>
-										{actionable.map((r) => {
-											const canToggle =
-												r.state === "drift" ||
-												r.state === "missing" ||
-												(r.state === "error" && r.wouldChange)
-											const desired = r.desiredIp ?? "—"
-											const current = r.currentIp ?? "—"
-											const showArrow =
-												r.state === "drift" ||
-												r.state === "missing" ||
-												(r.currentIp && r.desiredIp && r.currentIp !== r.desiredIp)
+							<div className="overflow-hidden rounded-lg border">
+								<div className="overflow-x-auto">
+									<Table>
+										<TableHeader>
+											<TableRow>
+												<TableHead className="w-[52px]"> </TableHead>
+												<TableHead>Hostname</TableHead>
+												<TableHead>A record target</TableHead>
+												<TableHead className="hidden sm:table-cell">
+													Proxy
+												</TableHead>
+												<TableHead>Status</TableHead>
+											</TableRow>
+										</TableHeader>
+										<TableBody>
+											{actionable.map((r, index) => {
+												const canToggle =
+													r.state === "drift" ||
+													r.state === "missing" ||
+													(r.state === "error" && r.wouldChange)
+												const desired = r.desiredIp ?? "—"
+												const current = r.currentIp ?? "—"
+												const showArrow =
+													r.state === "drift" ||
+													r.state === "missing" ||
+													(r.currentIp &&
+														r.desiredIp &&
+														r.currentIp !== r.desiredIp)
 
-											return (
-												<TableRow key={r.domainId}>
-													<TableCell>
-														{canToggle ? (
-															<Checkbox
-																checked={applyIds[r.domainId] ?? false}
-																onCheckedChange={(c) =>
-																	handleToggle(r.domainId, c === true)
-																}
-																aria-label={`Apply DNS update for ${r.host}`}
-															/>
-														) : (
-															<span className="text-muted-foreground">—</span>
-														)}
-													</TableCell>
-													<TableCell className="font-medium break-all">
-														{r.host}
-														{r.zoneName ? (
-															<div className="text-xs text-muted-foreground font-normal">
-																Zone: {r.zoneName}
-															</div>
-														) : null}
-													</TableCell>
-													<TableCell className="font-mono text-xs">
-														<div className="flex flex-wrap items-center gap-1.5">
-															<span className={r.currentIp ? "" : "text-muted-foreground"}>
-																{current}
-															</span>
-															{showArrow && r.desiredIp ? (
-																<>
-																	<ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
-																	<span>{desired}</span>
-																</>
-															) : r.state === "missing" && r.desiredIp ? (
-																<>
-																	<ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
-																	<span>{desired}</span>
-																</>
+												return (
+													<TableRow
+														key={r.domainId}
+														className="animate-in fade-in-0 duration-300 fill-mode-both"
+														style={{
+															animationDelay: `${Math.min(index, 10) * 30}ms`,
+														}}
+													>
+														<TableCell>
+															{canToggle ? (
+																<Checkbox
+																	checked={applyIds[r.domainId] ?? false}
+																	onCheckedChange={(c) =>
+																		handleToggle(r.domainId, c === true)
+																	}
+																	aria-label={`Apply DNS update for ${r.host}`}
+																/>
+															) : (
+																<span className="text-muted-foreground">—</span>
+															)}
+														</TableCell>
+														<TableCell className="break-all font-medium">
+															{r.host}
+															{r.zoneName ? (
+																<div className="text-xs font-normal text-muted-foreground">
+																	Zone: {r.zoneName}
+																</div>
 															) : null}
-														</div>
-														{r.errorMessage ? (
-															<p className="text-destructive text-[11px] mt-1 font-sans">
-																{r.errorMessage}
-															</p>
-														) : null}
-													</TableCell>
-													<TableCell className="text-xs">
-														{r.currentProxied === null ? (
-															<span className="text-muted-foreground">—</span>
-														) : (
-															<span>
-																{r.currentProxied ? "On" : "Off"}
-																{r.currentProxied !== r.desiredProxied ? (
+														</TableCell>
+														<TableCell className="font-mono text-xs">
+															<div className="flex flex-wrap items-center gap-1.5">
+																<span
+																	className={
+																		r.currentIp ? "" : "text-muted-foreground"
+																	}
+																>
+																	{current}
+																</span>
+																{showArrow && r.desiredIp ? (
 																	<>
-																		{" "}
-																		<ArrowRight className="inline size-3 align-middle" />
-																		{r.desiredProxied ? " On" : " Off"}
+																		<ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
+																		<span>{desired}</span>
+																	</>
+																) : r.state === "missing" && r.desiredIp ? (
+																	<>
+																		<ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
+																		<span>{desired}</span>
 																	</>
 																) : null}
-															</span>
-														)}
-													</TableCell>
-													<TableCell>
-														<Badge variant={stateBadgeVariant(r.state)}>
-															{stateLabel(r.state)}
-														</Badge>
-													</TableCell>
-												</TableRow>
-											)
-										})}
-									</TableBody>
-								</Table>
+															</div>
+															{r.errorMessage ? (
+																<p className="mt-1 font-sans text-[11px] text-destructive">
+																	{r.errorMessage}
+																</p>
+															) : null}
+														</TableCell>
+														<TableCell className="hidden text-xs sm:table-cell">
+															{r.currentProxied === null ? (
+																<span className="text-muted-foreground">—</span>
+															) : (
+																<span>
+																	{r.currentProxied ? "On" : "Off"}
+																	{r.currentProxied !== r.desiredProxied ? (
+																		<>
+																			{" "}
+																			<ArrowRight className="inline size-3 align-middle" />
+																			{r.desiredProxied ? " On" : " Off"}
+																		</>
+																	) : null}
+																</span>
+															)}
+														</TableCell>
+														<TableCell>
+															<Badge variant={stateBadgeVariant(r.state)}>
+																{stateLabel(r.state)}
+															</Badge>
+														</TableCell>
+													</TableRow>
+												)
+											})}
+										</TableBody>
+									</Table>
+								</div>
 							</div>
 						) : (
 							<p className="text-sm text-muted-foreground">
@@ -290,20 +312,25 @@ export const CloudflareDnsPreviewDialog = ({
 							</p>
 						)}
 
-						<div className="rounded-md border bg-muted/40 p-3 space-y-2 text-xs text-muted-foreground">
-							<Label className="text-foreground text-xs">Required for routing</Label>
-							<p>
-								The A record for each hostname must target this Dokploy server for HTTP(S)
-								to arrive here. If you skip an update, traffic may keep going to the old
-								IP until you change DNS manually or remove the domain from Cloudflare
-								automation in the app.
+						<div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+							<Label className="text-xs text-foreground">
+								Required for routing
+							</Label>
+							<p className="leading-relaxed">
+								The A record for each hostname must target this Dokploy server
+								for HTTP(S) to arrive here. Skipped updates keep traffic on the
+								old IP until DNS is changed manually.
 							</p>
 						</div>
 					</div>
 				)}
 
 				<DialogFooter className="gap-2 sm:gap-0">
-					<Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+					<Button
+						type="button"
+						variant="outline"
+						onClick={() => onOpenChange(false)}
+					>
 						Close
 					</Button>
 					<Button

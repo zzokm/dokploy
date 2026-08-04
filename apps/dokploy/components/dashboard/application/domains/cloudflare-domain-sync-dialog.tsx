@@ -5,7 +5,6 @@ import { useEffect, useRef } from "react"
 import { toast } from "sonner"
 import {
 	AlertDialog,
-	AlertDialogCancel,
 	AlertDialogContent,
 	AlertDialogDescription,
 	AlertDialogFooter,
@@ -27,10 +26,11 @@ export const CloudflareDomainSyncDialog = ({
 	onOpenChange,
 }: CloudflareDomainSyncDialogProps) => {
 	const utils = api.useUtils()
-	const { data: preview, isFetching } = api.cloudflareSettings.previewAppDnsForDomain.useQuery(
-		{ domainId },
-		{ enabled: open && !!domainId },
-	)
+	const { data: preview, isFetching } =
+		api.cloudflareSettings.previewAppDnsForDomain.useQuery(
+			{ domainId },
+			{ enabled: open && !!domainId },
+		)
 
 	const didAutoApply = useRef(false)
 
@@ -41,7 +41,9 @@ export const CloudflareDomainSyncDialog = ({
 			await utils.domain.byApplicationId.invalidate()
 			await utils.domain.byComposeId.invalidate()
 			await utils.cloudflareSettings.previewAppDns.invalidate()
-			await utils.cloudflareSettings.previewAppDnsForDomain.invalidate({ domainId })
+			await utils.cloudflareSettings.previewAppDnsForDomain.invalidate({
+				domainId,
+			})
 			onOpenChange(false)
 		},
 		onError: (e) => toast.error(e.message),
@@ -79,46 +81,65 @@ export const CloudflareDomainSyncDialog = ({
 					<AlertDialogDescription asChild>
 						<div className="space-y-3 text-left text-sm text-muted-foreground">
 							{isFetching || apply.isPending ? (
-								<div className="flex items-center gap-2 py-4">
+								<div className="flex min-h-[5rem] items-center justify-center gap-2 py-4">
 									<Loader2 className="size-4 animate-spin" aria-hidden />
-									<span>{apply.isPending ? "Updating Cloudflare…" : "Checking Cloudflare…"}</span>
+									<span>
+										{apply.isPending
+											? "Updating Cloudflare…"
+											: "Checking Cloudflare…"}
+									</span>
 								</div>
 							) : preview ? (
-								<>
+								<div className="animate-in fade-in-0 slide-in-from-bottom-1 space-y-3 duration-300">
 									{preview.state === "ok" ? (
 										<p>
-											The A record for <span className="font-mono text-foreground">{preview.host}</span>{" "}
+											The A record for{" "}
+											<span className="font-mono text-foreground">
+												{preview.host}
+											</span>{" "}
 											already points at this Dokploy server ({desired}).
 										</p>
 									) : preview.state === "no_zone" ? (
 										<p>
-											No synced Cloudflare zone matches <span className="font-mono text-foreground">{preview.host}</span>.
-											Open Domains and run <span className="font-medium text-foreground">Sync zones</span>, or
-											check that the hostname sits under a zone in this account.
+											No synced Cloudflare zone matches{" "}
+											<span className="font-mono text-foreground">
+												{preview.host}
+											</span>
+											. Open Domains and run{" "}
+											<span className="font-medium text-foreground">
+												Sync zones
+											</span>
+											, or check that the hostname sits under a zone in this
+											account.
 										</p>
 									) : preview.state === "no_target" ? (
 										<p>
-											This Dokploy install has no public IP for this app (no server IP and no panel
-											fallback). Assign a server or set the panel IP before syncing DNS.
+											This Dokploy install has no public IP for this app (no
+											server IP and no panel fallback). Assign a server or set
+											the panel IP before syncing DNS.
 										</p>
 									) : (
 										<>
 											<p>
 												Cloudflare will update the A record for{" "}
-												<span className="font-mono text-foreground">{preview.host}</span> so traffic
-												reaches this node.
+												<span className="font-mono text-foreground">
+													{preview.host}
+												</span>{" "}
+												so traffic reaches this node.
 											</p>
-											<div className="flex flex-wrap items-center gap-2 font-mono text-xs text-foreground bg-muted/50 rounded-md px-3 py-2">
+											<div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2.5 font-mono text-xs text-foreground">
 												<span>{current}</span>
 												<ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
 												<span>{desired}</span>
 											</div>
 											{preview.errorMessage ? (
-												<p className="text-destructive text-xs">{preview.errorMessage}</p>
+												<p className="text-xs text-destructive">
+													{preview.errorMessage}
+												</p>
 											) : null}
 										</>
 									)}
-								</>
+								</div>
 							) : (
 								<p>Could not load preview.</p>
 							)}

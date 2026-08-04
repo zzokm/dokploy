@@ -228,17 +228,21 @@ export const ShowDomains = ({ id, type }: Props) => {
 	});
 
 	return (
-		<div className="flex w-full flex-col gap-5 ">
-			<Card className="bg-background">
-				<CardHeader className="flex flex-row items-center flex-wrap gap-4 justify-between">
-					<div className="flex flex-col gap-1">
-						<CardTitle className="text-xl">Domains</CardTitle>
+		<div className="flex w-full animate-in fade-in-0 slide-in-from-bottom-2 flex-col gap-5 duration-300">
+			<Card className="w-full bg-background">
+				<CardHeader className="flex flex-row flex-wrap items-center justify-between gap-4">
+					<div className="flex min-w-0 flex-col gap-1">
+						<CardTitle className="flex items-center gap-2 text-xl">
+							<GlobeIcon className="size-5 text-muted-foreground" aria-hidden />
+							Domains
+						</CardTitle>
 						<CardDescription>
-							Domains are used to access to the application
+							Hostnames used to reach this application, with optional Cloudflare
+							DNS automation.
 						</CardDescription>
 					</div>
 
-					<div className="flex flex-row gap-2 flex-wrap">
+					<div className="flex flex-row flex-wrap gap-2">
 						{data && data?.length > 0 && (
 							<>
 								<Button
@@ -267,23 +271,27 @@ export const ShowDomains = ({ id, type }: Props) => {
 						)}
 					</div>
 				</CardHeader>
-				<CardContent className="flex w-full flex-row gap-4">
+				<CardContent className="flex w-full flex-col gap-4">
 					{isLoadingDomains ? (
-						<div className="flex w-full flex-row gap-4 min-h-[40vh] justify-center items-center">
+						<div className="flex min-h-[40vh] w-full flex-row items-center justify-center gap-3">
 							<Loader2 className="size-5 animate-spin text-muted-foreground" />
 							<span className="text-base text-muted-foreground">
-								Loading domains...
+								Loading domains…
 							</span>
 						</div>
 					) : data?.length === 0 ? (
-						<div className="flex w-full flex-col items-center justify-center gap-3 min-h-[40vh]">
-							<GlobeIcon className="size-8 text-muted-foreground" />
-							<span className="text-base text-muted-foreground">
-								To access the application it is required to set at least 1
-								domain
+						<div className="flex min-h-[40vh] w-full flex-col items-center justify-center gap-3">
+							<div className="flex size-12 items-center justify-center rounded-xl border border-border bg-muted/40">
+								<GlobeIcon
+									className="size-6 text-muted-foreground"
+									aria-hidden
+								/>
+							</div>
+							<span className="max-w-sm text-center text-base text-muted-foreground">
+								Add at least one domain so traffic can reach this application.
 							</span>
 							{canCreateDomain && (
-								<div className="flex flex-row gap-4 flex-wrap">
+								<div className="flex flex-row flex-wrap gap-4">
 									<AddDomain id={id} type={type}>
 										<Button>
 											<GlobeIcon className="size-4" /> Add Domain
@@ -335,7 +343,7 @@ export const ShowDomains = ({ id, type }: Props) => {
 									</DropdownMenuContent>
 								</DropdownMenu>
 							</div>
-							<div className="rounded-md border">
+							<div className="w-full overflow-x-auto rounded-md border">
 								<Table>
 									<TableHeader>
 										{table.getHeaderGroups().map((headerGroup) => (
@@ -409,13 +417,16 @@ export const ShowDomains = ({ id, type }: Props) => {
 							)}
 						</div>
 					) : (
-						<div className="grid grid-cols-1 gap-4 xl:grid-cols-2 w-full min-h-[40vh] ">
-							{data?.map((item) => {
+						<div className="grid min-h-[40vh] w-full grid-cols-1 gap-4 xl:grid-cols-2">
+							{data?.map((item, index) => {
 								const validationState = validationStates[item.host];
 								return (
 									<Card
 										key={item.domainId}
-										className="relative overflow-hidden w-full border transition-all hover:shadow-md bg-transparent h-fit"
+										className="relative h-fit w-full animate-in fade-in-0 slide-in-from-bottom-2 overflow-hidden border bg-transparent transition-all duration-300 fill-mode-both hover:shadow-md"
+										style={{
+											animationDelay: `${Math.min(index, 8) * 40}ms`,
+										}}
 									>
 										<CardContent className="p-6">
 											<div className="flex flex-col gap-4">

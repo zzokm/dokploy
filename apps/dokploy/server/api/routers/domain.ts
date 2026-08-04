@@ -12,6 +12,7 @@ import {
 	getDomainConnectionStatus,
 	getUnderlyingErrorMessage,
 	getWebServerSettings,
+	listDomainsInventory,
 	manageDomain,
 	prepareEnvironmentVariables,
 	readEnvironmentVariables,
@@ -140,6 +141,9 @@ export const domainRouter = createTRPCRouter({
 			});
 			return await findDomainsByComposeId(input.composeId);
 		}),
+	listInventory: withPermission("domain", "read").query(async ({ ctx }) => {
+		return await listDomainsInventory(ctx.session.activeOrganizationId);
+	}),
 	generateDomain: withPermission("domain", "create")
 		.input(z.object({ appName: z.string(), serverId: z.string().optional() }))
 		.mutation(async ({ input, ctx }) => {

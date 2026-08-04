@@ -80,11 +80,7 @@ export const ensureCloudflareAppDnsForDomain = async (input: {
 		return { skipped: true as const, reason: "no_zone_match" as const }
 	}
 
-	const proxied =
-		domain.cfProxied ??
-		domain.cloudflareProxied ??
-		input.proxiedDefault ??
-		true
+	const proxied = domain.cfProxied ?? input.proxiedDefault ?? true
 
 	const res = await upsertAppDnsRecord({
 		token,
@@ -92,6 +88,7 @@ export const ensureCloudflareAppDnsForDomain = async (input: {
 		zoneId: zone.cfZoneId,
 		proxied,
 		recordType: "A",
+		recordId: domain.cfDnsRecordId,
 	})
 
 	const now = new Date()

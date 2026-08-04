@@ -3,18 +3,15 @@ import { db } from "@dokploy/server/db"
 import { domains } from "@dokploy/server/db/schema"
 import { resolveDomainTargetById } from "../domain-target"
 import { cloudflareFetch } from "./client"
+import {
+	type CloudflareDnsRecord,
+	type CloudflareDnsRecordType,
+	normalizeDnsName,
+	pickCloudflareDnsRecord,
+} from "./dns-record-utils"
 
-export type CloudflareDnsRecordType = "A" | "AAAA" | "CNAME" | "TXT" | "MX"
-
-export type CloudflareDnsRecord = {
-	id: string
-	type: CloudflareDnsRecordType
-	name: string
-	content: string
-	ttl: number
-	proxied?: boolean
-	priority?: number
-}
+export type { CloudflareDnsRecord, CloudflareDnsRecordType }
+export { normalizeDnsName, pickCloudflareDnsRecord }
 
 export const listCloudflareDnsRecordsByName = async (input: {
 	token: string
@@ -27,7 +24,7 @@ export const listCloudflareDnsRecordsByName = async (input: {
 		method: "GET",
 		path: `/zones/${input.zoneId}/dns_records`,
 		query: {
-			name: input.name,
+			name: normalizeDnsName(input.name),
 			...(input.type ? { type: input.type } : {}),
 		},
 	})
@@ -49,7 +46,7 @@ export const createCloudflareDnsRecord = async (input: {
 		path: `/zones/${input.zoneId}/dns_records`,
 		body: {
 			type: input.type,
-			name: input.name,
+			name: normalizeDnsName(input.name),
 			content: input.content,
 			ttl: input.ttl,
 			...(input.priority !== undefined ? { priority: input.priority } : {}),
@@ -75,7 +72,7 @@ export const updateCloudflareDnsRecord = async (input: {
 		path: `/zones/${input.zoneId}/dns_records/${input.recordId}`,
 		body: {
 			type: input.type,
-			name: input.name,
+			name: normalizeDnsName(input.name),
 			content: input.content,
 			ttl: input.ttl,
 			...(input.priority !== undefined ? { priority: input.priority } : {}),
@@ -105,6 +102,8 @@ export const upsertCloudflareDnsRecord = async (input: {
 	ttl: 1 | number
 	proxied?: boolean
 	priority?: number
+	/** Prefer updating this existing Cloudflare DNS record id when present. */
+	recordId?: string | null
 }) => {
 	const existing = await listCloudflareDnsRecordsByName({
 		token: input.token,
@@ -113,12 +112,18 @@ export const upsertCloudflareDnsRecord = async (input: {
 		type: input.type,
 	})
 
-	const first = existing[0] ?? null
+	const first = pickCloudflareDnsRecord(existing, {
+		recordId: input.recordId,
+		name: input.name,
+		type: input.type,
+	})
+
 	if (!first) {
 		return await createCloudflareDnsRecord(input)
 	}
 
 	const needsUpdate =
+		normalizeDnsName(first.name) !== normalizeDnsName(input.name) ||
 		first.content !== input.content ||
 		first.ttl !== input.ttl ||
 		(input.priority !== undefined &&
@@ -141,6 +146,7 @@ export const upsertAppDnsRecord = async (input: {
 	zoneId: string
 	proxied: boolean
 	recordType?: "A" | "AAAA" | "CNAME"
+	recordId?: string | null
 }) => {
 	const target = await resolveDomainTargetById(input.domainId)
 	if (!target.expectedA) {
@@ -160,6 +166,7 @@ export const upsertAppDnsRecord = async (input: {
 		content: target.expectedA,
 		ttl: 1,
 		proxied: input.proxied,
+		recordId: input.recordId,
 	})
 
 	return {
@@ -180,9 +187,9 @@ export const getDomainCloudflareConfig = async (domainId: string) => {
 	}
 	return {
 		dnsProvider: row.dnsProvider,
-		cloudflareZoneId: row.cloudflareZoneId,
-		cloudflareRecordId: row.cloudflareRecordId,
-		cloudflareProxied: row.cloudflareProxied,
+		cfZoneId: row.cfZoneId,
+		cfDnsRecordId: row.cfDnsRecordId,
+		cfProxied: row.cfProxied,
+		cfStatus: row.cfStatus,
 	}
 }
-

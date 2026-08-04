@@ -84,7 +84,6 @@ const previewSingleDomain = async (input: {
 			host: domains.host,
 			cfDnsRecordId: domains.cfDnsRecordId,
 			cfProxied: domains.cfProxied,
-			cloudflareProxied: domains.cloudflareProxied,
 		})
 		.from(domains)
 		.where(eq(domains.domainId, input.domainId))
@@ -96,7 +95,7 @@ const previewSingleDomain = async (input: {
 
 	const target = await resolveDomainTargetById(input.domainId)
 	const desiredIp = target.expectedA
-	const desiredProxied = row.cfProxied ?? row.cloudflareProxied ?? true
+	const desiredProxied = row.cfProxied ?? true
 
 	const zone = await findBestZoneMatch(input.organizationId, row.host)
 	if (!zone) {

@@ -3,12 +3,13 @@ import {
 	VALID_HOSTNAME_REGEX,
 } from "@dokploy/server/utils/hostname-validation";
 import { standardSchemaResolver as zodResolver } from "@hookform/resolvers/standard-schema";
-import { Cloud, DatabaseZap, Dices, Globe, RefreshCw, X } from "lucide-react";
+import { DatabaseZap, Dices, Globe, RefreshCw, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import z from "zod";
+import { CloudflareHostnameLabelField } from "@/components/dashboard/domains/cloudflare-hostname-label-field";
 import { AlertBlock } from "@/components/shared/alert-block";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,7 @@ import {
 	FormItem,
 	FormLabel,
 	FormMessage,
-} from "@/components/ui/form"
+} from "@/components/ui/form";
 import { Input, NumberInput } from "@/components/ui/input";
 import {
 	Select,
@@ -49,20 +50,22 @@ import { api } from "@/utils/api";
 
 export type CacheType = "fetch" | "cache";
 
-type HostInputMode = "manual" | "cloudflare"
+type HostInputMode = "manual" | "cloudflare";
 
 const buildHostFromCloudflareZone = (zoneName: string, subdomain: string) => {
-	const zone = zoneName.trim().toLowerCase()
-	const raw = subdomain.trim().toLowerCase()
+	const zone = zoneName.trim().toLowerCase();
+	const raw = subdomain.trim().toLowerCase();
 	if (!raw || raw === "@" || raw === zone) {
-		return zone
+		return zone;
 	}
-	const cleaned = raw.replace(/\.$/, "").replace(new RegExp(`\\.${zone.replace(/\./g, "\\.")}$`), "")
+	const cleaned = raw
+		.replace(/\.$/, "")
+		.replace(new RegExp(`\\.${zone.replace(/\./g, "\\.")}$`), "");
 	if (!cleaned) {
-		return zone
+		return zone;
 	}
-	return `${cleaned}.${zone}`
-}
+	return `${cleaned}.${zone}`;
+};
 
 export const domain = z
 	.object({
@@ -172,9 +175,13 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 	const { data: cfSettings } = api.cloudflareSettings.get.useQuery(undefined, {
 		enabled: isOpen,
 	});
-	const { data: cfZones } = api.cloudflareSettings.listZones.useQuery(undefined, {
-		enabled: isOpen && !!cfSettings?.connected && hostInputMode === "cloudflare",
-	});
+	const { data: cfZones } = api.cloudflareSettings.listZones.useQuery(
+		undefined,
+		{
+			enabled:
+				isOpen && !!cfSettings?.connected && hostInputMode === "cloudflare",
+		},
+	);
 	const { data, refetch } = api.domain.one.useQuery(
 		{
 			domainId,
@@ -262,50 +269,44 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 	const hideHttpsForCloudflareAutomation =
 		!domainId &&
 		(hostInputMode === "cloudflare" ||
-			(hostInputMode === "manual" && !!cfSettings?.connected && !isTraefikMeDomain))
-
-	const showManualCloudflareProxyRow =
-		!domainId && hostInputMode === "manual" && !!cfSettings?.connected && !isTraefikMeDomain
+			(hostInputMode === "manual" &&
+				!!cfSettings?.connected &&
+				!isTraefikMeDomain));
 
 	const enabledCfZones =
-		cfZones?.filter((z) => z.status !== "disabled" && !z.paused) ?? []
+		cfZones?.filter((z) => z.status !== "disabled" && !z.paused) ?? [];
 
-	const selectedZone = enabledCfZones.find((z) => z.cfZoneId === selectedCfZoneId)
+	const selectedZone = enabledCfZones.find(
+		(z) => z.cfZoneId === selectedCfZoneId,
+	);
 
 	useEffect(() => {
 		if (!isOpen || domainId) {
-			return
+			return;
 		}
 		if (hostInputMode !== "cloudflare" || !selectedZone) {
-			return
+			return;
 		}
 		form.setValue(
 			"host",
 			buildHostFromCloudflareZone(selectedZone.name, subdomainLabel),
-		)
-	}, [
-		isOpen,
-		domainId,
-		hostInputMode,
-		selectedZone,
-		subdomainLabel,
-		form,
-	])
+		);
+	}, [isOpen, domainId, hostInputMode, selectedZone, subdomainLabel, form]);
 
 	useEffect(() => {
 		if (!isOpen || domainId) {
-			return
+			return;
 		}
-		setHostInputMode("manual")
-		setSelectedCfZoneId("")
-		setSubdomainLabel("")
-		setCfProxiedOnCreate(true)
-	}, [isOpen, domainId])
+		setHostInputMode("manual");
+		setSelectedCfZoneId("");
+		setSubdomainLabel("");
+		setCfProxiedOnCreate(true);
+	}, [isOpen, domainId]);
 
 	useEffect(() => {
 		if (!domainId && hostInputMode === "cloudflare") {
-			form.setValue("https", true)
-			form.setValue("certificateType", "letsencrypt")
+			form.setValue("https", true);
+			form.setValue("certificateType", "letsencrypt");
 		}
 		if (
 			!domainId &&
@@ -313,10 +314,10 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 			cfSettings?.connected &&
 			!isTraefikMeDomain
 		) {
-			form.setValue("https", true)
-			form.setValue("certificateType", "letsencrypt")
+			form.setValue("https", true);
+			form.setValue("certificateType", "letsencrypt");
 		}
-	}, [domainId, hostInputMode, cfSettings?.connected, isTraefikMeDomain, form])
+	}, [domainId, hostInputMode, cfSettings?.connected, isTraefikMeDomain, form]);
 
 	useEffect(() => {
 		if (data) {
@@ -372,30 +373,32 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 	};
 
 	const onSubmit = async (data: Domain) => {
-		let finalHost = data.host
+		let finalHost = data.host;
 		if (!domainId && hostInputMode === "cloudflare") {
 			if (!cfSettings?.connected) {
-				toast.error("Connect Cloudflare under Domains first")
-				return
+				toast.error("Connect Cloudflare under Domains first");
+				return;
 			}
 			if (!selectedZone) {
-				toast.error("Select a Cloudflare zone")
-				return
+				toast.error("Select a Cloudflare zone");
+				return;
 			}
-			const sub = subdomainLabel.trim()
+			const sub = subdomainLabel.trim();
 			if (sub && !/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/i.test(sub)) {
-				toast.error("Use letters, numbers, hyphens, and dots only for the hostname prefix")
-				return
+				toast.error(
+					"Use letters, numbers, hyphens, and dots only for the hostname prefix",
+				);
+				return;
 			}
-			finalHost = buildHostFromCloudflareZone(selectedZone.name, sub)
+			finalHost = buildHostFromCloudflareZone(selectedZone.name, sub);
 		}
 
-		const traefikMeHost = finalHost.includes("traefik.me")
+		const traefikMeHost = finalHost.includes("traefik.me");
 		const wantsCloudflareDns =
 			!domainId &&
 			!traefikMeHost &&
 			(hostInputMode === "cloudflare" ||
-				(hostInputMode === "manual" && !!cfSettings?.connected))
+				(hostInputMode === "manual" && !!cfSettings?.connected));
 
 		await mutateAsync({
 			domainId,
@@ -475,43 +478,30 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 					</AlertBlock>
 				)}
 
-				{!domainId && (
-					<div className="mb-2 animate-in fade-in-0 slide-in-from-bottom-1 space-y-3 rounded-xl border border-border bg-muted/40 p-4 duration-300">
-						<div className="space-y-1">
-							<div className="text-sm font-medium">Hostname</div>
+				{!domainId && cfSettings?.connected ? (
+					<div className="mb-2 flex flex-row items-center justify-between gap-4 rounded-lg border p-3 shadow-xs">
+						<div className="min-w-0 space-y-0.5">
+							<p className="text-sm font-medium leading-none">
+								Cloudflare managed domain
+							</p>
 							<p className="text-xs text-muted-foreground">
-								Choose how this domain is created.
+								Build the hostname from a synced zone.
 							</p>
 						</div>
-						<Select
-							value={hostInputMode}
-							onValueChange={(v) => {
-								const next = v as HostInputMode
-								setHostInputMode(next)
-								if (next === "manual") {
-									form.setValue("host", "")
+						<Switch
+							checked={hostInputMode === "cloudflare"}
+							onCheckedChange={(checked) => {
+								const next: HostInputMode = checked ? "cloudflare" : "manual";
+								setHostInputMode(next);
+								if (!checked) {
+									form.setValue("host", "");
 								}
 							}}
-						>
-							<SelectTrigger aria-label="How to enter hostname">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="manual">
-									Custom hostname (full domain)
-								</SelectItem>
-								<SelectItem value="cloudflare">
-									Cloudflare zone (managed DNS and SSL)
-								</SelectItem>
-							</SelectContent>
-						</Select>
-						<p className="text-xs leading-relaxed text-muted-foreground">
-							{hostInputMode === "cloudflare"
-								? "Pick a synced zone and a label (e.g. app → app.example.com). DNS and certificates are handled for you."
-								: "Enter any hostname. You can use Cloudflare or another DNS provider yourself."}
-						</p>
+							aria-label="Cloudflare managed domain"
+							className="shrink-0"
+						/>
 					</div>
-				)}
+				) : null}
 
 				<Form {...form}>
 					<form
@@ -680,28 +670,12 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 										</div>
 									)}
 								</div>
-								{!domainId && hostInputMode === "cloudflare" ? (
+								{!domainId &&
+								hostInputMode === "cloudflare" &&
+								cfSettings?.connected ? (
 									<div className="animate-in fade-in-0 slide-in-from-bottom-1 space-y-4 duration-300">
-										{!cfSettings?.connected ? (
-											<AlertBlock type="warning">
-												Connect your Cloudflare API token on the{" "}
-												<Link
-													href="/dashboard/domains"
-													className="text-primary underline"
-												>
-													Domains
-												</Link>{" "}
-												page, then sync zones.
-											</AlertBlock>
-										) : null}
 										<div className="space-y-2">
-											<div className="flex items-center gap-2 text-sm font-medium">
-												<Cloud
-													className="size-4 text-muted-foreground"
-													aria-hidden
-												/>
-												Cloudflare zone
-											</div>
+											<p className="text-sm font-medium">Zone</p>
 											<Select
 												value={selectedCfZoneId}
 												onValueChange={setSelectedCfZoneId}
@@ -718,159 +692,121 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 													))}
 												</SelectContent>
 											</Select>
-											{!enabledCfZones.length && cfSettings?.connected ? (
+											{!enabledCfZones.length ? (
 												<p className="text-xs text-muted-foreground">
 													No zones yet. Open Domains and click Sync zones.
 												</p>
 											) : null}
 										</div>
-										<div className="space-y-2">
-											<div className="text-sm font-medium">Hostname label</div>
-											<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-												<Input
-													placeholder="app or www"
-													value={subdomainLabel}
-													onChange={(e) => setSubdomainLabel(e.target.value)}
-													aria-label="Subdomain or hostname prefix"
-													disabled={!selectedCfZoneId}
-													className="sm:max-w-[240px]"
-												/>
-												<span className="font-mono text-sm text-muted-foreground sm:pt-0">
-													{selectedZone
+										<CloudflareHostnameLabelField
+											value={subdomainLabel}
+											onChange={setSubdomainLabel}
+											placeholder="app or www"
+											ariaLabel="Subdomain or hostname prefix"
+											disabled={!selectedCfZoneId}
+											inputClassName="text-sm"
+											suffix={
+												selectedZone
+													? subdomainLabel.trim()
 														? `.${selectedZone.name}`
-														: ".your-zone.com"}
-												</span>
-											</div>
-											<p className="text-xs leading-relaxed text-muted-foreground">
-												Leave empty for the zone apex (
-												{selectedZone?.name ?? "example.com"}). Traefik routes
-												by Host header; your container port is set below.
-											</p>
-										</div>
-										<div className="flex flex-col gap-4 rounded-xl border border-border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
-											<div className="min-w-0 space-y-0.5">
-												<FormLabel>Cloudflare proxy (orange cloud)</FormLabel>
-												<FormDescription>
-													Recommended. Traffic hits your server on 80/443;
-													Traefik forwards to the container port you configure.
-												</FormDescription>
-											</div>
-											<Switch
-												checked={cfProxiedOnCreate}
-												onCheckedChange={setCfProxiedOnCreate}
-												aria-label="Cloudflare proxy enabled"
-												className="shrink-0"
-											/>
-										</div>
+														: selectedZone.name
+													: ".your-zone.com"
+											}
+										/>
 										<FormField
 											control={form.control}
 											name="host"
 											render={({ field }) => (
-												<FormItem className="hidden">
+												<FormItem>
+													<FormLabel>Host</FormLabel>
 													<FormControl>
-														<Input type="hidden" {...field} />
+														<Input
+															className="font-mono"
+															{...field}
+															readOnly
+															disabled
+														/>
 													</FormControl>
+													<FormDescription>
+														Filled from the zone and label above.
+													</FormDescription>
 													<FormMessage />
 												</FormItem>
 											)}
 										/>
-										{selectedZone ? (
-											<div className="break-all rounded-lg border border-border bg-muted/40 px-3 py-2.5 font-mono text-sm transition-colors">
-												{host}
-											</div>
-										) : null}
 									</div>
 								) : (
-								<FormField
-									control={form.control}
-									name="host"
-									render={({ field }) => (
-										<FormItem>
-											{!canGenerateTraefikMeDomains &&
-												field.value.includes("sslip.io") && (
-													<AlertBlock type="warning">
-														You need to set an IP address in your{" "}
-														<Link
-															href="/dashboard/settings/server"
-															className="text-primary"
-														>
-															{application?.serverId
-																? "Remote Servers -> Server -> Edit Server -> Update IP Address"
-																: "Web Server -> Server -> Update Server IP"}
-														</Link>{" "}
-														to make your sslip.io domain work.
+									<FormField
+										control={form.control}
+										name="host"
+										render={({ field }) => (
+											<FormItem>
+												{!canGenerateTraefikMeDomains &&
+													field.value.includes("sslip.io") && (
+														<AlertBlock type="warning">
+															You need to set an IP address in your{" "}
+															<Link
+																href="/dashboard/settings/server"
+																className="text-primary"
+															>
+																{application?.serverId
+																	? "Remote Servers -> Server -> Edit Server -> Update IP Address"
+																	: "Web Server -> Server -> Update Server IP"}
+															</Link>{" "}
+															to make your sslip.io domain work.
+														</AlertBlock>
+													)}
+												{isTraefikMeDomain && (
+													<AlertBlock type="info">
+														<strong>Note:</strong> sslip.io is a public HTTP
+														service and does not support SSL/HTTPS. HTTPS and
+														certificate options will not have any effect.
 													</AlertBlock>
 												)}
-											{isTraefikMeDomain && (
-												<AlertBlock type="info">
-													<strong>Note:</strong> sslip.io is a public HTTP
-													service and does not support SSL/HTTPS. HTTPS and
-													certificate options will not have any effect.
-												</AlertBlock>
-											)}
-											<FormLabel>Host</FormLabel>
-											<div className="flex gap-2">
-												<FormControl>
-													<Input placeholder="api.dokploy.com" {...field} />
-												</FormControl>
-												<TooltipProvider delayDuration={0}>
-													<Tooltip>
-														<TooltipTrigger asChild>
-															<Button
-																variant="secondary"
-																type="button"
-																isLoading={isLoadingGenerate}
-																onClick={() => {
-																	generateDomain({
-																		appName: application?.appName || "",
-																		serverId: application?.serverId || "",
-																	})
-																		.then((domain) => {
-																			field.onChange(domain);
+												<FormLabel>Host</FormLabel>
+												<div className="flex gap-2">
+													<FormControl>
+														<Input placeholder="api.dokploy.com" {...field} />
+													</FormControl>
+													<TooltipProvider delayDuration={0}>
+														<Tooltip>
+															<TooltipTrigger asChild>
+																<Button
+																	variant="secondary"
+																	type="button"
+																	isLoading={isLoadingGenerate}
+																	onClick={() => {
+																		generateDomain({
+																			appName: application?.appName || "",
+																			serverId: application?.serverId || "",
 																		})
-																		.catch((err) => {
-																			toast.error(err.message);
-																		});
-																}}
+																			.then((domain) => {
+																				field.onChange(domain);
+																			})
+																			.catch((err) => {
+																				toast.error(err.message);
+																			});
+																	}}
+																>
+																	<Dices className="size-4 text-muted-foreground" />
+																</Button>
+															</TooltipTrigger>
+															<TooltipContent
+																side="left"
+																sideOffset={5}
+																className="max-w-40"
 															>
-																<Dices className="size-4 text-muted-foreground" />
-															</Button>
-														</TooltipTrigger>
-														<TooltipContent
-															side="left"
-															sideOffset={5}
-															className="max-w-40"
-														>
-															<p>Generate sslip.io domain</p>
-														</TooltipContent>
-													</Tooltip>
-												</TooltipProvider>
-											</div>
+																<p>Generate sslip.io domain</p>
+															</TooltipContent>
+														</Tooltip>
+													</TooltipProvider>
+												</div>
 
-											<FormMessage />
-										</FormItem>
-									)}
-								/>
+												<FormMessage />
+											</FormItem>
+										)}
+									/>
 								)}
-
-								{showManualCloudflareProxyRow ? (
-									<div className="flex animate-in fade-in-0 slide-in-from-bottom-1 flex-col gap-4 rounded-xl border border-border bg-background p-4 duration-300 sm:flex-row sm:items-center sm:justify-between">
-										<div className="min-w-0 space-y-0.5">
-											<FormLabel>Cloudflare proxy (orange cloud)</FormLabel>
-											<FormDescription>
-												With Cloudflare connected, new domains use managed DNS
-												by default. Traffic hits your server on 80/443; Traefik
-												forwards to the container port you set below.
-											</FormDescription>
-										</div>
-										<Switch
-											checked={cfProxiedOnCreate}
-											onCheckedChange={setCfProxiedOnCreate}
-											aria-label="Cloudflare proxy enabled for new domain"
-											className="shrink-0"
-										/>
-									</div>
-								) : null}
 
 								<FormField
 									control={form.control}
@@ -974,10 +910,7 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 															onCheckedChange={(checked) => {
 																field.onChange(checked);
 																if (!checked) {
-																	form.setValue(
-																		"customEntrypoint",
-																		undefined,
-																	);
+																	form.setValue("customEntrypoint", undefined);
 																}
 															}}
 														/>

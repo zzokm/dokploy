@@ -18,6 +18,12 @@ const app = {
 const baseDomain: Domain = {
 	applicationId: "app-1",
 	certificateType: "none",
+	dnsProvider: "none",
+	cfZoneId: null,
+	cfZoneName: null,
+	cfDnsRecordId: null,
+	cfProxied: true,
+	cfStatus: "pending",
 	createdAt: "",
 	domainId: "domain-1",
 	host: "app.example.com",

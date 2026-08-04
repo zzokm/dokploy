@@ -3,12 +3,14 @@ import {
 	VALID_HOSTNAME_REGEX,
 } from "@dokploy/server/utils/hostname-validation";
 import { standardSchemaResolver as zodResolver } from "@hookform/resolvers/standard-schema";
-import { GlobeIcon } from "lucide-react";
-import { useEffect } from "react";
+import { Cloud, GlobeIcon } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { AlertBlock } from "@/components/shared/alert-block";
+import { ServerDomainCloudflareControls } from "@/components/dashboard/settings/web-server/server-domain-cloudflare-controls";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -36,6 +38,8 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/utils/api";
+
+type HostInputMode = "manual" | "cloudflare";
 
 const addServerDomain = z
 	.object({
@@ -77,9 +81,20 @@ const addServerDomain = z
 type AddServerDomain = z.infer<typeof addServerDomain>;
 
 export const WebDomain = () => {
+	const utils = api.useUtils();
 	const { data, refetch } = api.settings.getWebServerSettings.useQuery();
 	const { mutateAsync, isPending } =
 		api.settings.assignDomainServer.useMutation();
+	const { data: cfSettings } = api.cloudflareSettings.get.useQuery();
+	const { data: cfZones } = api.cloudflareSettings.listZones.useQuery(
+		undefined,
+		{ enabled: !!cfSettings?.connected },
+	);
+
+	const [hostInputMode, setHostInputMode] = useState<HostInputMode>("manual");
+	const [selectedCfZoneId, setSelectedCfZoneId] = useState("");
+	const [cfHostnameLabel, setCfHostnameLabel] = useState("@");
+	const [syncDnsAfterSave, setSyncDnsAfterSave] = useState(true);
 
 	const form = useForm<AddServerDomain>({
 		defaultValues: {
@@ -94,6 +109,20 @@ export const WebDomain = () => {
 	const domain = form.watch("domain") || "";
 	const host = data?.host || "";
 	const hasChanged = domain !== host;
+
+	const enabledCfZones = useMemo(
+		() =>
+			(cfZones ?? []).filter(
+				(z) => z.status === "active" && !z.paused && !!z.cfZoneId,
+			),
+		[cfZones],
+	);
+
+	const selectedZone = useMemo(
+		() => enabledCfZones.find((z) => z.cfZoneId === selectedCfZoneId) ?? null,
+		[enabledCfZones, selectedCfZoneId],
+	);
+
 	useEffect(() => {
 		if (data) {
 			form.reset({
@@ -105,16 +134,50 @@ export const WebDomain = () => {
 		}
 	}, [form, form.reset, data]);
 
-	const onSubmit = async (data: AddServerDomain) => {
+	useEffect(() => {
+		if (hostInputMode !== "cloudflare" || !selectedZone) {
+			return;
+		}
+		const label = cfHostnameLabel.trim().toLowerCase().replace(/\.$/, "");
+		const nextHost =
+			!label || label === "@"
+				? selectedZone.name.toLowerCase()
+				: `${label}.${selectedZone.name.toLowerCase()}`;
+		form.setValue("domain", nextHost, { shouldValidate: true, shouldDirty: true });
+	}, [hostInputMode, selectedZone, cfHostnameLabel, form]);
+
+	const applyDns = api.cloudflareSettings.applyServerDomainDns.useMutation();
+
+	const onSubmit = async (formData: AddServerDomain) => {
 		await mutateAsync({
-			host: data.domain,
-			letsEncryptEmail: data.letsEncryptEmail,
-			certificateType: data.certificateType,
-			https: data.https,
+			host: formData.domain,
+			letsEncryptEmail: formData.letsEncryptEmail,
+			certificateType: formData.certificateType,
+			https: formData.https,
 		})
 			.then(async () => {
 				await refetch();
 				toast.success("Domain Assigned");
+
+				const shouldSync =
+					hostInputMode === "cloudflare" &&
+					syncDnsAfterSave &&
+					!!cfSettings?.connected &&
+					!!formData.domain.trim();
+
+				if (shouldSync) {
+					try {
+						await applyDns.mutateAsync({ proxied: true });
+						await utils.cloudflareSettings.previewServerDomainDns.invalidate();
+						toast.success("Cloudflare DNS synced");
+					} catch (e) {
+						toast.error(
+							e instanceof Error
+								? e.message
+								: "Domain saved, but Cloudflare DNS sync failed",
+						);
+					}
+				}
 			})
 			.catch(() => {
 				toast.error("Error assigning the domain");
@@ -155,6 +218,125 @@ export const WebDomain = () => {
 								onSubmit={form.handleSubmit(onSubmit)}
 								className="grid w-full gap-4 grid-cols-2"
 							>
+								<div className="col-span-2 mb-1 animate-in fade-in-0 slide-in-from-bottom-1 space-y-3 rounded-xl border border-border bg-muted/40 p-4 duration-300">
+									<div className="space-y-1">
+										<div className="text-sm font-medium">Hostname</div>
+										<p className="text-xs text-muted-foreground">
+											Enter a custom hostname or pick a Cloudflare zone.
+										</p>
+									</div>
+									<Select
+										value={hostInputMode}
+										onValueChange={(v) => {
+											const next = v as HostInputMode;
+											setHostInputMode(next);
+											if (next === "manual") {
+												form.setValue("domain", host || "", {
+													shouldValidate: true,
+												});
+											}
+										}}
+									>
+										<SelectTrigger aria-label="How to enter hostname">
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="manual">
+												Custom hostname (full domain)
+											</SelectItem>
+											<SelectItem value="cloudflare">
+												Cloudflare zone (managed DNS)
+											</SelectItem>
+										</SelectContent>
+									</Select>
+								</div>
+
+								{hostInputMode === "cloudflare" ? (
+									<div className="col-span-2 animate-in fade-in-0 slide-in-from-bottom-1 space-y-4 duration-300">
+										{!cfSettings?.connected ? (
+											<AlertBlock type="warning">
+												Connect your Cloudflare API token in DNS providers
+												below or on the{" "}
+												<Link
+													href="/dashboard/domains"
+													className="text-primary underline"
+												>
+													Domains
+												</Link>{" "}
+												page, then sync zones.
+											</AlertBlock>
+										) : null}
+										<div className="grid gap-4 md:grid-cols-2">
+											<div className="space-y-2">
+												<div className="flex items-center gap-2 text-sm font-medium">
+													<Cloud
+														className="size-4 text-muted-foreground"
+														aria-hidden
+													/>
+													Cloudflare zone
+												</div>
+												<Select
+													value={selectedCfZoneId}
+													onValueChange={setSelectedCfZoneId}
+													disabled={!enabledCfZones.length}
+												>
+													<SelectTrigger aria-label="Cloudflare zone">
+														<SelectValue placeholder="Select a zone" />
+													</SelectTrigger>
+													<SelectContent>
+														{enabledCfZones.map((z) => (
+															<SelectItem key={z.cfZoneId} value={z.cfZoneId}>
+																{z.name}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+												{!enabledCfZones.length && cfSettings?.connected ? (
+													<p className="text-xs text-muted-foreground">
+														No zones yet. Open Domains and click Sync zones.
+													</p>
+												) : null}
+											</div>
+											<div className="space-y-2">
+												<div className="text-sm font-medium">Hostname label</div>
+												<Input
+													value={cfHostnameLabel}
+													onChange={(e) => setCfHostnameLabel(e.target.value)}
+													placeholder="@ or panel"
+													className="font-mono text-sm"
+													disabled={!selectedZone}
+												/>
+												<p className="text-xs text-muted-foreground">
+													Use{" "}
+													<span className="font-mono text-foreground">@</span>{" "}
+													for the apex, or a label like{" "}
+													<span className="font-mono text-foreground">
+														panel
+													</span>
+													.
+												</p>
+											</div>
+										</div>
+										<div className="flex flex-col gap-3 rounded-md border border-border bg-background px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+											<div className="min-w-0 space-y-0.5">
+												<p className="text-sm font-medium">
+													Sync DNS after save
+												</p>
+												<p className="text-xs text-muted-foreground">
+													Create/update the A record to this server&apos;s IP
+													(proxied).
+												</p>
+											</div>
+											<Switch
+												checked={syncDnsAfterSave}
+												onCheckedChange={setSyncDnsAfterSave}
+												disabled={!cfSettings?.connected}
+												aria-label="Sync DNS after save"
+											/>
+										</div>
+									</div>
+								) : null}
+
 								<FormField
 									control={form.control}
 									name="domain"
@@ -164,9 +346,11 @@ export const WebDomain = () => {
 												<FormLabel>Domain</FormLabel>
 												<FormControl>
 													<Input
-														className="w-full"
+														className="w-full font-mono"
 														placeholder={"dokploy.com"}
 														{...field}
+														disabled={hostInputMode === "cloudflare"}
+														readOnly={hostInputMode === "cloudflare"}
 													/>
 												</FormControl>
 												<FormMessage />
@@ -246,8 +430,16 @@ export const WebDomain = () => {
 									/>
 								)}
 
+								<ServerDomainCloudflareControls
+									savedHost={host}
+									formHost={domain}
+								/>
+
 								<div className="flex w-full justify-end col-span-2">
-									<Button isLoading={isPending} type="submit">
+									<Button
+										isLoading={isPending || applyDns.isPending}
+										type="submit"
+									>
 										Save
 									</Button>
 								</div>

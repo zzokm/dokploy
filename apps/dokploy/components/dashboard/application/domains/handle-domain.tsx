@@ -265,7 +265,9 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 	const https = form.watch("https");
 	const domainType = form.watch("domainType");
 	const host = form.watch("host");
+	const serviceName = form.watch("serviceName");
 	const isTraefikMeDomain = host?.includes("sslip.io") || false;
+	const cloudflareHostnamePlaceholder = `@ or ${serviceName?.trim() || "api"}`;
 
 	const hideHttpsForCloudflareAutomation =
 		!domainId &&
@@ -713,7 +715,7 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 										<CloudflareHostnameLabelField
 											value={subdomainLabel}
 											onChange={setSubdomainLabel}
-											placeholder="@ or dokploy"
+											placeholder={cloudflareHostnamePlaceholder}
 											ariaLabel="Subdomain or hostname prefix"
 											disabled={!selectedCfZoneId}
 											inputClassName="text-sm"

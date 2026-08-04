@@ -59,7 +59,6 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { api } from "@/utils/api";
-import { CloudflareDomainControls } from "./cloudflare-domain-controls";
 import { createColumns } from "./columns";
 import { DnsHelperModal } from "./dns-helper-modal";
 import { DomainConnectionPanel } from "./domain-connection-panel";
@@ -660,16 +659,6 @@ export const ShowDomains = ({ id, type }: Props) => {
 												{!item.host.includes("traefik.me") &&
 												item.dnsProvider !== "cloudflare" ? (
 													<DomainConnectionPanel domainId={item.domainId} />
-												) : null}
-
-												{!item.host.includes("traefik.me") ? (
-													<CloudflareDomainControls
-														domainId={item.domainId}
-														currentDnsProvider={item.dnsProvider}
-														currentProxied={
-															item.cfProxied ?? true
-														}
-													/>
 												) : null}
 											</div>
 										</CardContent>

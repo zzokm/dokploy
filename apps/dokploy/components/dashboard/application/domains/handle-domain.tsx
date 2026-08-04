@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import z from "zod";
+import { CloudflareDomainControls } from "@/components/dashboard/application/domains/cloudflare-domain-controls";
 import { CloudflareHostnameLabelField } from "@/components/dashboard/domains/cloudflare-hostname-label-field";
 import { AlertBlock } from "@/components/shared/alert-block";
 import { Badge } from "@/components/ui/badge";
@@ -501,6 +502,17 @@ export const AddDomain = ({ id, type, domainId = "", children }: Props) => {
 							className="shrink-0"
 						/>
 					</div>
+				) : null}
+
+				{domainId &&
+				data &&
+				!data.host.includes("traefik.me") &&
+				(cfSettings?.connected || data.dnsProvider === "cloudflare") ? (
+					<CloudflareDomainControls
+						domainId={domainId}
+						currentDnsProvider={data.dnsProvider}
+						currentProxied={data.cfProxied ?? true}
+					/>
 				) : null}
 
 				<Form {...form}>

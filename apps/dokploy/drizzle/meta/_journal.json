@@ -1303,6 +1303,13 @@
       "when": 1776146400004,
       "tag": "0185_consolidate_domain_cloudflare_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 186,
+      "version": "7",
+      "when": 1776146400005,
+      "tag": "0186_repair_domain_cloudflare_schema",
+      "breakpoints": true
     }
   ]
 }

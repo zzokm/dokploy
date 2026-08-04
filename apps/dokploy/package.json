@@ -16,7 +16,6 @@
 		"reset-2fa": "node -r dotenv/config dist/reset-2fa.mjs",
 		"migrate-auth-secret": "node -r dotenv/config dist/migrate-auth-secret.mjs",
 		"dev": "tsx -r dotenv/config ./server/server.ts  --project tsconfig.server.json ",
-		"dev:data-plane": "pnpm core-services:up:mail && pnpm dev",
 		"studio": "drizzle-kit studio --config ./server/db/drizzle.config.ts",
 		"migration:generate": "drizzle-kit generate --config ./server/db/drizzle.config.ts",
 		"migration:run": "tsx -r dotenv/config migration.ts",
@@ -38,11 +37,7 @@
 		"docker:push:canary": "./docker/push.sh canary",
 		"version": "echo $(node -p \"require('./package.json').version\")",
 		"test": "vitest --config __test__/vitest.config.ts",
-		"generate:openapi": "tsx -r dotenv/config scripts/generate-openapi.ts",
-		"core-services:init": "node ../../scripts/core-services-init.mjs",
-		"core-services:up": "node ../../scripts/core-services-init.mjs && docker compose -f ../../docker/core-services/docker-compose.yml up -d --remove-orphans",
-		"core-services:up:mail": "node ../../scripts/core-services-init.mjs && docker compose -f ../../docker/core-services/docker-compose.yml --profile mail up -d --remove-orphans",
-		"core-services:down": "docker compose -f ../../docker/core-services/docker-compose.yml --profile mail down"
+		"generate:openapi": "tsx -r dotenv/config scripts/generate-openapi.ts"
 	},
 	"dependencies": {
 		"@ai-sdk/anthropic": "^3.0.44",

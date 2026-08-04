@@ -17,7 +17,6 @@ export * from "./environment";
 export * from "./forward-auth";
 export * from "./git-provider";
 export * from "./gitea";
-export * from "./hosted-domain";
 export * from "./github";
 export * from "./gitlab";
 export * from "./libsql";

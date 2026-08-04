@@ -24,7 +24,17 @@ const nextConfig = {
 			},
 			{
 				source: "/dashboard/settings/infra-emails",
-				destination: "/dashboard/emails",
+				destination: "/dashboard/domains",
+				permanent: false,
+			},
+			{
+				source: "/dashboard/emails",
+				destination: "/dashboard/domains",
+				permanent: false,
+			},
+			{
+				source: "/dashboard/emails/:path*",
+				destination: "/dashboard/domains",
 				permanent: false,
 			},
 			{

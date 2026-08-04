@@ -119,9 +119,6 @@ export const webServerSettings = pgTable("webServerSettings", {
 	cleanupCacheOnCompose: boolean("cleanupCacheOnCompose")
 		.notNull()
 		.default(false),
-	disableBuiltInEmailServer: boolean("disable_built_in_email_server")
-		.notNull()
-		.default(false),
 	createdAt: timestamp("created_at").defaultNow(),
 	updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -174,7 +171,6 @@ export const apiUpdateWebServerSettings = createSchema.partial().extend({
 	remoteServersOnly: z.boolean().optional(),
 	enforceSSO: z.boolean().optional(),
 	buildsConcurrency: z.number().int().min(1).max(100).optional(),
-	disableBuiltInEmailServer: z.boolean().optional(),
 });
 
 export const apiUpdateWebServerBuildsConcurrency = z.object({

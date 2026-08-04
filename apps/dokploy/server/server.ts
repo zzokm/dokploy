@@ -19,7 +19,6 @@ import {
 import { config } from "dotenv";
 import next from "next";
 import packageInfo from "../package.json";
-import { reconcileCoreServices } from "@dokploy/server/services/docker/core-services-reconcile";
 import { setupDockerContainerLogsWebSocketServer } from "./wss/docker-container-logs";
 import { setupDockerContainerTerminalWebSocketServer } from "./wss/docker-container-terminal";
 import { setupDockerStatsMonitoringSocketServer } from "./wss/docker-stats";
@@ -88,8 +87,6 @@ void app.prepare().then(async () => {
 		if (process.env.NODE_ENV === "production" && !IS_CLOUD) {
 			createDefaultMiddlewares();
 			await initializeNetwork();
-			// Ensure DNS/Mail data-plane is always present and running.
-			await reconcileCoreServices({ serverId: null, isServer: true });
 			await initCronJobs();
 			await initSchedules();
 			await initCancelDeployments();

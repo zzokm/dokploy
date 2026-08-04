@@ -47,21 +47,6 @@
 			"problemMatcher": []
 		},
 		{
-			"label": "Dokploy: Core services (data plane — mail)",
-			"type": "shell",
-			"command": "pnpm run core-services:up:mail",
-			"options": {
-				"cwd": "${workspaceFolder}"
-			},
-			"presentation": {
-				"reveal": "always",
-				"panel": "shared",
-				"showReuseMessage": false
-			},
-			"group": "build",
-			"problemMatcher": []
-		},
-		{
 			"label": "Dokploy: Dev server",
 			"type": "shell",
 			"command": "pnpm run dokploy:dev",

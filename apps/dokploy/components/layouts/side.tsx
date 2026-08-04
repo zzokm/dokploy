@@ -25,10 +25,8 @@ import {
 	KeyRound,
 	Loader2,
 	LogIn,
-	Mail,
 	Network,
 	type LucideIcon,
-	Network,
 	Package,
 	Palette,
 	PieChart,
@@ -210,14 +208,6 @@ const MENU: Menu = {
 			title: "Domains",
 			url: "/dashboard/domains",
 			icon: Globe,
-			isEnabled: ({ permissions, isCloud }) =>
-				!!(permissions?.organization.update && !isCloud),
-		},
-		{
-			isSingle: true,
-			title: "Emails",
-			url: "/dashboard/emails",
-			icon: Mail,
 			isEnabled: ({ permissions, isCloud }) =>
 				!!(permissions?.organization.update && !isCloud),
 		},

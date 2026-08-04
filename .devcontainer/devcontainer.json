@@ -35,13 +35,7 @@
 	"forwardPorts": [
 		3000,
 		5432,
-		6379,
-		3025,
-		3587,
-		3465,
-		3143,
-		3993,
-		3080
+		6379
 	],
 	"portsAttributes": {
 		"3000": {
@@ -55,33 +49,8 @@
 		"6379": {
 			"label": "Redis",
 			"onAutoForward": "silent"
-		},
-		"3080": {
-			"label": "Panel Roundcube (mail profile)",
-			"onAutoForward": "silent"
-		},
-		"3025": {
-			"label": "Panel DMS SMTP 25 (mail profile)",
-			"onAutoForward": "silent"
-		},
-		"3587": {
-			"label": "Panel DMS submission 587 (mail profile)",
-			"onAutoForward": "silent"
-		},
-		"3465": {
-			"label": "Panel DMS SMTPS 465 (mail profile)",
-			"onAutoForward": "silent"
-		},
-		"3143": {
-			"label": "Panel DMS IMAP 143 (mail profile)",
-			"onAutoForward": "silent"
-		},
-		"3993": {
-			"label": "Panel DMS IMAPS 993 (mail profile)",
-			"onAutoForward": "silent"
 		}
 	},
-	"postStartCommand": "pnpm core-services:up:mail",
 	"remoteUser": "node",
 	"workspaceFolder": "/workspaces/dokploy",
 	"runArgs": ["--name", "dokploy-devcontainer"]

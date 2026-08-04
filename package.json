@@ -7,9 +7,7 @@
 	],
 	"scripts": {
 		"dokploy:setup": "pnpm --filter=dokploy run setup",
-		"dokploy:setup:with-data-plane": "pnpm dokploy:setup && pnpm core-services:up:mail",
 		"dokploy:dev": "pnpm --filter=dokploy run dev",
-		"dokploy:dev:data-plane": "pnpm core-services:up:mail && pnpm dokploy:dev",
 		"dokploy:build": "pnpm --filter=dokploy run build",
 		"dokploy:start": "pnpm --filter=dokploy run start",
 		"test": "pnpm --filter=dokploy run test",
@@ -22,11 +20,7 @@
 		"format-and-lint": "biome check .",
 		"check": "biome check --write --no-errors-on-unmatched --files-ignore-unknown=true",
 		"format-and-lint:fix": "biome check . --write",
-		"generate:openapi": "pnpm --filter=dokploy run generate:openapi",
-		"core-services:init": "node scripts/core-services-init.mjs",
-		"core-services:up": "node scripts/core-services-init.mjs && docker compose -f docker/core-services/docker-compose.yml up -d --remove-orphans",
-		"core-services:up:mail": "node scripts/core-services-init.mjs && docker compose -f docker/core-services/docker-compose.yml --profile mail up -d --remove-orphans",
-		"core-services:down": "docker compose -f docker/core-services/docker-compose.yml --profile mail down"
+		"generate:openapi": "pnpm --filter=dokploy run generate:openapi"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.1.1",

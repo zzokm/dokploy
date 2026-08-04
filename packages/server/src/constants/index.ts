@@ -93,10 +93,6 @@ if (!globalForDocker.docker) {
 
 export const docker = globalForDocker.docker;
 
-export {
-	serverPaths,
-} from "./server-paths"
-
 export const paths = (isServer = false) => {
 	const BASE_PATH =
 		isServer || process.env.NODE_ENV === "production"

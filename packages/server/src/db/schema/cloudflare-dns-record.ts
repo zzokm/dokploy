@@ -14,7 +14,7 @@ import { organization } from "./account"
 
 export const cloudflareDnsRecordManagedBy = pgEnum("cloudflareDnsRecordManagedBy", [
 	"app_domain",
-	"mail_stack",
+	"mail_stack", // historical; unused after email hosting removal
 	"manual",
 ])
 

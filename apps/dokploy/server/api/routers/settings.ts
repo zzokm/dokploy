@@ -80,10 +80,6 @@ import {
 	protectedProcedure,
 	publicProcedure,
 } from "../trpc";
-import {
-	getCoreServicesStatus,
-	reconcileCoreServices,
-} from "@dokploy/server/services/docker/core-services-reconcile";
 
 export const settingsRouter = createTRPCRouter({
 	getWebServerSettings: protectedProcedure.query(async () => {
@@ -637,28 +633,6 @@ export const settingsRouter = createTRPCRouter({
 		const settings = await getWebServerSettings();
 		return settings?.serverIp || "";
 	}),
-	setDisableBuiltInEmailServer: adminProcedure
-		.input(
-			z.object({
-				disableBuiltInEmailServer: z.boolean(),
-			}),
-		)
-		.mutation(async ({ input, ctx }) => {
-			if (IS_CLOUD) {
-				return true
-			}
-			const settings = await updateWebServerSettings({
-				disableBuiltInEmailServer: input.disableBuiltInEmailServer,
-			})
-			// Apply immediately: reconcile core services will remove mail containers when disabled.
-			await reconcileCoreServices({ serverId: null, isServer: true })
-			await audit(ctx, {
-				action: "update",
-				resourceType: "settings",
-				resourceName: "disable-built-in-email-server",
-			})
-			return settings
-		}),
 	updateServerIp: adminProcedure
 		.input(
 			z.object({
@@ -1130,31 +1104,4 @@ export const settingsRouter = createTRPCRouter({
 		const ips = process.env.DOKPLOY_CLOUD_IPS?.split(",");
 		return ips;
 	}),
-
-	getCoreServicesStatus: adminProcedure
-		.input(apiServerSchema)
-		.query(async ({ input }) => {
-			if (IS_CLOUD) {
-				return {
-					networkName: "dokploy-network",
-					services: [],
-				}
-			}
-			return getCoreServicesStatus({ serverId: input?.serverId })
-		}),
-
-	reconcileCoreServices: adminProcedure
-		.input(apiServerSchema)
-		.mutation(async ({ input, ctx }) => {
-			if (IS_CLOUD) {
-				return true
-			}
-			await reconcileCoreServices({ serverId: input?.serverId ?? null })
-			await audit(ctx, {
-				action: "update",
-				resourceType: "settings",
-				resourceName: "core-services-reconcile",
-			})
-			return true
-		}),
 });

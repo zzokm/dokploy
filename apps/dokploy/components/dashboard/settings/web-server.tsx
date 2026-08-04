@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/card";
 import { api } from "@/utils/api";
 import { ShowDokployActions } from "./servers/actions/show-dokploy-actions";
-import { CoreServicesStatusGrid } from "./servers/actions/core-services-status-grid";
 import { ShowStorageActions } from "./servers/actions/show-storage-actions";
 import { ShowTraefikActions } from "./servers/actions/show-traefik-actions";
 import { ToggleDockerCleanup } from "./servers/actions/toggle-docker-cleanup";
@@ -52,16 +51,16 @@ export const WebServer = () => {
 							<UpdateServer />
 						</div>
 
-						<div className="space-y-3">
-							<div className="text-sm font-medium">DNS providers</div>
-							<div className="grid md:grid-cols-2 gap-4">
+						<div className="animate-in fade-in-0 slide-in-from-bottom-2 space-y-3 duration-300">
+							<div className="space-y-1">
+								<div className="text-sm font-medium">DNS providers</div>
+								<p className="text-xs text-muted-foreground">
+									Connect Cloudflare for automated DNS and Traefik DNS-01.
+								</p>
+							</div>
+							<div className="grid gap-4 md:grid-cols-2">
 								<CloudflareSettingsCard />
 							</div>
-						</div>
-
-						<div className="space-y-3">
-							<div className="text-sm font-medium">Core services</div>
-							<CoreServicesStatusGrid />
 						</div>
 
 						<div className="flex items-center flex-wrap justify-between gap-4">

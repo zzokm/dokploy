@@ -68,7 +68,6 @@ const baseSettings: WebServerSettings = {
 	cleanupCacheOnPreviews: false,
 	remoteServersOnly: false,
 	enforceSSO: false,
-	disableBuiltInEmailServer: false,
 	createdAt: null,
 	updatedAt: new Date(),
 };

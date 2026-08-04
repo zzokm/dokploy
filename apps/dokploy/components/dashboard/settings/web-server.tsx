@@ -52,12 +52,6 @@ export const WebServer = () => {
 						</div>
 
 						<div className="animate-in fade-in-0 slide-in-from-bottom-2 space-y-3 duration-300">
-							<div className="space-y-1">
-								<div className="text-sm font-medium">DNS providers</div>
-								<p className="text-xs text-muted-foreground">
-									Connect Cloudflare for automated DNS and Traefik DNS-01.
-								</p>
-							</div>
 							<div className="grid gap-4 md:grid-cols-2">
 								<CloudflareSettingsCard />
 							</div>

@@ -9,18 +9,28 @@ FROM base AS build
 COPY . /usr/src/app
 WORKDIR /usr/src/app
 
-RUN apt-get update && apt-get install -y python3 make g++ git python3-pip pkg-config libsecret-1-dev && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+    && echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache \
+    && apt-get update && apt-get install -y python3 make g++ git python3-pip pkg-config libsecret-1-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+# Install dependencies (pnpm store persists across rebuilds via BuildKit cache mount)
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --config.ignore-scripts=false
 
-# Deploy only the dokploy app
-
+# Heap / CPU via build-args so the Dockerfile stays stable across rebuilds (layer cache friendly)
+ARG BUILD_HEAP_MB=4096
+ARG NEXT_CPU_COUNT=4
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_OPTIONS=--max-old-space-size=4096
-RUN pnpm --filter=@dokploy/server build
-RUN pnpm --filter=./apps/dokploy run build
+ENV NODE_OPTIONS=--max-old-space-size=${BUILD_HEAP_MB}
+ENV NEXT_CPU_COUNT=${NEXT_CPU_COUNT}
+
+RUN --mount=type=cache,id=dokploy-node-cache,target=/usr/src/app/node_modules/.cache \
+    pnpm --filter=@dokploy/server build
+RUN --mount=type=cache,id=dokploy-next-cache,target=/usr/src/app/apps/dokploy/.next/cache \
+    pnpm --filter=./apps/dokploy run build
 
 RUN pnpm --filter=./apps/dokploy --prod deploy --legacy /prod/dokploy
 
@@ -33,7 +43,13 @@ WORKDIR /app
 # Set production
 ENV NODE_ENV=production
 
-RUN apt-get update && apt-get install -y curl unzip zip apache2-utils iproute2 rsync git-lfs && git lfs install && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean \
+    && echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache \
+    && apt-get update && apt-get install -y curl unzip zip apache2-utils iproute2 rsync git-lfs \
+    && git lfs install \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy only the necessary files
 COPY --from=build /prod/dokploy/.next ./.next

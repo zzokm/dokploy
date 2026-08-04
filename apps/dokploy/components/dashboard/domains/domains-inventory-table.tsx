@@ -12,6 +12,7 @@ import {
 } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import { Globe2, Loader2, Search } from "lucide-react";
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
 	deriveRoutedStatus,
@@ -95,7 +96,11 @@ const HealthBadgeCell = ({
 	);
 };
 
-export const DomainsInventoryTable = () => {
+export const DomainsInventoryTable = ({
+	emptyContent,
+}: {
+	emptyContent?: ReactNode;
+}) => {
 	const { data, isPending } = api.domain.listInventory.useQuery();
 	const { mutateAsync: validateDomain } =
 		api.domain.validateDomain.useMutation();
@@ -321,6 +326,9 @@ export const DomainsInventoryTable = () => {
 	}
 
 	if (!data?.length) {
+		if (emptyContent) {
+			return <>{emptyContent}</>;
+		}
 		return (
 			<div className="flex min-h-[20vh] flex-col items-center justify-center gap-3 px-2 text-center">
 				<Globe2 className="size-8 text-muted-foreground" aria-hidden />

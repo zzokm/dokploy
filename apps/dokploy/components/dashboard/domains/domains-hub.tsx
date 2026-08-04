@@ -1,6 +1,7 @@
 "use client";
 
-import { Cloud, Globe2, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
+import { Cloud, FolderOpen, Globe2, KeyRound, Link2, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 import { DomainsInventoryTable } from "@/components/dashboard/domains/domains-inventory-table";
@@ -23,10 +24,130 @@ const statusVariant = (status: "active" | "pending" | "disabled") => {
 	return "outline";
 };
 
+const ConnectCloudflareEmpty = ({
+	tokenInput,
+	setTokenInput,
+	onConnect,
+	isLoading,
+}: {
+	tokenInput: string;
+	setTokenInput: (value: string) => void;
+	onConnect: () => void;
+	isLoading: boolean;
+}) => (
+	<div className="mx-auto flex w-full max-w-lg flex-col gap-8 py-4">
+		<div className="flex flex-col items-center gap-3 text-center">
+			<div className="flex size-14 items-center justify-center rounded-xl border border-border bg-muted/40">
+				<Cloud className="size-7 text-muted-foreground" aria-hidden />
+			</div>
+			<div className="space-y-1.5">
+				<p className="text-base font-medium text-foreground">
+					Connect Cloudflare
+				</p>
+				<p className="text-sm leading-relaxed text-muted-foreground">
+					Import your domains and automate A records for applications,
+					compose services, and the web server.
+				</p>
+			</div>
+		</div>
+
+		<ol className="space-y-3 text-sm">
+			<li className="flex gap-3 rounded-lg border bg-sidebar/60 p-3">
+				<span className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background">
+					<KeyRound className="size-4 text-muted-foreground" aria-hidden />
+				</span>
+				<div className="min-w-0 space-y-0.5">
+					<p className="font-medium">1. Create an API token</p>
+					<p className="text-xs text-muted-foreground">
+						In Cloudflare: My Profile → API Tokens. Include Zone Read and DNS
+						Write.
+					</p>
+				</div>
+			</li>
+			<li className="flex gap-3 rounded-lg border bg-sidebar/60 p-3">
+				<span className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background">
+					<Link2 className="size-4 text-muted-foreground" aria-hidden />
+				</span>
+				<div className="min-w-0 space-y-0.5">
+					<p className="font-medium">2. Connect here</p>
+					<p className="text-xs text-muted-foreground">
+						Paste the token below. We store it encrypted and sync your domains.
+					</p>
+				</div>
+			</li>
+			<li className="flex gap-3 rounded-lg border bg-sidebar/60 p-3">
+				<span className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background">
+					<FolderOpen className="size-4 text-muted-foreground" aria-hidden />
+				</span>
+				<div className="min-w-0 space-y-0.5">
+					<p className="font-medium">3. Attach from a project</p>
+					<p className="text-xs text-muted-foreground">
+						Open a service Domains tab and add a hostname under a synced domain.
+					</p>
+				</div>
+			</li>
+		</ol>
+
+		<div className="space-y-3">
+			<div className="space-y-2">
+				<Label htmlFor="cf-token">Cloudflare API token</Label>
+				<Input
+					id="cf-token"
+					value={tokenInput}
+					onChange={(e) => setTokenInput(e.target.value)}
+					placeholder="Paste API token"
+					autoComplete="off"
+					className="font-mono text-sm"
+				/>
+			</div>
+			<Button
+				type="button"
+				isLoading={isLoading}
+				onClick={onConnect}
+				className="w-full sm:w-auto"
+			>
+				Connect Cloudflare
+			</Button>
+			<p className="text-xs leading-relaxed text-muted-foreground">
+				Required permissions:{" "}
+				<span className="font-medium text-foreground">Zone Read</span> and{" "}
+				<span className="font-medium text-foreground">DNS Write</span>
+			</p>
+		</div>
+	</div>
+);
+
+const ConnectedNoAppDomainsEmpty = ({
+	zoneCount,
+}: {
+	zoneCount: number;
+}) => (
+	<div className="flex min-h-[22vh] flex-col items-center justify-center gap-4 px-2 text-center">
+		<div className="flex size-12 items-center justify-center rounded-xl border border-border bg-muted/40">
+			<Globe2 className="size-6 text-muted-foreground" aria-hidden />
+		</div>
+		<div className="max-w-md space-y-1.5">
+			<p className="text-sm font-medium text-foreground">
+				Synced {zoneCount} domain{zoneCount === 1 ? "" : "s"} — attach one from a
+				project.
+			</p>
+			<p className="text-xs leading-relaxed text-muted-foreground">
+				Cloudflare domains are ready. Open any application or compose service,
+				go to Domains, and add a hostname.
+			</p>
+		</div>
+		<Button type="button" variant="secondary" asChild>
+			<Link href="/dashboard/projects">Go to projects</Link>
+		</Button>
+	</div>
+);
+
 export const DomainsHub = () => {
 	const utils = api.useUtils();
 	const [tokenInput, setTokenInput] = useState("");
 	const { data: settings } = api.cloudflareSettings.get.useQuery();
+	const { data: inventory, isPending: inventoryPending } =
+		api.domain.listInventory.useQuery();
 	const { data: zones, refetch, isPending: zonesPending } =
 		api.cloudflareSettings.listZones.useQuery(undefined, {
 			enabled: !!settings?.connected,
@@ -85,6 +206,13 @@ export const DomainsHub = () => {
 		setToken.mutate({ apiToken: token });
 	};
 
+	const provisionedCount =
+		inventory?.filter((row) => row.kind !== "web-server").length ?? 0;
+	const hasInventory = (inventory?.length ?? 0) > 0;
+	const zoneCount = zones?.length ?? 0;
+	const showConnectedThinEmpty =
+		!inventoryPending && provisionedCount === 0 && zoneCount > 0;
+
 	if (!settings?.connected) {
 		return (
 			<div className="flex w-full flex-col gap-4">
@@ -96,58 +224,35 @@ export const DomainsHub = () => {
 								Domains
 							</CardTitle>
 							<CardDescription>
-								Inventory of every hostname across your projects. Connect
-								Cloudflare to automate DNS.
+								Connect Cloudflare to import domains and automate DNS for your
+								applications.
 							</CardDescription>
 						</CardHeader>
 						<CardContent className="space-y-8 border-t py-8 sm:py-10">
-							<DomainsInventoryTable />
-
-							<div className="mx-auto flex w-full max-w-md flex-col gap-6 border-t pt-8">
-								<div className="flex flex-col items-center gap-3 text-center">
-									<div className="flex size-12 items-center justify-center rounded-xl border border-border bg-muted/40">
-										<Cloud
-											className="size-6 text-muted-foreground"
-											aria-hidden
-										/>
-									</div>
+							{inventoryPending ? (
+								<div className="flex min-h-[12vh] items-center justify-center gap-2 text-sm text-muted-foreground">
+									<Loader2 className="size-4 animate-spin" aria-hidden />
+									Loading…
+								</div>
+							) : hasInventory ? (
+								<section className="space-y-3">
 									<div className="space-y-1">
-										<p className="text-sm font-medium text-foreground">
-											Connect Cloudflare
-										</p>
-										<p className="text-xs leading-relaxed text-muted-foreground">
-											Paste a scoped API token. Domains sync after connect; app
-											domains can then update A records automatically.
+										<h3 className="text-sm font-medium">All domains</h3>
+										<p className="text-xs text-muted-foreground">
+											Hostnames already attached in projects (DNS not automated
+											yet).
 										</p>
 									</div>
-								</div>
+									<DomainsInventoryTable />
+								</section>
+							) : null}
 
-								<div className="space-y-2">
-									<Label htmlFor="cf-token">Cloudflare API token</Label>
-									<Input
-										id="cf-token"
-										value={tokenInput}
-										onChange={(e) => setTokenInput(e.target.value)}
-										placeholder="Paste API token"
-										autoComplete="off"
-										className="font-mono text-sm"
-									/>
-								</div>
-								<Button
-									type="button"
-									isLoading={setToken.isPending}
-									onClick={handleConnect}
-									className="w-full sm:w-auto"
-								>
-									Connect Cloudflare
-								</Button>
-								<p className="text-xs leading-relaxed text-muted-foreground">
-									Required permissions:{" "}
-									<span className="font-medium text-foreground">Zone Read</span>{" "}
-									and{" "}
-									<span className="font-medium text-foreground">DNS Write</span>
-								</p>
-							</div>
+							<ConnectCloudflareEmpty
+								tokenInput={tokenInput}
+								setTokenInput={setTokenInput}
+								onConnect={handleConnect}
+								isLoading={setToken.isPending}
+							/>
 						</CardContent>
 					</div>
 				</Card>
@@ -201,7 +306,14 @@ export const DomainsHub = () => {
 									Every hostname provisioned in this organization.
 								</p>
 							</div>
-							<DomainsInventoryTable />
+							{showConnectedThinEmpty ? (
+								<div className="space-y-6">
+									<ConnectedNoAppDomainsEmpty zoneCount={zoneCount} />
+									{hasInventory ? <DomainsInventoryTable /> : null}
+								</div>
+							) : (
+								<DomainsInventoryTable />
+							)}
 						</section>
 
 						<section className="space-y-3 border-t pt-6">

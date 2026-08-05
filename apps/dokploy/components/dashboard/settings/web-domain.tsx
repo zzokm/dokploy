@@ -11,6 +11,7 @@ import { z } from "zod";
 import { CloudflareHostnameLabelField } from "@/components/dashboard/domains/cloudflare-hostname-label-field";
 import { matchHostToCloudflareZone } from "@/components/dashboard/settings/web-server/match-host-to-cloudflare-zone";
 import { ServerDomainCloudflareControls } from "@/components/dashboard/settings/web-server/server-domain-cloudflare-controls";
+import { shouldShowServerCloudflareControls } from "@/components/dashboard/settings/web-server/should-show-server-cloudflare-controls";
 import { AlertBlock } from "@/components/shared/alert-block";
 import { Button } from "@/components/ui/button";
 import {
@@ -150,9 +151,14 @@ export const WebDomain = () => {
 
 	const trimmedSavedHost = host.trim().toLowerCase();
 	const trimmedFormHost = domain.trim().toLowerCase();
-	const hasActionableSavedCloudflareHost =
-		isCloudflareManagedHost && trimmedFormHost === trimmedSavedHost;
-	const shouldShowCloudflareControls = hasActionableSavedCloudflareHost;
+	const cloudflareModeEnabled =
+		hostInputMode === "cloudflare" ||
+		(!userDisabledCfMode && isCloudflareManagedHost && cfZonesPending);
+	const shouldShowCloudflareControls = shouldShowServerCloudflareControls({
+		cloudflareModeEnabled,
+		isCloudflareManagedHost,
+		formMatchesSavedHost: trimmedFormHost === trimmedSavedHost,
+	});
 
 	useEffect(() => {
 		if (data) {
@@ -259,9 +265,6 @@ export const WebDomain = () => {
 
 	const showCloudflareToggle =
 		!!cfSettings?.connected && (!cfZonesPending || isCloudflareManagedHost);
-	const toggleChecked =
-		hostInputMode === "cloudflare" ||
-		(!userDisabledCfMode && isCloudflareManagedHost && cfZonesPending);
 
 	return (
 		<div className="w-full">
@@ -308,7 +311,7 @@ export const WebDomain = () => {
 											</p>
 										</div>
 										<Switch
-											checked={toggleChecked}
+											checked={cloudflareModeEnabled}
 											onCheckedChange={(checked) => {
 												const next: HostInputMode = checked
 													? "cloudflare"

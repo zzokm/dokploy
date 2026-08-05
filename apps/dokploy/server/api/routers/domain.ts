@@ -413,6 +413,43 @@ export const domainRouter = createTRPCRouter({
 			return true
 		}),
 
+	disableDnsProviderCloudflare: protectedProcedure
+		.input(z.object({ domainId: z.string().min(1) }))
+		.mutation(async ({ input, ctx }) => {
+			const domain = await findDomainById(input.domainId);
+			const serviceId = domain.applicationId || domain.composeId;
+			if (serviceId) {
+				await checkServicePermissionAndAccess(ctx, serviceId, {
+					domain: ["create"],
+				});
+			} else if (domain.previewDeploymentId) {
+				const preview = await findPreviewDeploymentById(domain.previewDeploymentId);
+				await checkServicePermissionAndAccess(ctx, preview.applicationId, {
+					domain: ["create"],
+				});
+			}
+
+			// Only drop ownership: the live record and its proxy mode are left as
+			// they are so turning the switch off never takes the hostname offline,
+			// and cfProxied stays around to restore if management is re-enabled.
+			await ctx.db
+				.update(domains)
+				.set({
+					dnsProvider: "none",
+					cfStatus: "pending",
+				})
+				.where(eq(domains.domainId, input.domainId))
+
+			await audit(ctx, {
+				action: "update",
+				resourceType: "domain",
+				resourceId: domain.domainId,
+				resourceName: domain.host,
+			});
+
+			return true
+		}),
+
 	syncCloudflareDns: protectedProcedure
 		.input(z.object({ domainId: z.string().min(1) }))
 		.mutation(async ({ input, ctx }) => {

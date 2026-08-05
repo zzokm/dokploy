@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
+import {
+	deriveCloudflareDomainControlsVisibility,
+	resolveCloudflareManagedState,
+} from "@/components/dashboard/application/domains/cloudflare-domain-controls-visibility";
 import { CloudflareDomainSyncDialog } from "@/components/dashboard/application/domains/cloudflare-domain-sync-dialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -21,46 +25,60 @@ export const CloudflareDomainControls = ({
 	const utils = api.useUtils();
 	const settings = api.cloudflareSettings.get.useQuery();
 
-	const [proxied, setProxied] = useState<boolean>(currentProxied ?? true);
+	// Optimistic overlays cleared once the refetch lands, so an error falls back
+	// to server truth instead of a guessed previous value.
+	const [pendingManaged, setPendingManaged] = useState<boolean | null>(null);
+	const [pendingProxied, setPendingProxied] = useState<boolean | null>(null);
 	const [syncDialogOpen, setSyncDialogOpen] = useState(false);
 
-	useEffect(() => {
-		setProxied(currentProxied ?? true);
-	}, [currentProxied]);
-
-	const setProvider = api.domain.setDnsProviderCloudflare.useMutation({
-		onSuccess: async () => {
-			await utils.domain.one.invalidate({ domainId });
-			await utils.domain.byApplicationId.invalidate();
-			await utils.domain.byComposeId.invalidate();
-		},
-		onError: (e) => toast.error(e.message),
+	const managed = resolveCloudflareManagedState({
+		pendingManaged,
+		dnsProvider: currentDnsProvider,
 	});
-
-	const isCloudflare = currentDnsProvider === "cloudflare";
+	const proxied = pendingProxied ?? currentProxied ?? true;
 	const isConnected = !!settings.data?.connected;
 
-	const enableCloudflareManagement = () => {
-		setProvider.mutate({ domainId, proxied });
+	const onSettled = async () => {
+		await Promise.all([
+			utils.domain.one.invalidate({ domainId }),
+			utils.domain.byApplicationId.invalidate(),
+			utils.domain.byComposeId.invalidate(),
+		]);
+		setPendingManaged(null);
+		setPendingProxied(null);
+	};
+
+	const setProvider = api.domain.setDnsProviderCloudflare.useMutation({
+		onError: (e) => toast.error(e.message),
+		onSettled,
+	});
+	const disableProvider = api.domain.disableDnsProviderCloudflare.useMutation({
+		onError: (e) => toast.error(e.message),
+		onSettled,
+	});
+
+	const isPending = setProvider.isPending || disableProvider.isPending;
+
+	const handleManagedChange = (checked: boolean) => {
+		setPendingManaged(checked);
+		if (checked) {
+			setProvider.mutate({ domainId, proxied });
+		} else {
+			disableProvider.mutate({ domainId });
+		}
 	};
 
 	const handleProxiedChange = (checked: boolean) => {
-		const previous = proxied;
-		setProxied(checked);
-		if (!isConnected || !isCloudflare) {
-			return;
-		}
-		setProvider.mutate(
-			{ domainId, proxied: checked },
-			{
-				onError: () => {
-					setProxied(previous);
-				},
-			},
-		);
+		setPendingProxied(checked);
+		setProvider.mutate({ domainId, proxied: checked });
 	};
 
-	if (!isConnected && !isCloudflare) {
+	const visibility = deriveCloudflareDomainControlsVisibility({
+		isConnected,
+		isCloudflareManaged: managed,
+	});
+
+	if (!visibility.showSection) {
 		return null;
 	}
 
@@ -73,38 +91,36 @@ export const CloudflareDomainControls = ({
 			/>
 			<div className="mb-2 flex w-full animate-in fade-in-0 slide-in-from-bottom-1 flex-col gap-3 duration-300">
 				<p className="text-sm font-medium">Cloudflare DNS settings</p>
-				{!isConnected ? (
+				{visibility.showReconnectHint ? (
 					<p className="text-xs text-muted-foreground">
 						Reconnect Cloudflare on the Domains page to sync or update proxy
 						settings for this hostname.
 					</p>
-				) : !isCloudflare ? (
+				) : null}
+				{visibility.showManagedToggle ? (
 					<div className="flex flex-row items-center justify-between gap-4 rounded-lg border p-3 shadow-xs">
 						<p className="text-sm font-medium leading-none">
-							Manage in Cloudflare
+							Cloudflare managed domain
 						</p>
 						<Switch
-							checked={false}
-							onCheckedChange={(checked) => {
-								if (checked) {
-									enableCloudflareManagement();
-								}
-							}}
-							disabled={setProvider.isPending}
-							aria-label="Enable Cloudflare management"
+							checked={managed}
+							onCheckedChange={handleManagedChange}
+							disabled={isPending}
+							aria-label="Cloudflare managed domain"
 							className="shrink-0"
 						/>
 					</div>
-				) : (
+				) : null}
+				{visibility.showProxyToggle ? (
 					<>
-						<div className="flex flex-row items-center justify-between gap-4 rounded-lg border p-3 shadow-xs">
+						<div className="flex animate-in fade-in-0 slide-in-from-top-1 flex-row items-center justify-between gap-4 rounded-lg border p-3 shadow-xs duration-200">
 							<p className="text-sm font-medium leading-none">
 								Proxied (orange cloud)
 							</p>
 							<Switch
 								checked={proxied}
 								onCheckedChange={handleProxiedChange}
-								disabled={setProvider.isPending}
+								disabled={isPending}
 								aria-label="Cloudflare proxy enabled"
 								className="shrink-0"
 							/>
@@ -120,7 +136,7 @@ export const CloudflareDomainControls = ({
 							</Button>
 						</div>
 					</>
-				)}
+				) : null}
 			</div>
 		</>
 	);

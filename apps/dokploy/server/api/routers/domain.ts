@@ -319,7 +319,10 @@ export const domainRouter = createTRPCRouter({
 					domain: ["read"],
 				});
 			}
-			return getConnectionInstructionsForDomain(input.domainId);
+			return getConnectionInstructionsForDomain(
+				input.domainId,
+				ctx.session.activeOrganizationId,
+			);
 		}),
 
 	getConnectionStatus: protectedProcedure

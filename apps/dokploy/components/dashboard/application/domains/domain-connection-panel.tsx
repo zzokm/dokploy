@@ -1,6 +1,7 @@
 "use client"
 
-import { Copy, Globe, Loader2, RefreshCw } from "lucide-react"
+import { formatDistanceToNow } from "date-fns"
+import { Cloud, Copy, Globe, Loader2, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -13,9 +14,16 @@ import {
 	TableRow,
 } from "@/components/ui/table"
 import { api } from "@/utils/api"
+import {
+	cloudflareConnectionDetails,
+	cloudflareConnectionLabel,
+	connectionBadgeClass,
+	deriveConnectionBadge,
+} from "./domain-connection-utils"
 
 type DomainConnectionPanelProps = {
 	domainId: string
+	dnsValidation?: { isLoading: boolean; isValid?: boolean }
 }
 
 const copyToClipboard = async (text: string) => {
@@ -27,50 +35,28 @@ const copyToClipboard = async (text: string) => {
 	}
 }
 
-const badgeClassForStatus = (status: string | null | undefined) => {
-	switch (status) {
-		case "active":
-			return "bg-green-500/10 text-green-700 border-green-500/20 dark:text-green-400"
-		case "checking":
-			return "bg-yellow-500/10 text-yellow-800 border-yellow-500/20 dark:text-yellow-300"
-		case "dns_mismatch":
-		case "dns_no_answer":
-		case "error":
-			return "bg-red-500/10 text-red-700 border-red-500/20 dark:text-red-400"
-		case "server_unreachable":
-			return "bg-amber-500/10 text-amber-800 border-amber-500/20 dark:text-amber-300"
-		default:
-			return "border-transparent bg-muted text-muted-foreground"
-	}
-}
-
-const labelForStatus = (status: string | null | undefined) => {
-	switch (status) {
-		case "active":
-			return "Active"
-		case "checking":
-			return "Checking"
-		case "dns_mismatch":
-			return "DNS mismatch"
-		case "dns_no_answer":
-			return "No DNS answers"
-		case "server_unreachable":
-			return "Server unreachable"
-		case "error":
-			return "Error"
-		default:
-			return "Pending"
-	}
+const formatSyncedLabel = (iso: string | null) => {
+	if (!iso) return null
+	const date = new Date(iso)
+	if (Number.isNaN(date.getTime())) return null
+	return `synced ${formatDistanceToNow(date, { addSuffix: true })}`
 }
 
 export const DomainConnectionPanel = ({
 	domainId,
+	dnsValidation,
 }: DomainConnectionPanelProps) => {
 	const utils = api.useUtils()
 	const instructions = api.domain.getConnectionInstructions.useQuery({
 		domainId,
 	})
-	const status = api.domain.getConnectionStatus.useQuery({ domainId })
+	const cloudflare = instructions.data?.cloudflare ?? null
+	const isCloudflareManaged = !!cloudflare?.managed
+
+	const status = api.domain.getConnectionStatus.useQuery(
+		{ domainId },
+		{ enabled: instructions.isSuccess && !isCloudflareManaged },
+	)
 
 	const verify = api.domain.verifyConnection.useMutation({
 		onSuccess: async () => {
@@ -80,7 +66,45 @@ export const DomainConnectionPanel = ({
 		onError: (e) => toast.error(e.message),
 	})
 
-	const currentStatus = status.data?.status ?? "pending"
+	if (instructions.isPending) {
+		return (
+			<div className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
+				<Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+				<span>Loading DNS details…</span>
+			</div>
+		)
+	}
+
+	if (cloudflare && isCloudflareManaged) {
+		const details = cloudflareConnectionDetails(
+			cloudflare,
+			formatSyncedLabel(cloudflare.lastSyncedAt),
+		)
+
+		return (
+			<div className="flex w-full animate-in fade-in-0 slide-in-from-bottom-1 flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border bg-muted/40 px-3 py-2 duration-300">
+				<Cloud className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+				<span
+					className={`text-xs font-medium ${
+						cloudflare.status === "error" ? "text-red-600 dark:text-red-400" : ""
+					}`}
+				>
+					{cloudflareConnectionLabel(cloudflare)}
+				</span>
+				{details.length ? (
+					<span className="min-w-0 truncate text-xs text-muted-foreground">
+						{details.join(" · ")}
+					</span>
+				) : null}
+			</div>
+		)
+	}
+
+	const badge = deriveConnectionBadge({
+		checkStatus: status.data?.status,
+		isChecking: verify.isPending || status.isFetching,
+		dnsValidation,
+	})
 	const statusMessage = status.data?.message ?? null
 
 	return (
@@ -92,23 +116,22 @@ export const DomainConnectionPanel = ({
 				<div className="space-y-1">
 					<p className="text-sm font-medium leading-none">Connection &amp; DNS</p>
 					<p className="text-xs leading-relaxed text-muted-foreground">
-						Point DNS at your server, then verify. Copy values into your DNS
-						provider if you are not using Cloudflare automation.
+						Copy these records into your DNS provider, then verify.
 					</p>
 				</div>
 
 				<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 					<Badge
 						variant="outline"
-						className={`w-fit text-[11px] ${badgeClassForStatus(currentStatus)}`}
+						className={`w-fit text-[11px] ${connectionBadgeClass(badge)}`}
 					>
-						{verify.isPending || status.isFetching ? (
+						{badge === "Checking" ? (
 							<>
 								<Loader2 className="mr-1 size-3 animate-spin" aria-hidden />
 								Checking
 							</>
 						) : (
-							labelForStatus(currentStatus)
+							badge
 						)}
 					</Badge>
 					<Button
@@ -128,12 +151,7 @@ export const DomainConnectionPanel = ({
 					<p className="text-xs text-muted-foreground">{statusMessage}</p>
 				) : null}
 
-				{instructions.isPending ? (
-					<div className="flex items-center gap-2 py-1 text-xs text-muted-foreground">
-						<Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
-						<span>Loading DNS instructions…</span>
-					</div>
-				) : instructions.data?.records?.length ? (
+				{instructions.data?.records?.length ? (
 					<div className="overflow-hidden rounded-md border border-border bg-background">
 						<div className="overflow-x-auto">
 							<Table>

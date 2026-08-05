@@ -773,9 +773,11 @@ export const ShowDomains = ({ id, type }: Props) => {
 													</TooltipProvider>
 												</div>
 
-												{!item.host.includes("traefik.me") &&
-												item.dnsProvider !== "cloudflare" ? (
-													<DomainConnectionPanel domainId={item.domainId} />
+												{!item.host.includes("traefik.me") ? (
+													<DomainConnectionPanel
+														domainId={item.domainId}
+														dnsValidation={validationState}
+													/>
 												) : null}
 											</div>
 										</CardContent>

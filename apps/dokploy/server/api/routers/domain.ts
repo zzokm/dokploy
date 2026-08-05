@@ -8,8 +8,6 @@ import {
 	findPreviewDeploymentById,
 	findServerById,
 	generateTraefikMeDomain,
-	getConnectionInstructionsForDomain,
-	getDomainConnectionStatus,
 	getUnderlyingErrorMessage,
 	getWebServerSettings,
 	listDomainDnsRecords,
@@ -20,7 +18,6 @@ import {
 	snapshotDomainCreateInput,
 	updateDomainById,
 	validateDomain,
-	verifyDomainConnection,
 } from "@dokploy/server";
 import { domains } from "@dokploy/server/db/schema";
 import {
@@ -323,69 +320,6 @@ export const domainRouter = createTRPCRouter({
 		)
 		.mutation(async ({ input }) => {
 			return validateDomain(input.domain, input.serverIp);
-		}),
-
-	getConnectionInstructions: protectedProcedure
-		.input(apiFindDomain)
-		.query(async ({ input, ctx }) => {
-			const domain = await findDomainById(input.domainId);
-			const serviceId = domain.applicationId || domain.composeId;
-			if (serviceId) {
-				await checkServicePermissionAndAccess(ctx, serviceId, {
-					domain: ["read"],
-				});
-			} else if (domain.previewDeploymentId) {
-				const preview = await findPreviewDeploymentById(
-					domain.previewDeploymentId,
-				);
-				await checkServicePermissionAndAccess(ctx, preview.applicationId, {
-					domain: ["read"],
-				});
-			}
-			return getConnectionInstructionsForDomain(
-				input.domainId,
-				ctx.session.activeOrganizationId,
-			);
-		}),
-
-	getConnectionStatus: protectedProcedure
-		.input(apiFindDomain)
-		.query(async ({ input, ctx }) => {
-			const domain = await findDomainById(input.domainId);
-			const serviceId = domain.applicationId || domain.composeId;
-			if (serviceId) {
-				await checkServicePermissionAndAccess(ctx, serviceId, {
-					domain: ["read"],
-				});
-			} else if (domain.previewDeploymentId) {
-				const preview = await findPreviewDeploymentById(
-					domain.previewDeploymentId,
-				);
-				await checkServicePermissionAndAccess(ctx, preview.applicationId, {
-					domain: ["read"],
-				});
-			}
-			return getDomainConnectionStatus(input.domainId);
-		}),
-
-	verifyConnection: protectedProcedure
-		.input(apiFindDomain)
-		.mutation(async ({ input, ctx }) => {
-			const domain = await findDomainById(input.domainId);
-			const serviceId = domain.applicationId || domain.composeId;
-			if (serviceId) {
-				await checkServicePermissionAndAccess(ctx, serviceId, {
-					domain: ["create"],
-				});
-			} else if (domain.previewDeploymentId) {
-				const preview = await findPreviewDeploymentById(
-					domain.previewDeploymentId,
-				);
-				await checkServicePermissionAndAccess(ctx, preview.applicationId, {
-					domain: ["create"],
-				});
-			}
-			return verifyDomainConnection(input.domainId);
 		}),
 
 	setDnsProviderCloudflare: protectedProcedure

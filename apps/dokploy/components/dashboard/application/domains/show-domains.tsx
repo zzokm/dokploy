@@ -63,7 +63,6 @@ import {
 import { api } from "@/utils/api";
 import { createColumns } from "./columns";
 import { DnsHelperModal } from "./dns-helper-modal";
-import { DomainConnectionPanel } from "./domain-connection-panel";
 import {
 	isComposeRoutingStale,
 	latestSuccessfulDeployAt,
@@ -833,13 +832,6 @@ export const ShowDomains = ({ id, type }: Props) => {
 														</Tooltip>
 													</TooltipProvider>
 												</div>
-
-												{!item.host.includes("traefik.me") ? (
-													<DomainConnectionPanel
-														domainId={item.domainId}
-														dnsValidation={validationState}
-													/>
-												) : null}
 											</div>
 										</CardContent>
 									</Card>

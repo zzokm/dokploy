@@ -1,16 +1,11 @@
 import { Resolver } from "node:dns/promises"
 import net from "node:net"
 import { db } from "@dokploy/server/db"
-import { cloudflareDnsRecord, domains } from "@dokploy/server/db/schema"
 import {
 	domainConnectionCheck,
 	domainConnectionCheckStatus,
 } from "@dokploy/server/db/schema/domain-connection-check"
-import { and, eq, inArray } from "drizzle-orm"
-import {
-	type ConnectionCloudflareState,
-	deriveConnectionCloudflareState,
-} from "./domain-connection-utils"
+import { eq, inArray } from "drizzle-orm"
 import { resolveDomainTargetById } from "./domain-target"
 
 type DomainConnectionStatus =
@@ -85,110 +80,6 @@ const checkTcpPort = async (opts: {
 
 		socket.connect(opts.port, opts.host)
 	})
-
-export type ConnectionInstruction = {
-	type: "A"
-	name: string
-	value: string
-}
-
-const instructionNameForHost = (host: string) => {
-	const parts = host.split(".").filter(Boolean)
-	if (parts.length <= 2) {
-		return "@"
-	}
-	return parts[0] ?? "@"
-}
-
-const normalizeHostFqdn = (host: string) =>
-	host.trim().toLowerCase().replace(/\.$/, "")
-
-const loadCloudflareState = async (
-	domainId: string,
-	host: string,
-	organizationId?: string,
-): Promise<ConnectionCloudflareState> => {
-	const [row] = await db
-		.select({
-			dnsProvider: domains.dnsProvider,
-			cfZoneName: domains.cfZoneName,
-			cfProxied: domains.cfProxied,
-			cfStatus: domains.cfStatus,
-		})
-		.from(domains)
-		.where(eq(domains.domainId, domainId))
-		.limit(1)
-
-	const isCloudflareProvider = row?.dnsProvider === "cloudflare"
-
-	const mirrored = organizationId
-		? await db
-				.select({
-					type: cloudflareDnsRecord.type,
-					proxied: cloudflareDnsRecord.proxied,
-					lastSyncedAt: cloudflareDnsRecord.lastSyncedAt,
-				})
-				.from(cloudflareDnsRecord)
-				.where(
-					and(
-						eq(cloudflareDnsRecord.organizationId, organizationId),
-						eq(cloudflareDnsRecord.name, normalizeHostFqdn(host)),
-					),
-				)
-		: []
-
-	return deriveConnectionCloudflareState({
-		dnsProvider: isCloudflareProvider ? "cloudflare" : "none",
-		cfZoneName: row?.cfZoneName ?? null,
-		cfProxied: row?.cfProxied ?? null,
-		cfStatus: isCloudflareProvider ? (row?.cfStatus ?? null) : null,
-		mirroredRecords: mirrored.map((record) => ({
-			type: record.type,
-			proxied: record.proxied,
-			lastSyncedAt: record.lastSyncedAt
-				? new Date(record.lastSyncedAt).toISOString()
-				: null,
-		})),
-	})
-}
-
-export const getConnectionInstructionsForDomain = async (
-	domainId: string,
-	organizationId?: string,
-) => {
-	const target = await resolveDomainTargetById(domainId)
-	const cloudflare = await loadCloudflareState(
-		target.domainId,
-		target.host,
-		organizationId,
-	)
-
-	if (!target.expectedA) {
-		return {
-			domainId: target.domainId,
-			host: target.host,
-			targetServerId: target.targetServerId,
-			expectedA: null,
-			cloudflare,
-			records: [] as ConnectionInstruction[],
-		}
-	}
-
-	return {
-		domainId: target.domainId,
-		host: target.host,
-		targetServerId: target.targetServerId,
-		expectedA: target.expectedA,
-		cloudflare,
-		records: [
-			{
-				type: "A" as const,
-				name: instructionNameForHost(target.host),
-				value: target.expectedA,
-			},
-		],
-	}
-}
 
 export const getDomainConnectionStatus = async (domainId: string) => {
 	const [row] = await db
@@ -382,4 +273,3 @@ export const pollDomainConnectionsOnce = async (opts?: {
 
 	return { checked }
 }
-

@@ -20,6 +20,7 @@ import {
 	getContainerLogs,
 	getWebServerSettings,
 	IS_CLOUD,
+	loadServicePortHints,
 	loadServices,
 	randomizeComposeFile,
 	randomizeIsolatedDeploymentComposeFile,
@@ -316,6 +317,24 @@ export const composeRouter = createTRPCRouter({
 				service: ["read"],
 			});
 			return await loadServices(input.composeId, input.type);
+		}),
+	loadServicePorts: protectedProcedure
+		.input(
+			z.object({
+				composeId: z.string().min(1),
+				serviceName: z.string().min(1),
+				type: z.enum(["fetch", "cache"]).default("cache"),
+			}),
+		)
+		.query(async ({ input, ctx }) => {
+			await checkServicePermissionAndAccess(ctx, input.composeId, {
+				service: ["read"],
+			});
+			return await loadServicePortHints(
+				input.composeId,
+				input.serviceName,
+				input.type,
+			);
 		}),
 	loadMountsByService: protectedProcedure
 		.input(

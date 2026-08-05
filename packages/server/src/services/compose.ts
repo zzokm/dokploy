@@ -14,6 +14,10 @@ import {
 	loadDockerCompose,
 	loadDockerComposeRemote,
 } from "@dokploy/server/utils/docker/domain";
+import {
+	extractServicePortHints,
+	type ServicePortHints,
+} from "@dokploy/server/utils/docker/service-ports";
 import type { ComposeSpecification } from "@dokploy/server/utils/docker/types";
 import { sendBuildErrorNotifications } from "@dokploy/server/utils/notifications/build-error";
 import { sendBuildSuccessNotifications } from "@dokploy/server/utils/notifications/build-success";
@@ -152,7 +156,7 @@ export const findComposeById = async (composeId: string) => {
 	return result;
 };
 
-export const loadServices = async (
+const loadComposeSpecification = async (
 	composeId: string,
 	type: "fetch" | "cache" = "fetch",
 ) => {
@@ -190,9 +194,31 @@ export const loadServices = async (
 		});
 	}
 
-	const services = Object.keys(composeData.services);
+	return composeData;
+};
+
+export const loadServices = async (
+	composeId: string,
+	type: "fetch" | "cache" = "fetch",
+) => {
+	const composeData = await loadComposeSpecification(composeId, type);
+
+	const services = Object.keys(composeData.services ?? {});
 
 	return [...services];
+};
+
+/**
+ * Ports declared by a compose service, so the domain form can default to the
+ * container listen port instead of asking the user to guess it.
+ */
+export const loadServicePortHints = async (
+	composeId: string,
+	serviceName: string,
+	type: "fetch" | "cache" = "cache",
+): Promise<ServicePortHints> => {
+	const composeData = await loadComposeSpecification(composeId, type);
+	return extractServicePortHints(composeData.services?.[serviceName]);
 };
 
 export const updateCompose = async (

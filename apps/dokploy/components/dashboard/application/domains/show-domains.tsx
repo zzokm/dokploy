@@ -28,6 +28,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { useState } from "react";
 import { toast } from "sonner";
+import { AlertBlock } from "@/components/shared/alert-block";
 import { DialogAction } from "@/components/shared/dialog-action";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -63,6 +64,10 @@ import { api } from "@/utils/api";
 import { createColumns } from "./columns";
 import { DnsHelperModal } from "./dns-helper-modal";
 import { DomainConnectionPanel } from "./domain-connection-panel";
+import {
+	isComposeRoutingStale,
+	latestSuccessfulDeployAt,
+} from "./domain-port-guidance";
 import { AddDomain } from "./handle-domain";
 import { HandleForwardAuth } from "./handle-forward-auth";
 
@@ -182,6 +187,36 @@ export const ShowDomains = ({ id, type }: Props) => {
 		api.domain.validateDomain.useMutation();
 	const { mutateAsync: deleteDomain, isPending: isRemoving } =
 		api.domain.delete.useMutation();
+	const { mutateAsync: deployCompose, isPending: isDeploying } =
+		api.compose.deploy.useMutation();
+
+	const [savedSinceDeploy, setSavedSinceDeploy] = useState(false);
+
+	const lastDeployAt =
+		type === "compose" && application && "deployments" in application
+			? latestSuccessfulDeployAt(application.deployments)
+			: null;
+
+	const hasStaleDomain =
+		type === "compose" &&
+		(data ?? []).some((item) =>
+			isComposeRoutingStale({
+				domainUpdatedAt: item.createdAt,
+				lastSuccessfulDeployAt: lastDeployAt,
+			}),
+		);
+
+	const needsApply = type === "compose" && (savedSinceDeploy || hasStaleDomain);
+
+	const handleApplyRouting = async () => {
+		try {
+			await deployCompose({ composeId: id });
+			setSavedSinceDeploy(false);
+			toast.success("Deployment queued — routing applies once it finishes");
+		} catch {
+			toast.error("Error deploying compose");
+		}
+	};
 
 	const handleDeleteDomain = async (domainId: string) => {
 		try {
@@ -321,6 +356,7 @@ export const ShowDomains = ({ id, type }: Props) => {
 					type={type}
 					domainId={deepLinkDomainId}
 					defaultOpen
+					onSaved={() => setSavedSinceDeploy(true)}
 					onOpenChange={(open) => {
 						if (open) return;
 						const nextQuery = { ...router.query };
@@ -337,6 +373,22 @@ export const ShowDomains = ({ id, type }: Props) => {
 				>
 					<span className="sr-only">Edit domain</span>
 				</AddDomain>
+			) : null}
+			{needsApply ? (
+				<AlertBlock type="warning">
+					Domain changes are saved but not routed yet. Compose Traefik labels
+					are written on deploy — until then this hostname returns a 404.
+					{canCreateDomain ? (
+						<Button
+							size="sm"
+							className="ml-3 align-middle"
+							isLoading={isDeploying}
+							onClick={handleApplyRouting}
+						>
+							<RefreshCw className="size-4" /> Deploy to apply
+						</Button>
+					) : null}
+				</AlertBlock>
 			) : null}
 			<Card className="w-full bg-background">
 				<CardHeader className="flex flex-row flex-wrap items-center justify-between gap-4">
@@ -370,7 +422,11 @@ export const ShowDomains = ({ id, type }: Props) => {
 									)}
 								</Button>
 								{canCreateDomain && (
-									<AddDomain id={id} type={type}>
+									<AddDomain
+										id={id}
+										type={type}
+										onSaved={() => setSavedSinceDeploy(true)}
+									>
 										<Button>
 											<GlobeIcon className="size-4" /> Add Domain
 										</Button>
@@ -401,7 +457,11 @@ export const ShowDomains = ({ id, type }: Props) => {
 							</span>
 							{canCreateDomain && (
 								<div className="flex flex-row flex-wrap gap-4">
-									<AddDomain id={id} type={type}>
+									<AddDomain
+										id={id}
+										type={type}
+										onSaved={() => setSavedSinceDeploy(true)}
+									>
 										<Button>
 											<GlobeIcon className="size-4" /> Add Domain
 										</Button>
@@ -566,6 +626,7 @@ export const ShowDomains = ({ id, type }: Props) => {
 																id={id}
 																type={type}
 																domainId={item.domainId}
+																onSaved={() => setSavedSinceDeploy(true)}
 															>
 																<Button
 																	variant="ghost"

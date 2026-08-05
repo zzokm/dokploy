@@ -10,6 +10,11 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import z from "zod";
 import { CloudflareDomainControls } from "@/components/dashboard/application/domains/cloudflare-domain-controls";
+import {
+	type DomainPortHints,
+	deriveDomainPortGuidance,
+	suggestDomainPort,
+} from "@/components/dashboard/application/domains/domain-port-guidance";
 import { CloudflareHostnameLabelField } from "@/components/dashboard/domains/cloudflare-hostname-label-field";
 import { AlertBlock } from "@/components/shared/alert-block";
 import { Badge } from "@/components/ui/badge";
@@ -163,6 +168,8 @@ interface Props {
 	children: React.ReactNode;
 	defaultOpen?: boolean;
 	onOpenChange?: (open: boolean) => void;
+	/** Fired after a successful save so the parent can prompt to apply routing. */
+	onSaved?: () => void;
 }
 
 export const AddDomain = ({
@@ -172,6 +179,7 @@ export const AddDomain = ({
 	children,
 	defaultOpen = false,
 	onOpenChange,
+	onSaved,
 }: Props) => {
 	const [isOpen, setIsOpen] = useState(defaultOpen);
 	const [cacheType, setCacheType] = useState<CacheType>("cache");
@@ -249,6 +257,11 @@ export const AddDomain = ({
 		},
 	);
 
+	const applicationPorts =
+		type === "application" && application && "ports" in application
+			? application.ports
+			: [];
+
 	const form = useForm<Domain>({
 		resolver: zodResolver(domain),
 		defaultValues: {
@@ -275,7 +288,37 @@ export const AddDomain = ({
 	const domainType = form.watch("domainType");
 	const host = form.watch("host");
 	const serviceName = form.watch("serviceName");
+	const portValue = form.watch("port");
 	const isTraefikMeDomain = host?.includes("sslip.io") || false;
+
+	const { data: composePortHints } = api.compose.loadServicePorts.useQuery(
+		{
+			composeId: id,
+			serviceName: serviceName ?? "",
+			type: "cache",
+		},
+		{
+			retry: false,
+			refetchOnWindowFocus: false,
+			enabled: type === "compose" && !!id && !!serviceName,
+		},
+	);
+
+	const portHints: DomainPortHints | null =
+		type === "compose"
+			? (composePortHints ?? null)
+			: applicationPorts.length
+				? {
+						containerPorts: applicationPorts.map((p) => p.targetPort),
+						hostPublishedPorts: applicationPorts.map((p) => p.publishedPort),
+					}
+				: null;
+
+	const portGuidance = deriveDomainPortGuidance({
+		port: portValue ?? null,
+		hints: portHints,
+	});
+	const suggestedPort = suggestDomainPort(portHints);
 	const cloudflareHostnamePlaceholder = `@ or ${serviceName?.trim() || "api"}`;
 
 	const hideHttpsForCloudflareAutomation =
@@ -375,6 +418,14 @@ export const AddDomain = ({
 		}
 	}, [certificateType, form]);
 
+	// Default to the port the service actually listens on, so the user never has
+	// to guess (and never reaches for the host publish port).
+	useEffect(() => {
+		if (suggestedPort == null) return;
+		if (form.getValues("port") != null) return;
+		form.setValue("port", suggestedPort, { shouldValidate: true });
+	}, [suggestedPort, form]);
+
 	const dictionary = {
 		success: domainId ? "Domain Updated" : "Domain Created",
 		error: domainId ? "Error updating the domain" : "Error creating the domain",
@@ -456,6 +507,7 @@ export const AddDomain = ({
 				if (domainId) {
 					refetch();
 				}
+				onSaved?.();
 				setIsOpen(false);
 			})
 			.catch((e) => {
@@ -490,9 +542,11 @@ export const AddDomain = ({
 				{isError && <AlertBlock type="error">{error?.message}</AlertBlock>}
 
 				{type === "compose" && (
-					<AlertBlock type="info" className="mb-4">
-						Whenever you make changes to domains, remember to redeploy your
-						compose to apply the changes.
+					<AlertBlock type="warning" className="mb-4">
+						Compose routing lives in the compose file's Traefik labels, so this
+						domain only starts working after a deploy. Saving here writes DNS
+						and the domain record; Traefik answers <strong>404</strong> until
+						you deploy.
 					</AlertBlock>
 				)}
 
@@ -900,13 +954,24 @@ export const AddDomain = ({
 											<FormItem>
 												<FormLabel>Container Port</FormLabel>
 												<FormDescription>
-													The port where your application is running inside the
-													container (e.g., 3000 for Node.js, 80 for Nginx, 8080
-													for Java)
+													The port your app listens on <em>inside</em> the
+													container — not a host publish port. Traefik reaches
+													the container over <code>dokploy-network</code>.
 												</FormDescription>
 												<FormControl>
 													<NumberInput placeholder={"3000"} {...field} />
 												</FormControl>
+												{portGuidance ? (
+													<AlertBlock
+														type={
+															portGuidance.kind === "host_publish"
+																? "warning"
+																: "info"
+														}
+													>
+														{portGuidance.message}
+													</AlertBlock>
+												) : null}
 												<FormMessage />
 											</FormItem>
 										);

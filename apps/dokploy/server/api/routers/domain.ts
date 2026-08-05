@@ -15,20 +15,22 @@ import {
 	listDomainDnsRecords,
 	listDomainsInventory,
 	manageDomain,
-	prepareEnvironmentVariables,
-	readEnvironmentVariables,
-	readPorts,
 	removeDomain,
 	removeDomainById,
 	snapshotDomainCreateInput,
 	updateDomainById,
 	validateDomain,
 	verifyDomainConnection,
-	writeTraefikSetup,
-} from "@dokploy/server"
+} from "@dokploy/server";
+import { domains } from "@dokploy/server/db/schema";
+import {
+	deleteCloudflareAppDnsForDomain,
+	ensureCloudflareAppDnsForDomain,
+} from "@dokploy/server/services/cloudflare/app-domain-automation";
+import { ensureTraefikCloudflareDnsToken } from "@dokploy/server/services/cloudflare/traefik-dns-token";
 import { checkServicePermissionAndAccess } from "@dokploy/server/services/permission";
 import { TRPCError } from "@trpc/server";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import {
 	createTRPCRouter,
@@ -43,17 +45,30 @@ import {
 	apiFindOneApplication,
 	apiUpdateDomain,
 } from "@/server/db/schema";
-import { domains } from "@dokploy/server/db/schema";
-import {
-	deleteCloudflareAppDnsForDomain,
-	ensureCloudflareAppDnsForDomain,
-} from "@dokploy/server/services/cloudflare/app-domain-automation";
+
+/**
+ * Proxied hostnames route TLS through the `letsencrypt-cloudflare` DNS-01
+ * resolver, which is a no-op unless Traefik holds the Cloudflare API token.
+ * Runs in the background because applying it recreates Traefik.
+ */
+const syncTraefikDnsToken = (organizationId: string, proxied: boolean) => {
+	if (!proxied) return;
+	void ensureTraefikCloudflareDnsToken({ organizationId })
+		.then((result) => {
+			if (result.applied) {
+				console.log("Traefik recreated with the Cloudflare DNS-01 token");
+			}
+		})
+		.catch((error) => {
+			console.error("ensureTraefikCloudflareDnsToken:", error);
+		});
+};
 
 export const domainRouter = createTRPCRouter({
 	create: protectedProcedure
 		.input(apiCreateDomain)
 		.mutation(async ({ input, ctx }) => {
-			let createdDomainId: string | undefined
+			let createdDomainId: string | undefined;
 			try {
 				if (input.domainType === "compose" && input.composeId) {
 					await checkServicePermissionAndAccess(ctx, input.composeId, {
@@ -65,7 +80,7 @@ export const domainRouter = createTRPCRouter({
 					});
 				}
 				const domain = await createDomain(input);
-				createdDomainId = domain.domainId
+				createdDomainId = domain.domainId;
 				await audit(ctx, {
 					action: "create",
 					resourceType: "domain",
@@ -78,13 +93,15 @@ export const domainRouter = createTRPCRouter({
 						organizationId: ctx.session.activeOrganizationId,
 						domainId: domain.domainId,
 						proxiedDefault: input.cfProxied ?? true,
-					})
+					});
 					if (cfResult.skipped) {
 						if (domain.applicationId) {
-							const application = await findApplicationById(domain.applicationId)
-							await removeDomain(application, domain.uniqueConfigKey)
+							const application = await findApplicationById(
+								domain.applicationId,
+							);
+							await removeDomain(application, domain.uniqueConfigKey);
 						}
-						await removeDomainById(domain.domainId)
+						await removeDomainById(domain.domainId);
 						const msg =
 							cfResult.reason === "no_zone_match"
 								? "No Cloudflare domain matches this hostname. Sync domains on Domains or choose a domain when adding the domain."
@@ -92,20 +109,26 @@ export const domainRouter = createTRPCRouter({
 									? "Connect Cloudflare under Domains first."
 									: cfResult.reason === "token_unseal_failed"
 										? "Cloudflare token could not be decrypted. Check DOKPLOY_ENCRYPTION_KEY."
-										: "Could not configure Cloudflare DNS for this domain."
+										: "Could not configure Cloudflare DNS for this domain.";
 						throw new TRPCError({
 							code: "BAD_REQUEST",
 							message: msg,
-						})
+						});
 					}
-					const refreshed = await findDomainById(domain.domainId)
+					const refreshed = await findDomainById(domain.domainId);
 					if (refreshed.applicationId) {
-						const application = await findApplicationById(refreshed.applicationId)
-						await manageDomain(application, refreshed)
+						const application = await findApplicationById(
+							refreshed.applicationId,
+						);
+						await manageDomain(application, refreshed);
 					}
+					syncTraefikDnsToken(
+						ctx.session.activeOrganizationId,
+						refreshed.cfProxied,
+					);
 				}
 
-				return await findDomainById(domain.domainId)
+				return await findDomainById(domain.domainId);
 			} catch (error) {
 				const { termbinUrl } = await dumpDomainCreateDebug({
 					stage: "domain.create",
@@ -114,11 +137,11 @@ export const domainRouter = createTRPCRouter({
 					inputSnapshot: snapshotDomainCreateInput(
 						input as unknown as Record<string, unknown>,
 					),
-				})
-				const underlying = getUnderlyingErrorMessage(error)
+				});
+				const underlying = getUnderlyingErrorMessage(error);
 				const message = termbinUrl
 					? `${underlying} | debug=${termbinUrl}`
-					: underlying
+					: underlying;
 				throw new TRPCError({
 					code: "BAD_REQUEST",
 					message: message || "Error creating the domain",
@@ -229,7 +252,7 @@ export const domainRouter = createTRPCRouter({
 					organizationId: ctx.session.activeOrganizationId,
 					domainId: input.domainId,
 					proxiedDefault: domain.cfProxied ?? true,
-				}).catch(() => {})
+				}).catch(() => {});
 			}
 			return result;
 		}),
@@ -272,7 +295,7 @@ export const domainRouter = createTRPCRouter({
 				await deleteCloudflareAppDnsForDomain({
 					organizationId: ctx.session.activeOrganizationId,
 					domainId: input.domainId,
-				}).catch(() => {})
+				}).catch(() => {});
 			}
 
 			const result = await removeDomainById(input.domainId);
@@ -380,7 +403,9 @@ export const domainRouter = createTRPCRouter({
 					domain: ["create"],
 				});
 			} else if (domain.previewDeploymentId) {
-				const preview = await findPreviewDeploymentById(domain.previewDeploymentId);
+				const preview = await findPreviewDeploymentById(
+					domain.previewDeploymentId,
+				);
 				await checkServicePermissionAndAccess(ctx, preview.applicationId, {
 					domain: ["create"],
 				});
@@ -396,7 +421,7 @@ export const domainRouter = createTRPCRouter({
 					certificateType: "letsencrypt",
 					customCertResolver: input.proxied ? "letsencrypt-cloudflare" : null,
 				})
-				.where(eq(domains.domainId, input.domainId))
+				.where(eq(domains.domainId, input.domainId));
 
 			await audit(ctx, {
 				action: "update",
@@ -408,9 +433,10 @@ export const domainRouter = createTRPCRouter({
 				organizationId: ctx.session.activeOrganizationId,
 				domainId: input.domainId,
 				proxiedDefault: input.proxied,
-			})
+			});
+			syncTraefikDnsToken(ctx.session.activeOrganizationId, input.proxied);
 
-			return true
+			return true;
 		}),
 
 	disableDnsProviderCloudflare: protectedProcedure
@@ -423,7 +449,9 @@ export const domainRouter = createTRPCRouter({
 					domain: ["create"],
 				});
 			} else if (domain.previewDeploymentId) {
-				const preview = await findPreviewDeploymentById(domain.previewDeploymentId);
+				const preview = await findPreviewDeploymentById(
+					domain.previewDeploymentId,
+				);
 				await checkServicePermissionAndAccess(ctx, preview.applicationId, {
 					domain: ["create"],
 				});
@@ -438,7 +466,7 @@ export const domainRouter = createTRPCRouter({
 					dnsProvider: "none",
 					cfStatus: "pending",
 				})
-				.where(eq(domains.domainId, input.domainId))
+				.where(eq(domains.domainId, input.domainId));
 
 			await audit(ctx, {
 				action: "update",
@@ -447,7 +475,7 @@ export const domainRouter = createTRPCRouter({
 				resourceName: domain.host,
 			});
 
-			return true
+			return true;
 		}),
 
 	syncCloudflareDns: protectedProcedure
@@ -482,11 +510,16 @@ export const domainRouter = createTRPCRouter({
 					});
 				}
 
-				return await ensureCloudflareAppDnsForDomain({
+				const result = await ensureCloudflareAppDnsForDomain({
 					organizationId: ctx.session.activeOrganizationId,
 					domainId: input.domainId,
 					proxiedDefault: domain.cfProxied ?? true,
 				});
+				syncTraefikDnsToken(
+					ctx.session.activeOrganizationId,
+					domain.cfProxied ?? true,
+				);
+				return result;
 			} catch (error) {
 				const { termbinUrl } = await dumpDomainCreateDebug({
 					stage: "domain.syncCloudflareDns",

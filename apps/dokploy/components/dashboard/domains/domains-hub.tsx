@@ -1,13 +1,24 @@
 "use client";
 
 import { formatDistanceToNow } from "date-fns";
-import { Cloud, FolderOpen, Globe2, KeyRound, Link2, ListTree, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
+import {
+	ChevronDown,
+	Cloud,
+	FolderOpen,
+	Globe2,
+	KeyRound,
+	Link2,
+	ListTree,
+	Loader2,
+	RefreshCw,
+	ShieldCheck,
+} from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { DomainsInventoryTable } from "@/components/dashboard/domains/domains-inventory-table";
 import { latestSyncIso } from "@/components/dashboard/domains/domain-inventory-utils";
-import { ZoneDnsRecordsSheet } from "@/components/dashboard/domains/zone-dns-records-sheet";
+import { DomainsInventoryTable } from "@/components/dashboard/domains/domains-inventory-table";
+import { ZoneDnsRecordsPanel } from "@/components/dashboard/domains/zone-dns-records-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +30,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import { api } from "@/utils/api";
 
 const statusVariant = (status: "active" | "pending" | "disabled") => {
@@ -151,10 +163,7 @@ const ConnectedNoAppDomainsEmpty = ({
 export const DomainsHub = () => {
 	const utils = api.useUtils();
 	const [tokenInput, setTokenInput] = useState("");
-	const [zoneRecords, setZoneRecords] = useState<{
-		cfZoneId: string;
-		zoneName: string;
-	} | null>(null);
+	const [expandedZoneIds, setExpandedZoneIds] = useState<string[]>([]);
 	const { data: settings } = api.cloudflareSettings.get.useQuery();
 	const { data: inventory, isPending: inventoryPending } =
 		api.domain.listInventory.useQuery();
@@ -209,6 +218,14 @@ export const DomainsHub = () => {
 		},
 		onError: (e) => toast.error(e.message),
 	});
+
+	const toggleZoneRecords = (cfZoneId: string) => {
+		setExpandedZoneIds((prev) =>
+			prev.includes(cfZoneId)
+				? prev.filter((id) => id !== cfZoneId)
+				: [...prev, cfZoneId],
+		);
+	};
 
 	const handleConnect = () => {
 		const token = tokenInput.trim();
@@ -379,63 +396,75 @@ export const DomainsHub = () => {
 								</div>
 							) : (
 								<div className="flex w-full flex-col gap-2">
-									{zones.map((z, index) => (
-										<div
-											key={z.cfZoneId}
-											className="flex w-full animate-in fade-in-0 slide-in-from-bottom-1 items-center justify-between rounded-lg bg-sidebar p-1 duration-300 fill-mode-both"
-											style={{
-												animationDelay: `${Math.min(index, 8) * 40}ms`,
-											}}
-										>
-											<div className="flex w-full items-center justify-between rounded-lg border bg-background p-3 transition-colors hover:bg-muted/20">
-												<div className="flex min-w-0 flex-col gap-1">
-													<span className="truncate text-sm font-medium">
-														{z.name}
-													</span>
-													<span className="text-xs text-muted-foreground">
-														Proxy managed per application domain
-													</span>
-												</div>
-												<div className="ml-3 flex shrink-0 flex-wrap items-center justify-end gap-2">
-													<Badge variant={statusVariant(z.status)}>
-														{z.status}
-													</Badge>
-													{z.paused ? (
-														<Badge variant="outline">paused</Badge>
+									{zones.map((z, index) => {
+										const expanded = expandedZoneIds.includes(z.cfZoneId);
+										const panelId = `zone-records-${z.cfZoneId}`;
+										return (
+											<div
+												key={z.cfZoneId}
+												className="w-full animate-in fade-in-0 slide-in-from-bottom-1 rounded-lg bg-sidebar p-1 duration-300 fill-mode-both"
+												style={{
+													animationDelay: `${Math.min(index, 8) * 40}ms`,
+												}}
+											>
+												<div className="w-full overflow-hidden rounded-lg border bg-background">
+													<div className="flex flex-col gap-3 p-3 transition-colors hover:bg-muted/20 sm:flex-row sm:items-center sm:justify-between">
+														<div className="flex min-w-0 flex-col gap-1">
+															<span className="truncate text-sm font-medium">
+																{z.name}
+															</span>
+															<span className="text-xs text-muted-foreground">
+																Proxy managed per application domain
+															</span>
+														</div>
+														<div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+															<Badge variant={statusVariant(z.status)}>
+																{z.status}
+															</Badge>
+															{z.paused ? (
+																<Badge variant="outline">paused</Badge>
+															) : null}
+															<Button
+																type="button"
+																variant="secondary"
+																size="sm"
+																className="h-8"
+																aria-expanded={expanded}
+																aria-controls={panelId}
+																onClick={() => toggleZoneRecords(z.cfZoneId)}
+															>
+																<ListTree
+																	className="mr-1.5 size-3.5"
+																	aria-hidden
+																/>
+																Records
+																<ChevronDown
+																	className={cn(
+																		"ml-1.5 size-3.5 transition-transform duration-200",
+																		expanded && "rotate-180",
+																	)}
+																	aria-hidden
+																/>
+															</Button>
+														</div>
+													</div>
+													{expanded ? (
+														<ZoneDnsRecordsPanel
+															id={panelId}
+															cfZoneId={z.cfZoneId}
+															zoneName={z.name}
+														/>
 													) : null}
-													<Button
-														type="button"
-														variant="secondary"
-														size="sm"
-														className="h-8"
-														onClick={() =>
-															setZoneRecords({
-																cfZoneId: z.cfZoneId,
-																zoneName: z.name,
-															})
-														}
-													>
-														<ListTree className="mr-1.5 size-3.5" aria-hidden />
-														Records
-													</Button>
 												</div>
 											</div>
-										</div>
-									))}
+										);
+									})}
 								</div>
 							)}
 						</section>
 					</CardContent>
 				</div>
 			</Card>
-			<ZoneDnsRecordsSheet
-				cfZoneId={zoneRecords?.cfZoneId ?? null}
-				zoneName={zoneRecords?.zoneName}
-				open={!!zoneRecords}
-				onOpenChange={(nextOpen) => {
-					if (!nextOpen) setZoneRecords(null);
-				}}
-			/>
 		</div>
 	);
 };

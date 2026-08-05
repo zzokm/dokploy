@@ -10,42 +10,30 @@ import {
 	type SortingState,
 	useReactTable,
 } from "@tanstack/react-table";
-import { formatDistanceToNow } from "date-fns";
 import {
 	ExternalLink,
 	FolderOpen,
 	Globe2,
 	Loader2,
-	RefreshCw,
 	Search,
 	Settings2,
 } from "lucide-react";
 import { useRouter } from "next/router";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 import {
 	buildDomainEditHref,
 	buildHostnameExternalUrl,
 	deriveInventoryWarnings,
-	deriveRoutedStatus,
 	inventoryDnsBadgeFromCfStatus,
 	inventoryDnsBadgeFromValidation,
-	inventoryRoutedBadge,
 	inventorySslBadge,
-	inventorySyncBadge,
 	openProjectButtonLabel,
 	sanitizeDnsValidationError,
 } from "@/components/dashboard/domains/domain-inventory-utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipProvider,
-	TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
 	Table,
 	TableBody,
@@ -54,6 +42,12 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipProvider,
+	TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { api, type RouterOutputs } from "@/utils/api";
 
 export type InventoryRow =
@@ -67,23 +61,14 @@ type DnsHealthState = {
 
 type DnsHealthMap = Record<string, DnsHealthState>;
 
-const formatRelative = (iso: string | null) => {
-	if (!iso) return "—";
-	const date = new Date(iso);
-	if (Number.isNaN(date.getTime())) return "—";
-	return formatDistanceToNow(date, { addSuffix: true });
-};
-
 const healthVariant = (
 	label: string,
 ): "default" | "secondary" | "destructive" | "outline" => {
-	if (label === "Valid" || label === "Routed" || label === "Synced") {
+	if (label === "Valid") {
 		return "default";
 	}
 	if (
 		label === "Failed" ||
-		label === "Not routed" ||
-		label === "Error" ||
 		label === "Redeploy required" ||
 		label === "Host publish port"
 	) {
@@ -127,23 +112,14 @@ export const DomainsInventoryTable = ({
 	emptyContent?: ReactNode;
 }) => {
 	const router = useRouter();
-	const utils = api.useUtils();
 	const { data, isPending } = api.domain.listInventory.useQuery();
 	const { mutateAsync: validateDomain } =
 		api.domain.validateDomain.useMutation();
-	const syncDomain = api.domain.syncCloudflareDns.useMutation({
-		onSuccess: async () => {
-			toast.success("Domain DNS synced");
-			await utils.domain.listInventory.invalidate();
-		},
-		onError: (e) => toast.error(e.message),
-	});
 	const [sorting, setSorting] = useState<SortingState>([
 		{ id: "host", desc: false },
 	]);
 	const [hostFilter, setHostFilter] = useState("");
 	const [dnsHealth, setDnsHealth] = useState<DnsHealthMap>({});
-	const [syncingDomainId, setSyncingDomainId] = useState<string | null>(null);
 	const validatedKeyRef = useRef<string>("");
 
 	const openProject = (row: InventoryRow) => {
@@ -157,18 +133,6 @@ export const DomainsInventoryTable = ({
 		});
 		if (!href) return;
 		void router.push(href);
-	};
-
-	const handleRowSync = async (row: InventoryRow) => {
-		if (row.dnsProvider !== "cloudflare" || row.kind === "web-server") {
-			return;
-		}
-		setSyncingDomainId(row.domainId);
-		try {
-			await syncDomain.mutateAsync({ domainId: row.domainId });
-		} finally {
-			setSyncingDomainId(null);
-		}
 	};
 
 	useEffect(() => {
@@ -356,70 +320,6 @@ export const DomainsInventoryTable = ({
 				},
 			},
 			{
-				id: "routed",
-				header: "Routed",
-				cell: ({ row }) => {
-					const status = deriveRoutedStatus({
-						kind: row.original.kind,
-						createdAt: row.original.createdAt,
-						lastSuccessfulDeployAt: row.original.lastSuccessfulDeployAt,
-					});
-					const label = inventoryRoutedBadge(status);
-					return (
-						<HealthBadgeCell
-							label={label}
-							hint={
-								status === "not_routed"
-									? "Domain added after last deploy — redeploy to apply Traefik"
-									: undefined
-							}
-						/>
-					);
-				},
-			},
-			{
-				id: "lastSync",
-				header: "Last sync",
-				cell: ({ row }) => {
-					const syncLabel = inventorySyncBadge({
-						dnsProvider: row.original.dnsProvider,
-						cfStatus: row.original.cfStatus,
-					});
-					const canSync =
-						row.original.dnsProvider === "cloudflare" &&
-						row.original.kind !== "web-server";
-					return (
-						<div className="flex min-w-[9rem] flex-col items-start gap-1.5">
-							<div className="flex flex-wrap items-center gap-1.5">
-								{syncLabel !== "—" ? (
-									<Badge variant={healthVariant(syncLabel)}>{syncLabel}</Badge>
-								) : (
-									<span className="text-sm text-muted-foreground">—</span>
-								)}
-								<span className="whitespace-nowrap text-xs text-muted-foreground">
-									{formatRelative(row.original.lastSyncedAt)}
-								</span>
-							</div>
-							{canSync ? (
-								<Button
-									type="button"
-									variant="ghost"
-									size="sm"
-									className="h-7 px-2 text-xs"
-									isLoading={syncingDomainId === row.original.domainId}
-									onClick={() => {
-										void handleRowSync(row.original);
-									}}
-								>
-									<RefreshCw className="mr-1 size-3" aria-hidden />
-									Sync
-								</Button>
-							) : null}
-						</div>
-					);
-				},
-			},
-			{
 				id: "actions",
 				header: "Actions",
 				cell: ({ row }) => {
@@ -450,7 +350,7 @@ export const DomainsInventoryTable = ({
 				},
 			},
 		],
-		[dnsHealth, syncingDomainId],
+		[dnsHealth],
 	);
 
 	const filtered = useMemo(() => {
@@ -523,11 +423,7 @@ export const DomainsInventoryTable = ({
 										<TableHead
 											key={header.id}
 											className={
-												header.id === "lastSync"
-													? "hidden md:table-cell"
-													: header.id === "ssl" || header.id === "routed"
-														? "hidden sm:table-cell"
-														: undefined
+												header.id === "ssl" ? "hidden sm:table-cell" : undefined
 											}
 										>
 											{header.isPlaceholder
@@ -555,12 +451,9 @@ export const DomainsInventoryTable = ({
 											<TableCell
 												key={cell.id}
 												className={
-													cell.column.id === "lastSync"
-														? "hidden md:table-cell"
-														: cell.column.id === "ssl" ||
-																cell.column.id === "routed"
-															? "hidden sm:table-cell"
-															: undefined
+													cell.column.id === "ssl"
+														? "hidden sm:table-cell"
+														: undefined
 												}
 											>
 												{flexRender(

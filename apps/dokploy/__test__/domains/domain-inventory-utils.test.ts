@@ -2,18 +2,21 @@ import { describe, expect, it } from "vitest";
 import {
 	buildDomainEditHref,
 	buildHostnameExternalUrl,
+	deriveDnsProxyState,
 	deriveInventoryWarnings,
 	deriveRoutedStatus,
+	dnsProxyStateHint,
+	dnsProxyStateLabel,
 	dnsRecordManagedByLabel,
 	inventoryDnsBadgeFromCfStatus,
 	inventoryDnsBadgeFromValidation,
-	inventoryRoutedBadge,
 	inventorySslBadge,
 	inventorySslLabel,
-	inventorySyncBadge,
 	isPreviewableDnsRecordType,
+	isProxyableDnsRecordType,
 	latestSyncIso,
 	openProjectButtonLabel,
+	parseDnsTtl,
 	sanitizeDnsValidationError,
 } from "@/components/dashboard/domains/domain-inventory-utils";
 
@@ -183,32 +186,6 @@ describe("deriveRoutedStatus", () => {
 	});
 });
 
-describe("inventoryRoutedBadge", () => {
-	it("maps not_routed to Not routed", () => {
-		expect(inventoryRoutedBadge("not_routed")).toBe("Not routed");
-	});
-});
-
-describe("inventorySyncBadge", () => {
-	it("maps cloudflare error to Error", () => {
-		expect(
-			inventorySyncBadge({
-				dnsProvider: "cloudflare",
-				cfStatus: "error",
-			}),
-		).toBe("Error");
-	});
-
-	it("returns dash for non-cloudflare rows", () => {
-		expect(
-			inventorySyncBadge({
-				dnsProvider: "none",
-				cfStatus: null,
-			}),
-		).toBe("—");
-	});
-});
-
 describe("latestSyncIso", () => {
 	it("picks the newest timestamp", () => {
 		expect(
@@ -290,6 +267,87 @@ describe("isPreviewableDnsRecordType", () => {
 
 	it("rejects unrelated types", () => {
 		expect(isPreviewableDnsRecordType("TXT")).toBe(false);
+	});
+});
+
+describe("isProxyableDnsRecordType", () => {
+	it("accepts A, AAAA, and CNAME regardless of casing", () => {
+		expect(isProxyableDnsRecordType("A")).toBe(true);
+		expect(isProxyableDnsRecordType("aaaa")).toBe(true);
+		expect(isProxyableDnsRecordType(" CNAME ")).toBe(true);
+	});
+
+	it("rejects types Cloudflare cannot proxy", () => {
+		expect(isProxyableDnsRecordType("TXT")).toBe(false);
+		expect(isProxyableDnsRecordType("MX")).toBe(false);
+		expect(isProxyableDnsRecordType("NS")).toBe(false);
+	});
+});
+
+describe("deriveDnsProxyState", () => {
+	it("returns proxied for a proxied A record", () => {
+		expect(deriveDnsProxyState({ type: "A", proxied: true })).toBe("proxied");
+	});
+
+	it("returns dns_only for an unproxied CNAME", () => {
+		expect(deriveDnsProxyState({ type: "CNAME", proxied: false })).toBe(
+			"dns_only",
+		);
+	});
+
+	it("returns not_proxyable for types that can never be proxied", () => {
+		expect(deriveDnsProxyState({ type: "TXT", proxied: false })).toBe(
+			"not_proxyable",
+		);
+		expect(deriveDnsProxyState({ type: "MX", proxied: null })).toBe(
+			"not_proxyable",
+		);
+		expect(deriveDnsProxyState({ type: "NS" })).toBe("not_proxyable");
+	});
+
+	it("never reports a non-proxyable type as proxied", () => {
+		expect(deriveDnsProxyState({ type: "TXT", proxied: true })).toBe(
+			"not_proxyable",
+		);
+	});
+});
+
+describe("dnsProxyStateLabel", () => {
+	it("differentiates not proxied from not proxyable", () => {
+		expect(dnsProxyStateLabel("proxied")).toBe("Proxied");
+		expect(dnsProxyStateLabel("dns_only")).toBe("DNS only");
+		expect(dnsProxyStateLabel("not_proxyable")).toBe("N/A");
+	});
+});
+
+describe("dnsProxyStateHint", () => {
+	it("explains why proxying is unavailable", () => {
+		expect(dnsProxyStateHint("not_proxyable")).toContain(
+			"A, AAAA, and CNAME",
+		);
+	});
+
+	it("returns a hint for every state", () => {
+		expect(dnsProxyStateHint("proxied").length).toBeGreaterThan(0);
+		expect(dnsProxyStateHint("dns_only").length).toBeGreaterThan(0);
+	});
+});
+
+describe("parseDnsTtl", () => {
+	it("keeps 1 as the Auto sentinel", () => {
+		expect(parseDnsTtl("1")).toBe(1);
+	});
+
+	it("accepts values of at least 60 seconds", () => {
+		expect(parseDnsTtl("300")).toBe(300);
+		expect(parseDnsTtl("60.9")).toBe(60);
+	});
+
+	it("falls back to Auto for invalid or too-small values", () => {
+		expect(parseDnsTtl("")).toBe(1);
+		expect(parseDnsTtl("abc")).toBe(1);
+		expect(parseDnsTtl("30")).toBe(1);
+		expect(parseDnsTtl("-5")).toBe(1);
 	});
 });
 

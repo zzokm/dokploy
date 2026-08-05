@@ -4,8 +4,6 @@ export type InventoryDnsBadge = HealthBadge | "Manual";
 
 export type InventorySslBadge = HealthBadge | "None" | "Custom";
 
-export type InventoryRoutedBadge = "Routed" | "Not routed" | "Pending";
-
 const DNS_ERRNO_PATTERN =
 	/\b(ENOTFOUND|ENODATA|EAI_AGAIN|ESERVFAIL|ETIMEOUT|ETIMEDOUT|ENOTIMP|EREFUSED)\b/i;
 
@@ -98,26 +96,6 @@ export const inventorySslLabel = (input: {
 	return "Let's Encrypt";
 };
 
-export const inventoryRoutedBadge = (status: "routed" | "not_routed" | "pending"): InventoryRoutedBadge => {
-	if (status === "routed") return "Routed";
-	if (status === "not_routed") return "Not routed";
-	return "Pending";
-};
-
-export type InventorySyncBadge = "Synced" | "Pending" | "Error" | "—";
-
-export const inventorySyncBadge = (input: {
-	dnsProvider: "none" | "cloudflare";
-	cfStatus: "synced" | "pending" | "error" | null;
-}): InventorySyncBadge => {
-	if (input.dnsProvider !== "cloudflare") {
-		return "—";
-	}
-	if (input.cfStatus === "synced") return "Synced";
-	if (input.cfStatus === "error") return "Error";
-	return "Pending";
-};
-
 export const latestSyncIso = (timestamps: Array<string | null | undefined>) => {
 	let latest: number | null = null;
 	for (const value of timestamps) {
@@ -206,6 +184,51 @@ export const dnsRecordManagedByLabel = (managedBy: string) => {
 export const isPreviewableDnsRecordType = (type: string) => {
 	const normalized = type.trim().toUpperCase();
 	return normalized === "A" || normalized === "AAAA" || normalized === "CNAME";
+};
+
+/**
+ * Cloudflare only proxies A, AAAA, and CNAME records. Everything else has no
+ * proxy setting at all, which is different from an unproxied A record.
+ */
+export type DnsProxyState = "proxied" | "dns_only" | "not_proxyable";
+
+const PROXYABLE_DNS_RECORD_TYPES = new Set(["A", "AAAA", "CNAME"]);
+
+export const isProxyableDnsRecordType = (type: string) =>
+	PROXYABLE_DNS_RECORD_TYPES.has(type.trim().toUpperCase());
+
+export const deriveDnsProxyState = (input: {
+	type: string;
+	proxied?: boolean | null;
+}): DnsProxyState => {
+	if (!isProxyableDnsRecordType(input.type)) {
+		return "not_proxyable";
+	}
+	return input.proxied ? "proxied" : "dns_only";
+};
+
+export const dnsProxyStateLabel = (state: DnsProxyState) => {
+	if (state === "proxied") return "Proxied";
+	if (state === "dns_only") return "DNS only";
+	return "N/A";
+};
+
+export const dnsProxyStateHint = (state: DnsProxyState) => {
+	if (state === "proxied") {
+		return "Traffic for this record goes through the Cloudflare proxy.";
+	}
+	if (state === "dns_only") {
+		return "Cloudflare answers this record without proxying traffic.";
+	}
+	return "Proxying only applies to A, AAAA, and CNAME records.";
+};
+
+/** Cloudflare TTL: 1 means Auto, otherwise a value of at least 60 seconds. */
+export const parseDnsTtl = (value: string): number => {
+	const n = Number(value);
+	if (n === 1) return 1;
+	if (Number.isFinite(n) && n >= 60) return Math.floor(n);
+	return 1;
 };
 
 export type InventoryWarningKind =

@@ -30,8 +30,11 @@ export const CloudflareSettingsCard = () => {
 	const [token, setToken] = useState("")
 
 	const setTokenMutation = api.cloudflareSettings.setToken.useMutation({
-		onSuccess: async () => {
+		onSuccess: async (result) => {
 			toast.success("Cloudflare connected")
+			if (result.validation?.warning) {
+				toast.message(result.validation.warning)
+			}
 			setToken("")
 			await utils.cloudflareSettings.get.invalidate()
 			await utils.cloudflareSettings.listZones.invalidate()
@@ -128,10 +131,14 @@ export const CloudflareSettingsCard = () => {
 							</p>
 							<ul className="list-disc space-y-1 pl-5">
 								<li>
-									<span className="font-medium text-foreground">Zone Read</span>
+									<span className="font-medium text-foreground">
+										Zone → Zone → Read
+									</span>
 								</li>
 								<li>
-									<span className="font-medium text-foreground">DNS Write</span>
+									<span className="font-medium text-foreground">
+										Zone → DNS → Edit (includes read/write)
+									</span>
 								</li>
 							</ul>
 							<p className="leading-relaxed">

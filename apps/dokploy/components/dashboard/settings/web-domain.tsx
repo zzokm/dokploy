@@ -4,11 +4,12 @@ import {
 } from "@dokploy/server/utils/hostname-validation";
 import { standardSchemaResolver as zodResolver } from "@hookform/resolvers/standard-schema";
 import { GlobeIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { CloudflareHostnameLabelField } from "@/components/dashboard/domains/cloudflare-hostname-label-field";
+import { matchHostToCloudflareZone } from "@/components/dashboard/settings/web-server/match-host-to-cloudflare-zone";
 import { ServerDomainCloudflareControls } from "@/components/dashboard/settings/web-server/server-domain-cloudflare-controls";
 import { AlertBlock } from "@/components/shared/alert-block";
 import { Button } from "@/components/ui/button";
@@ -40,23 +41,6 @@ import { Switch } from "@/components/ui/switch";
 import { api } from "@/utils/api";
 
 type HostInputMode = "manual" | "cloudflare";
-
-const isHostInCloudflareZones = (
-	host: string,
-	zones: Array<{ name: string }> = [],
-) => {
-	const normalizedHost = host.trim().toLowerCase();
-	if (!normalizedHost) {
-		return false;
-	}
-
-	return zones.some((zone) => {
-		const zoneName = zone.name.trim().toLowerCase();
-		return (
-			normalizedHost === zoneName || normalizedHost.endsWith(`.${zoneName}`)
-		);
-	});
-};
 
 const addServerDomain = z
 	.object({
@@ -103,14 +87,20 @@ export const WebDomain = () => {
 	const { mutateAsync, isPending } =
 		api.settings.assignDomainServer.useMutation();
 	const { data: cfSettings } = api.cloudflareSettings.get.useQuery();
-	const { data: cfZones } = api.cloudflareSettings.listZones.useQuery(
-		undefined,
-		{ enabled: !!cfSettings?.connected },
-	);
+	const { data: cfZones, isPending: cfZonesPending } =
+		api.cloudflareSettings.listZones.useQuery(undefined, {
+			enabled: !!cfSettings?.connected,
+		});
+	const { data: serverDnsPreview } =
+		api.cloudflareSettings.previewServerDomainDns.useQuery(undefined, {
+			enabled: !!cfSettings?.connected && !!data?.host,
+		});
 
 	const [hostInputMode, setHostInputMode] = useState<HostInputMode>("manual");
 	const [selectedCfZoneId, setSelectedCfZoneId] = useState("");
 	const [cfHostnameLabel, setCfHostnameLabel] = useState("@");
+	const [userDisabledCfMode, setUserDisabledCfMode] = useState(false);
+	const hydratedHostRef = useRef<string>("");
 	const syncDnsAfterSave = true;
 
 	const form = useForm<AddServerDomain>({
@@ -139,17 +129,29 @@ export const WebDomain = () => {
 		() => enabledCfZones.find((z) => z.cfZoneId === selectedCfZoneId) ?? null,
 		[enabledCfZones, selectedCfZoneId],
 	);
-	const hasSavedCloudflareManagedHost = useMemo(
-		() => isHostInCloudflareZones(host, enabledCfZones),
+
+	const savedHostZoneMatch = useMemo(
+		() => matchHostToCloudflareZone(host, enabledCfZones),
 		[host, enabledCfZones],
 	);
+
+	const hasMirroredCloudflareDns =
+		!!serverDnsPreview &&
+		!!serverDnsPreview.host &&
+		(serverDnsPreview.state === "ok" ||
+			serverDnsPreview.state === "drift" ||
+			serverDnsPreview.state === "missing" ||
+			!!serverDnsPreview.currentRecordId);
+
+	const isCloudflareManagedHost =
+		!!cfSettings?.connected &&
+		!!host.trim() &&
+		(!!savedHostZoneMatch || hasMirroredCloudflareDns);
+
 	const trimmedSavedHost = host.trim().toLowerCase();
 	const trimmedFormHost = domain.trim().toLowerCase();
 	const hasActionableSavedCloudflareHost =
-		!!cfSettings?.connected &&
-		!!trimmedSavedHost &&
-		hasSavedCloudflareManagedHost &&
-		trimmedFormHost === trimmedSavedHost;
+		isCloudflareManagedHost && trimmedFormHost === trimmedSavedHost;
 	const shouldShowCloudflareControls = hasActionableSavedCloudflareHost;
 
 	useEffect(() => {
@@ -162,6 +164,45 @@ export const WebDomain = () => {
 			});
 		}
 	}, [form, form.reset, data]);
+
+	// Derive Cloudflare managed toggle from zone/mirror state — not a stale local flag.
+	useEffect(() => {
+		if (!cfSettings?.connected) {
+			setHostInputMode("manual");
+			hydratedHostRef.current = "";
+			return;
+		}
+		if (cfZonesPending) {
+			return;
+		}
+
+		const nextHost = host.trim().toLowerCase();
+		if (hydratedHostRef.current !== nextHost) {
+			hydratedHostRef.current = nextHost;
+			setUserDisabledCfMode(false);
+		}
+
+		if (userDisabledCfMode) {
+			return;
+		}
+
+		if (!isCloudflareManagedHost) {
+			return;
+		}
+
+		setHostInputMode("cloudflare");
+		if (savedHostZoneMatch) {
+			setSelectedCfZoneId(savedHostZoneMatch.cfZoneId);
+			setCfHostnameLabel(savedHostZoneMatch.label);
+		}
+	}, [
+		cfSettings?.connected,
+		cfZonesPending,
+		host,
+		isCloudflareManagedHost,
+		savedHostZoneMatch,
+		userDisabledCfMode,
+	]);
 
 	useEffect(() => {
 		if (hostInputMode !== "cloudflare" || !selectedZone) {
@@ -216,6 +257,12 @@ export const WebDomain = () => {
 			});
 	};
 
+	const showCloudflareToggle =
+		!!cfSettings?.connected && (!cfZonesPending || isCloudflareManagedHost);
+	const toggleChecked =
+		hostInputMode === "cloudflare" ||
+		(!userDisabledCfMode && isCloudflareManagedHost && cfZonesPending);
+
 	return (
 		<div className="w-full">
 			<Card className="h-full bg-sidebar  p-2.5 rounded-xl  max-w-5xl mx-auto">
@@ -250,7 +297,7 @@ export const WebDomain = () => {
 								onSubmit={form.handleSubmit(onSubmit)}
 								className="grid w-full gap-4 grid-cols-2"
 							>
-								{cfSettings?.connected ? (
+								{showCloudflareToggle ? (
 									<div className="col-span-2 flex flex-row items-center justify-between gap-4 rounded-lg border p-3 shadow-xs">
 										<div className="min-w-0 space-y-0.5">
 											<p className="text-sm font-medium leading-none">
@@ -261,16 +308,20 @@ export const WebDomain = () => {
 											</p>
 										</div>
 										<Switch
-											checked={hostInputMode === "cloudflare"}
+											checked={toggleChecked}
 											onCheckedChange={(checked) => {
 												const next: HostInputMode = checked
 													? "cloudflare"
 													: "manual";
 												setHostInputMode(next);
+												setUserDisabledCfMode(!checked);
 												if (!checked) {
 													form.setValue("domain", host || "", {
 														shouldValidate: true,
 													});
+												} else if (savedHostZoneMatch) {
+													setSelectedCfZoneId(savedHostZoneMatch.cfZoneId);
+													setCfHostnameLabel(savedHostZoneMatch.label);
 												}
 											}}
 											aria-label="Cloudflare managed domain"

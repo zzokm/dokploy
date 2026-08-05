@@ -18,7 +18,14 @@ import {
 	previewServerDomainDns,
 } from "@dokploy/server/services/cloudflare/server-domain-dns";
 import { syncCloudflareZonesForOrg } from "@dokploy/server/services/cloudflare/sync-zones";
-import { listCloudflareZones } from "@dokploy/server/services/cloudflare/zones";
+import { validateCloudflareApiToken } from "@dokploy/server/services/cloudflare/token-validation";
+import {
+	createZoneDnsRecord as createZoneDnsRecordService,
+	deleteZoneDnsRecord as deleteZoneDnsRecordService,
+	listZoneDnsRecords as listZoneDnsRecordsService,
+	updateZoneDnsRecord as updateZoneDnsRecordService,
+	zoneDnsRecordInputSchema,
+} from "@dokploy/server/services/cloudflare/zone-dns-records";
 import { checkServicePermissionAndAccess } from "@dokploy/server/services/permission";
 import {
 	canSealSecrets,
@@ -80,15 +87,11 @@ export const cloudflareSettingsRouter = createTRPCRouter({
 				});
 			}
 
-			try {
-				await listCloudflareZones({ token: input.apiToken });
-			} catch (e) {
+			const validation = await validateCloudflareApiToken(input.apiToken);
+			if (!validation.ok) {
 				throw new TRPCError({
 					code: "BAD_REQUEST",
-					message:
-						e instanceof Error
-							? e.message
-							: "Cloudflare token validation failed",
+					message: validation.message,
 				});
 			}
 
@@ -141,7 +144,16 @@ export const cloudflareSettingsRouter = createTRPCRouter({
 				// Traefik might not be deployed yet in local dev
 			}
 
-			return { connected: true as const, apiTokenLast4 };
+			return {
+				connected: true as const,
+				apiTokenLast4,
+				validation: {
+					zoneRead: validation.zoneRead,
+					dnsRead: validation.dnsRead,
+					dnsWrite: validation.dnsWrite,
+					warning: validation.warning ?? null,
+				},
+			};
 		}),
 
 	syncZones: protectedProcedure.mutation(async ({ ctx }) => {
@@ -338,6 +350,94 @@ export const cloudflareSettingsRouter = createTRPCRouter({
 					code: "BAD_REQUEST",
 					message:
 						e instanceof Error ? e.message : "Failed to sync server domain DNS",
+				});
+			}
+		}),
+
+	listZoneDnsRecords: protectedProcedure
+		.input(z.object({ cfZoneId: z.string().min(1) }))
+		.query(async ({ ctx, input }) => {
+			try {
+				return await listZoneDnsRecordsService({
+					organizationId: ctx.session.activeOrganizationId,
+					cfZoneId: input.cfZoneId,
+				});
+			} catch (e) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message:
+						e instanceof Error ? e.message : "Failed to list DNS records",
+				});
+			}
+		}),
+
+	createZoneDnsRecord: protectedProcedure
+		.input(
+			z.object({
+				cfZoneId: z.string().min(1),
+				record: zoneDnsRecordInputSchema,
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			try {
+				return await createZoneDnsRecordService({
+					organizationId: ctx.session.activeOrganizationId,
+					cfZoneId: input.cfZoneId,
+					record: input.record,
+				});
+			} catch (e) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message:
+						e instanceof Error ? e.message : "Failed to create DNS record",
+				});
+			}
+		}),
+
+	updateZoneDnsRecord: protectedProcedure
+		.input(
+			z.object({
+				cfZoneId: z.string().min(1),
+				cfRecordId: z.string().min(1),
+				record: zoneDnsRecordInputSchema,
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			try {
+				return await updateZoneDnsRecordService({
+					organizationId: ctx.session.activeOrganizationId,
+					cfZoneId: input.cfZoneId,
+					cfRecordId: input.cfRecordId,
+					record: input.record,
+				});
+			} catch (e) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message:
+						e instanceof Error ? e.message : "Failed to update DNS record",
+				});
+			}
+		}),
+
+	deleteZoneDnsRecord: protectedProcedure
+		.input(
+			z.object({
+				cfZoneId: z.string().min(1),
+				cfRecordId: z.string().min(1),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			try {
+				return await deleteZoneDnsRecordService({
+					organizationId: ctx.session.activeOrganizationId,
+					cfZoneId: input.cfZoneId,
+					cfRecordId: input.cfRecordId,
+				});
+			} catch (e) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message:
+						e instanceof Error ? e.message : "Failed to delete DNS record",
 				});
 			}
 		}),

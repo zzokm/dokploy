@@ -11,14 +11,22 @@ import {
 	useReactTable,
 } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { Globe2, ListTree, Loader2, RefreshCw, Search } from "lucide-react";
+import {
+	ExternalLink,
+	FolderOpen,
+	Globe2,
+	Loader2,
+	RefreshCw,
+	Search,
+	Settings2,
+} from "lucide-react";
 import { useRouter } from "next/router";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { DomainDnsRecordsSheet } from "@/components/dashboard/domains/domain-dns-records-sheet";
 import {
 	buildDomainEditHref,
+	buildHostnameExternalUrl,
 	deriveInventoryWarnings,
 	deriveRoutedStatus,
 	inventoryDnsBadgeFromCfStatus,
@@ -26,6 +34,7 @@ import {
 	inventoryRoutedBadge,
 	inventorySslBadge,
 	inventorySyncBadge,
+	openProjectButtonLabel,
 	sanitizeDnsValidationError,
 } from "@/components/dashboard/domains/domain-inventory-utils";
 import { Badge } from "@/components/ui/badge";
@@ -135,13 +144,9 @@ export const DomainsInventoryTable = ({
 	const [hostFilter, setHostFilter] = useState("");
 	const [dnsHealth, setDnsHealth] = useState<DnsHealthMap>({});
 	const [syncingDomainId, setSyncingDomainId] = useState<string | null>(null);
-	const [dnsPreview, setDnsPreview] = useState<{
-		domainId: string;
-		host: string;
-	} | null>(null);
 	const validatedKeyRef = useRef<string>("");
 
-	const openDomain = (row: InventoryRow) => {
+	const openProject = (row: InventoryRow) => {
 		const href = buildDomainEditHref({
 			kind: row.kind,
 			projectId: row.projectId,
@@ -254,12 +259,28 @@ export const DomainsInventoryTable = ({
 						https: row.original.https,
 						portLooksLikeHostPublish: row.original.portLooksLikeHostPublish,
 						port: row.original.port,
+						tlsReachable: row.original.tlsReachable,
+					});
+					const externalUrl = buildHostnameExternalUrl({
+						host: row.original.host,
+						https: row.original.https,
 					});
 					return (
 						<div className="flex min-w-0 flex-col gap-0.5">
-							<span className="truncate font-mono text-sm">
-								{row.original.host}
-							</span>
+							<a
+								href={externalUrl}
+								target="_blank"
+								rel="noopener noreferrer"
+								className="group inline-flex max-w-full items-center gap-1 truncate font-mono text-sm underline-offset-2 hover:underline"
+								onClick={(event) => event.stopPropagation()}
+							>
+								<span className="truncate">{row.original.host}</span>
+								<ExternalLink
+									className="size-3 shrink-0 text-muted-foreground opacity-70 transition-opacity group-hover:opacity-100"
+									aria-hidden
+								/>
+								<span className="sr-only">Open hostname in new tab</span>
+							</a>
 							<span className="text-xs text-muted-foreground">
 								{kindLabel(row.original.kind)}
 							</span>
@@ -274,22 +295,6 @@ export const DomainsInventoryTable = ({
 									))}
 								</div>
 							) : null}
-							<Button
-								type="button"
-								variant="ghost"
-								size="sm"
-								className="mt-0.5 h-7 w-fit px-2 text-xs md:hidden"
-								onClick={(event) => {
-									event.stopPropagation();
-									setDnsPreview({
-										domainId: row.original.domainId,
-										host: row.original.host,
-									});
-								}}
-							>
-								<ListTree className="mr-1 size-3" aria-hidden />
-								Records
-							</Button>
 						</div>
 					);
 				},
@@ -333,6 +338,7 @@ export const DomainsInventoryTable = ({
 						certificateType: row.original.certificateType,
 						https: row.original.https,
 						createdAt: row.original.createdAt,
+						tlsReachable: row.original.tlsReachable,
 					});
 					const display = label === "Pending" ? "Cert pending" : label;
 					return (
@@ -341,7 +347,9 @@ export const DomainsInventoryTable = ({
 							hint={
 								label === "Pending"
 									? "Let's Encrypt certificate is still being issued. This usually finishes within a few minutes."
-									: undefined
+									: label === "Failed"
+										? "HTTPS is configured but TLS could not be verified on port 443."
+										: undefined
 							}
 						/>
 					);
@@ -370,20 +378,6 @@ export const DomainsInventoryTable = ({
 				},
 			},
 			{
-				id: "proxy",
-				header: "Proxy",
-				cell: ({ row }) => {
-					if (row.original.cfProxied === null) {
-						return <span className="text-sm text-muted-foreground">—</span>;
-					}
-					return (
-						<Badge variant={row.original.cfProxied ? "default" : "outline"}>
-							{row.original.cfProxied ? "Proxied" : "DNS only"}
-						</Badge>
-					);
-				},
-			},
-			{
 				id: "lastSync",
 				header: "Last sync",
 				cell: ({ row }) => {
@@ -406,41 +400,52 @@ export const DomainsInventoryTable = ({
 									{formatRelative(row.original.lastSyncedAt)}
 								</span>
 							</div>
-							<div className="flex flex-wrap items-center gap-1">
+							{canSync ? (
 								<Button
 									type="button"
 									variant="ghost"
 									size="sm"
 									className="h-7 px-2 text-xs"
-									onClick={(event) => {
-										event.stopPropagation();
-										setDnsPreview({
-											domainId: row.original.domainId,
-											host: row.original.host,
-										});
+									isLoading={syncingDomainId === row.original.domainId}
+									onClick={() => {
+										void handleRowSync(row.original);
 									}}
 								>
-									<ListTree className="mr-1 size-3" aria-hidden />
-									Records
+									<RefreshCw className="mr-1 size-3" aria-hidden />
+									Sync
 								</Button>
-								{canSync ? (
-									<Button
-										type="button"
-										variant="ghost"
-										size="sm"
-										className="h-7 px-2 text-xs"
-										isLoading={syncingDomainId === row.original.domainId}
-										onClick={(event) => {
-											event.stopPropagation();
-											void handleRowSync(row.original);
-										}}
-									>
-										<RefreshCw className="mr-1 size-3" aria-hidden />
-										Sync
-									</Button>
-								) : null}
-							</div>
+							) : null}
 						</div>
+					);
+				},
+			},
+			{
+				id: "actions",
+				header: "Actions",
+				cell: ({ row }) => {
+					const href = buildDomainEditHref({
+						kind: row.original.kind,
+						projectId: row.original.projectId,
+						environmentId: row.original.environmentId,
+						applicationId: row.original.applicationId,
+						composeId: row.original.composeId,
+						domainId: row.original.domainId,
+					});
+					const label = openProjectButtonLabel(row.original.kind);
+					const Icon =
+						row.original.kind === "web-server" ? Settings2 : FolderOpen;
+					return (
+						<Button
+							type="button"
+							variant="secondary"
+							size="sm"
+							className="h-8 whitespace-nowrap"
+							disabled={!href}
+							onClick={() => openProject(row.original)}
+						>
+							<Icon className="mr-1.5 size-3.5" aria-hidden />
+							{label}
+						</Button>
 					);
 				},
 			},
@@ -518,7 +523,7 @@ export const DomainsInventoryTable = ({
 										<TableHead
 											key={header.id}
 											className={
-												header.id === "proxy" || header.id === "lastSync"
+												header.id === "lastSync"
 													? "hidden md:table-cell"
 													: header.id === "ssl" || header.id === "routed"
 														? "hidden sm:table-cell"
@@ -541,25 +546,15 @@ export const DomainsInventoryTable = ({
 								table.getRowModel().rows.map((row, index) => (
 									<TableRow
 										key={row.id}
-										role="link"
-										tabIndex={0}
-										className="cursor-pointer animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both duration-300 hover:bg-muted/40"
+										className="animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both duration-300 hover:bg-muted/40"
 										style={{
 											animationDelay: `${Math.min(index, 8) * 30}ms`,
-										}}
-										onClick={() => openDomain(row.original)}
-										onKeyDown={(event) => {
-											if (event.key === "Enter" || event.key === " ") {
-												event.preventDefault();
-												openDomain(row.original);
-											}
 										}}
 									>
 										{row.getVisibleCells().map((cell) => (
 											<TableCell
 												key={cell.id}
 												className={
-													cell.column.id === "proxy" ||
 													cell.column.id === "lastSync"
 														? "hidden md:table-cell"
 														: cell.column.id === "ssl" ||
@@ -612,14 +607,6 @@ export const DomainsInventoryTable = ({
 					</div>
 				) : null}
 			</div>
-			<DomainDnsRecordsSheet
-				domainId={dnsPreview?.domainId ?? null}
-				host={dnsPreview?.host}
-				open={!!dnsPreview}
-				onOpenChange={(nextOpen) => {
-					if (!nextOpen) setDnsPreview(null);
-				}}
-			/>
 		</TooltipProvider>
 	);
 };

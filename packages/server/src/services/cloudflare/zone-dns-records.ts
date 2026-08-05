@@ -1,0 +1,336 @@
+import { and, eq } from "drizzle-orm"
+import { db } from "@dokploy/server/db"
+import {
+	cloudflareDnsRecord,
+	cloudflareSettings,
+	cloudflareZone,
+} from "@dokploy/server/db/schema"
+import { unsealString } from "@dokploy/server/utils/crypto/seal"
+import { cloudflareFetch } from "./client"
+import {
+	type CloudflareDnsRecord,
+	createCloudflareDnsRecord,
+	deleteCloudflareDnsRecord,
+	normalizeDnsName,
+	updateCloudflareDnsRecord,
+} from "./dns-records"
+import {
+	isProxyableDnsRecordType,
+	type ZoneDnsRecordInput,
+	zoneDnsRecordInputSchema,
+} from "./zone-dns-record-schema"
+
+export {
+	type ZoneDnsRecordInput,
+	zoneDnsRecordInputSchema,
+	zoneDnsRecordTypeSchema,
+} from "./zone-dns-record-schema"
+
+export type ZoneDnsRecordView = {
+	cfRecordId: string
+	type: string
+	name: string
+	content: string
+	ttl: number
+	proxied: boolean
+	priority: number | null
+	managedBy: "app_domain" | "mail_stack" | "manual" | null
+	lastSyncedAt: string | null
+}
+
+const getOrgToken = async (organizationId: string) => {
+	const [settings] = await db
+		.select({ apiTokenEncrypted: cloudflareSettings.apiTokenEncrypted })
+		.from(cloudflareSettings)
+		.where(eq(cloudflareSettings.organizationId, organizationId))
+		.limit(1)
+
+	if (!settings) {
+		throw new Error("Connect Cloudflare first")
+	}
+
+	try {
+		return unsealString(settings.apiTokenEncrypted)
+	} catch {
+		throw new Error(
+			"Cloudflare token could not be decrypted. Check DOKPLOY_ENCRYPTION_KEY and restart Dokploy.",
+		)
+	}
+}
+
+const assertOrgOwnsZone = async (organizationId: string, cfZoneId: string) => {
+	const [zone] = await db
+		.select({
+			cfZoneId: cloudflareZone.cfZoneId,
+			name: cloudflareZone.name,
+			status: cloudflareZone.status,
+		})
+		.from(cloudflareZone)
+		.where(
+			and(
+				eq(cloudflareZone.organizationId, organizationId),
+				eq(cloudflareZone.cfZoneId, cfZoneId),
+			),
+		)
+		.limit(1)
+
+	if (!zone) {
+		throw new Error("Cloudflare domain not found for this organization")
+	}
+	return zone
+}
+
+const resolveRecordName = (name: string, zoneName: string) => {
+	const trimmed = name.trim().toLowerCase().replace(/\.$/, "")
+	if (!trimmed || trimmed === "@") {
+		return zoneName.toLowerCase()
+	}
+	if (trimmed === zoneName.toLowerCase() || trimmed.endsWith(`.${zoneName.toLowerCase()}`)) {
+		return trimmed
+	}
+	return `${trimmed}.${zoneName.toLowerCase()}`
+}
+
+const listAllCloudflareDnsRecords = async (token: string, zoneId: string) => {
+	const all: CloudflareDnsRecord[] = []
+	let page = 1
+	const perPage = 100
+
+	for (;;) {
+		const batch = await cloudflareFetch<CloudflareDnsRecord[]>({
+			token,
+			method: "GET",
+			path: `/zones/${zoneId}/dns_records`,
+			query: { page, per_page: perPage },
+		})
+		all.push(...batch)
+		if (batch.length < perPage) break
+		page += 1
+		if (page > 50) break
+	}
+
+	return all
+}
+
+const upsertMirror = async (input: {
+	organizationId: string
+	cfZoneId: string
+	record: CloudflareDnsRecord
+	managedBy?: "app_domain" | "mail_stack" | "manual"
+}) => {
+	const now = new Date()
+	const name = normalizeDnsName(input.record.name)
+	const proxied = !!input.record.proxied
+	const priority =
+		typeof input.record.priority === "number" ? input.record.priority : null
+
+	await db
+		.insert(cloudflareDnsRecord)
+		.values({
+			organizationId: input.organizationId,
+			cfZoneId: input.cfZoneId,
+			cfRecordId: input.record.id,
+			type: input.record.type,
+			name,
+			content: input.record.content,
+			ttl: input.record.ttl || 1,
+			proxied,
+			priority,
+			managedBy: input.managedBy ?? "manual",
+			lastSyncedAt: now,
+			updatedAt: now,
+		})
+		.onConflictDoUpdate({
+			target: [cloudflareDnsRecord.organizationId, cloudflareDnsRecord.cfRecordId],
+			set: {
+				cfZoneId: input.cfZoneId,
+				type: input.record.type,
+				name,
+				content: input.record.content,
+				ttl: input.record.ttl || 1,
+				proxied,
+				priority,
+				lastSyncedAt: now,
+				updatedAt: now,
+			},
+		})
+}
+
+const deleteMirror = async (organizationId: string, cfRecordId: string) => {
+	await db
+		.delete(cloudflareDnsRecord)
+		.where(
+			and(
+				eq(cloudflareDnsRecord.organizationId, organizationId),
+				eq(cloudflareDnsRecord.cfRecordId, cfRecordId),
+			),
+		)
+}
+
+export const listZoneDnsRecords = async (input: {
+	organizationId: string
+	cfZoneId: string
+}): Promise<{
+	cfZoneId: string
+	zoneName: string
+	records: ZoneDnsRecordView[]
+}> => {
+	const zone = await assertOrgOwnsZone(input.organizationId, input.cfZoneId)
+	const token = await getOrgToken(input.organizationId)
+	const remote = await listAllCloudflareDnsRecords(token, input.cfZoneId)
+
+	const mirrors = await db
+		.select({
+			cfRecordId: cloudflareDnsRecord.cfRecordId,
+			managedBy: cloudflareDnsRecord.managedBy,
+			lastSyncedAt: cloudflareDnsRecord.lastSyncedAt,
+		})
+		.from(cloudflareDnsRecord)
+		.where(
+			and(
+				eq(cloudflareDnsRecord.organizationId, input.organizationId),
+				eq(cloudflareDnsRecord.cfZoneId, input.cfZoneId),
+			),
+		)
+
+	const mirrorById = new Map(
+		mirrors.map((m) => [
+			m.cfRecordId,
+			{
+				managedBy: m.managedBy,
+				lastSyncedAt: m.lastSyncedAt
+					? m.lastSyncedAt instanceof Date
+						? m.lastSyncedAt.toISOString()
+						: String(m.lastSyncedAt)
+					: null,
+			},
+		]),
+	)
+
+	const records: ZoneDnsRecordView[] = remote.map((record) => {
+		const mirror = mirrorById.get(record.id)
+		return {
+			cfRecordId: record.id,
+			type: record.type,
+			name: normalizeDnsName(record.name),
+			content: record.content,
+			ttl: record.ttl,
+			proxied: !!record.proxied,
+			priority:
+				typeof record.priority === "number" ? record.priority : null,
+			managedBy: mirror?.managedBy ?? null,
+			lastSyncedAt: mirror?.lastSyncedAt ?? null,
+		}
+	})
+
+	records.sort((a, b) => {
+		const typeCmp = a.type.localeCompare(b.type)
+		if (typeCmp !== 0) return typeCmp
+		return a.name.localeCompare(b.name)
+	})
+
+	return {
+		cfZoneId: zone.cfZoneId,
+		zoneName: zone.name,
+		records,
+	}
+}
+
+export const createZoneDnsRecord = async (input: {
+	organizationId: string
+	cfZoneId: string
+	record: ZoneDnsRecordInput
+}) => {
+	const zone = await assertOrgOwnsZone(input.organizationId, input.cfZoneId)
+	const token = await getOrgToken(input.organizationId)
+	const parsed = zoneDnsRecordInputSchema.parse(input.record)
+	const name = resolveRecordName(parsed.name, zone.name)
+	const proxied = isProxyableDnsRecordType(parsed.type)
+		? (parsed.proxied ?? false)
+		: undefined
+
+	const created = await createCloudflareDnsRecord({
+		token,
+		zoneId: input.cfZoneId,
+		type: parsed.type,
+		name,
+		content: parsed.content,
+		ttl: parsed.ttl,
+		proxied,
+		priority: parsed.type === "MX" ? parsed.priority : undefined,
+	})
+
+	await upsertMirror({
+		organizationId: input.organizationId,
+		cfZoneId: input.cfZoneId,
+		record: created,
+		managedBy: "manual",
+	})
+
+	return created
+}
+
+export const updateZoneDnsRecord = async (input: {
+	organizationId: string
+	cfZoneId: string
+	cfRecordId: string
+	record: ZoneDnsRecordInput
+}) => {
+	const zone = await assertOrgOwnsZone(input.organizationId, input.cfZoneId)
+	const token = await getOrgToken(input.organizationId)
+	const parsed = zoneDnsRecordInputSchema.parse(input.record)
+	const name = resolveRecordName(parsed.name, zone.name)
+	const proxied = isProxyableDnsRecordType(parsed.type)
+		? (parsed.proxied ?? false)
+		: undefined
+
+	const updated = await updateCloudflareDnsRecord({
+		token,
+		zoneId: input.cfZoneId,
+		recordId: input.cfRecordId,
+		type: parsed.type,
+		name,
+		content: parsed.content,
+		ttl: parsed.ttl,
+		proxied,
+		priority: parsed.type === "MX" ? parsed.priority : undefined,
+	})
+
+	const [existingMirror] = await db
+		.select({ managedBy: cloudflareDnsRecord.managedBy })
+		.from(cloudflareDnsRecord)
+		.where(
+			and(
+				eq(cloudflareDnsRecord.organizationId, input.organizationId),
+				eq(cloudflareDnsRecord.cfRecordId, input.cfRecordId),
+			),
+		)
+		.limit(1)
+
+	await upsertMirror({
+		organizationId: input.organizationId,
+		cfZoneId: input.cfZoneId,
+		record: updated,
+		managedBy: existingMirror?.managedBy ?? "manual",
+	})
+
+	return updated
+}
+
+export const deleteZoneDnsRecord = async (input: {
+	organizationId: string
+	cfZoneId: string
+	cfRecordId: string
+}) => {
+	await assertOrgOwnsZone(input.organizationId, input.cfZoneId)
+	const token = await getOrgToken(input.organizationId)
+
+	await deleteCloudflareDnsRecord({
+		token,
+		zoneId: input.cfZoneId,
+		recordId: input.cfRecordId,
+	})
+
+	await deleteMirror(input.organizationId, input.cfRecordId)
+	return { ok: true as const }
+}

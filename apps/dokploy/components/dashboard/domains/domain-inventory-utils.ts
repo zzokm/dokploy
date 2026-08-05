@@ -56,13 +56,15 @@ export const inventoryDnsBadgeFromValidation = (input: {
 };
 
 /**
- * SSL health without live ACME inspection: configured cert type + recent create window.
- * Let's Encrypt stays Pending briefly after create, then Valid.
+ * SSL health: configured cert type + optional live TLS probe + recent-create window.
+ * Live TLS (`tlsReachable === true`) wins over the recent-create Pending heuristic.
  */
 export const inventorySslBadge = (input: {
 	certificateType: "none" | "letsencrypt" | "custom";
 	https: boolean;
 	createdAt?: string;
+	/** When true, certificate is confirmed via TLS handshake. */
+	tlsReachable?: boolean | null;
 }): InventorySslBadge => {
 	if (input.certificateType === "none" || !input.https) {
 		return "None";
@@ -70,8 +72,15 @@ export const inventorySslBadge = (input: {
 	if (input.certificateType === "custom") {
 		return "Custom";
 	}
+	if (input.tlsReachable === true) {
+		return "Valid";
+	}
 	if (isRecentlyCreatedDomain(input.createdAt)) {
 		return "Pending";
+	}
+	// Established Let's Encrypt without a probe — assume Valid (app domains).
+	if (input.tlsReachable === false) {
+		return "Failed";
 	}
 	return "Valid";
 };
@@ -170,6 +179,23 @@ export const buildDomainEditHref = (input: {
 	return null;
 };
 
+/** Public URL for a provisioned hostname (opens in a new tab). */
+export const buildHostnameExternalUrl = (input: {
+	host: string;
+	https: boolean;
+}): string => {
+	const host = input.host.trim().replace(/^https?:\/\//i, "").replace(/\/$/, "");
+	const scheme = input.https ? "https" : "http";
+	return `${scheme}://${host}`;
+};
+
+export const openProjectButtonLabel = (
+	kind: "application" | "compose" | "preview" | "web-server",
+) => {
+	if (kind === "web-server") return "Open settings";
+	return "Open project";
+};
+
 export const dnsRecordManagedByLabel = (managedBy: string) => {
 	if (managedBy === "app_domain") return "App domain";
 	if (managedBy === "manual") return "Manual";
@@ -205,6 +231,7 @@ export const deriveInventoryWarnings = (input: {
 	https: boolean;
 	portLooksLikeHostPublish?: boolean;
 	port?: number | null;
+	tlsReachable?: boolean | null;
 }): InventoryWarning[] => {
 	const warnings: InventoryWarning[] = [];
 
@@ -237,6 +264,7 @@ export const deriveInventoryWarnings = (input: {
 		certificateType: input.certificateType,
 		https: input.https,
 		createdAt: input.createdAt,
+		tlsReachable: input.tlsReachable,
 	});
 	if (ssl === "Pending") {
 		warnings.push({

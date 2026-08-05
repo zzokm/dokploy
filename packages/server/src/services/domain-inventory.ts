@@ -12,6 +12,7 @@ import {
 	projects,
 	server,
 } from "@dokploy/server/db/schema";
+import { checkHostTlsCertificate } from "./tls-check";
 import { getWebServerSettings } from "./web-server-settings";
 
 export type DomainInventoryKind =
@@ -53,6 +54,11 @@ export type DomainInventoryItem = {
 	expectedServerIp: string | null;
 	/** Latest successful deploy finishedAt/createdAt for the linked service. */
 	lastSuccessfulDeployAt: string | null;
+	/**
+	 * Live TLS probe for hosts where we check it (web-server).
+	 * null = not probed; true/false = handshake presented a certificate.
+	 */
+	tlsReachable: boolean | null;
 };
 
 const mapSyncIso = (value: Date | string | null | undefined) => {
@@ -357,6 +363,7 @@ export const listDomainsInventory = async (
 			expectedServerIp: row.serverIp?.trim() || fallbackIp,
 			lastSuccessfulDeployAt:
 				deployMap.get(`app:${row.applicationId}`) ?? null,
+			tlsReachable: null,
 		});
 	}
 
@@ -393,6 +400,7 @@ export const listDomainsInventory = async (
 			expectedServerIp: row.serverIp?.trim() || fallbackIp,
 			lastSuccessfulDeployAt:
 				deployMap.get(`compose:${row.composeId}`) ?? null,
+			tlsReachable: null,
 		});
 	}
 
@@ -430,6 +438,7 @@ export const listDomainsInventory = async (
 			expectedServerIp: row.serverIp?.trim() || fallbackIp,
 			lastSuccessfulDeployAt:
 				deployMap.get(`app:${row.applicationId}`) ?? null,
+			tlsReachable: null,
 		});
 	}
 
@@ -449,6 +458,20 @@ export const listDomainsInventory = async (
 				),
 			)
 			.limit(1);
+
+		const httpsEnabled =
+			!!webSettings?.https &&
+			(webSettings?.certificateType === "letsencrypt" ||
+				webSettings?.certificateType === "custom");
+
+		let tlsReachable: boolean | null = null;
+		if (httpsEnabled) {
+			try {
+				tlsReachable = await checkHostTlsCertificate(webHost);
+			} catch {
+				tlsReachable = false;
+			}
+		}
 
 		items.push({
 			domainId: "web-server",
@@ -473,11 +496,15 @@ export const listDomainsInventory = async (
 			cfStatus: webSync ? "synced" : null,
 			cfZoneName: null,
 			cfDnsRecordId: null,
+			// Prefer stable createdAt so settings saves don't reset the SSL window.
 			createdAt:
-				webSettings?.updatedAt?.toISOString?.() ?? new Date().toISOString(),
+				webSettings?.createdAt?.toISOString?.() ??
+				webSettings?.updatedAt?.toISOString?.() ??
+				new Date().toISOString(),
 			lastSyncedAt: mapSyncIso(webSync?.lastSyncedAt),
 			expectedServerIp: fallbackIp,
 			lastSuccessfulDeployAt: null,
+			tlsReachable,
 		});
 	}
 

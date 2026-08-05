@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	buildDomainEditHref,
+	buildHostnameExternalUrl,
 	deriveInventoryWarnings,
 	deriveRoutedStatus,
 	dnsRecordManagedByLabel,
@@ -12,6 +13,7 @@ import {
 	inventorySyncBadge,
 	isPreviewableDnsRecordType,
 	latestSyncIso,
+	openProjectButtonLabel,
 	sanitizeDnsValidationError,
 } from "@/components/dashboard/domains/domain-inventory-utils";
 
@@ -100,6 +102,28 @@ describe("inventorySslBadge", () => {
 				createdAt: new Date().toISOString(),
 			}),
 		).toBe("Pending");
+	});
+
+	it("returns Valid for recently created web-server domains with live TLS", () => {
+		expect(
+			inventorySslBadge({
+				certificateType: "letsencrypt",
+				https: true,
+				createdAt: new Date().toISOString(),
+				tlsReachable: true,
+			}),
+		).toBe("Valid");
+	});
+
+	it("returns Failed when TLS probe fails after the pending window", () => {
+		expect(
+			inventorySslBadge({
+				certificateType: "letsencrypt",
+				https: true,
+				createdAt: "2020-01-01T00:00:00.000Z",
+				tlsReachable: false,
+			}),
+		).toBe("Failed");
 	});
 });
 
@@ -227,6 +251,27 @@ describe("buildDomainEditHref", () => {
 	});
 });
 
+describe("buildHostnameExternalUrl", () => {
+	it("uses https when configured", () => {
+		expect(
+			buildHostnameExternalUrl({ host: "app.example.com", https: true }),
+		).toBe("https://app.example.com");
+	});
+
+	it("uses http when https is off", () => {
+		expect(
+			buildHostnameExternalUrl({ host: "app.example.com", https: false }),
+		).toBe("http://app.example.com");
+	});
+});
+
+describe("openProjectButtonLabel", () => {
+	it("labels web-server as Open settings", () => {
+		expect(openProjectButtonLabel("web-server")).toBe("Open settings");
+		expect(openProjectButtonLabel("application")).toBe("Open project");
+	});
+});
+
 describe("dnsRecordManagedByLabel", () => {
 	it("maps app_domain to App domain", () => {
 		expect(dnsRecordManagedByLabel("app_domain")).toBe("App domain");
@@ -291,6 +336,18 @@ describe("deriveInventoryWarnings", () => {
 		expect(warnings.find((w) => w.kind === "cert_pending")?.label).toBe(
 			"Cert pending",
 		);
+	});
+
+	it("does not warn cert pending for a live HTTPS web-server domain", () => {
+		const warnings = deriveInventoryWarnings({
+			kind: "web-server",
+			createdAt: new Date().toISOString(),
+			lastSuccessfulDeployAt: null,
+			certificateType: "letsencrypt",
+			https: true,
+			tlsReachable: true,
+		});
+		expect(warnings.some((w) => w.kind === "cert_pending")).toBe(false);
 	});
 
 	it("returns no warnings for a healthy established application domain", () => {

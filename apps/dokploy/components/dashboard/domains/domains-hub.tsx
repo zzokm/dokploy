@@ -1,12 +1,13 @@
 "use client";
 
 import { formatDistanceToNow } from "date-fns";
-import { Cloud, FolderOpen, Globe2, KeyRound, Link2, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
+import { Cloud, FolderOpen, Globe2, KeyRound, Link2, ListTree, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DomainsInventoryTable } from "@/components/dashboard/domains/domains-inventory-table";
 import { latestSyncIso } from "@/components/dashboard/domains/domain-inventory-utils";
+import { ZoneDnsRecordsSheet } from "@/components/dashboard/domains/zone-dns-records-sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -61,8 +62,8 @@ const ConnectCloudflareEmpty = ({
 				<div className="min-w-0 space-y-0.5">
 					<p className="font-medium">1. Create an API token</p>
 					<p className="text-xs text-muted-foreground">
-						In Cloudflare: My Profile → API Tokens. Include Zone Read and DNS
-						Write.
+						In Cloudflare: My Profile → API Tokens. Include Zone → Zone → Read
+						and Zone → DNS → Edit (includes read/write).
 					</p>
 				</div>
 			</li>
@@ -112,8 +113,11 @@ const ConnectCloudflareEmpty = ({
 			</Button>
 			<p className="text-xs leading-relaxed text-muted-foreground">
 				Required permissions:{" "}
-				<span className="font-medium text-foreground">Zone Read</span> and{" "}
-				<span className="font-medium text-foreground">DNS Write</span>
+				<span className="font-medium text-foreground">Zone → Zone → Read</span>{" "}
+				and{" "}
+				<span className="font-medium text-foreground">
+					Zone → DNS → Edit (includes read/write)
+				</span>
 			</p>
 		</div>
 	</div>
@@ -147,6 +151,10 @@ const ConnectedNoAppDomainsEmpty = ({
 export const DomainsHub = () => {
 	const utils = api.useUtils();
 	const [tokenInput, setTokenInput] = useState("");
+	const [zoneRecords, setZoneRecords] = useState<{
+		cfZoneId: string;
+		zoneName: string;
+	} | null>(null);
 	const { data: settings } = api.cloudflareSettings.get.useQuery();
 	const { data: inventory, isPending: inventoryPending } =
 		api.domain.listInventory.useQuery();
@@ -156,8 +164,11 @@ export const DomainsHub = () => {
 		});
 
 	const setToken = api.cloudflareSettings.setToken.useMutation({
-		onSuccess: async () => {
+		onSuccess: async (result) => {
 			toast.success("Cloudflare connected — syncing domains…");
+			if (result.validation?.warning) {
+				toast.message(result.validation.warning);
+			}
 			setTokenInput("");
 			await utils.cloudflareSettings.get.invalidate();
 			await utils.cloudflareSettings.listZones.invalidate();
@@ -392,6 +403,21 @@ export const DomainsHub = () => {
 													{z.paused ? (
 														<Badge variant="outline">paused</Badge>
 													) : null}
+													<Button
+														type="button"
+														variant="secondary"
+														size="sm"
+														className="h-8"
+														onClick={() =>
+															setZoneRecords({
+																cfZoneId: z.cfZoneId,
+																zoneName: z.name,
+															})
+														}
+													>
+														<ListTree className="mr-1.5 size-3.5" aria-hidden />
+														Records
+													</Button>
 												</div>
 											</div>
 										</div>
@@ -402,6 +428,14 @@ export const DomainsHub = () => {
 					</CardContent>
 				</div>
 			</Card>
+			<ZoneDnsRecordsSheet
+				cfZoneId={zoneRecords?.cfZoneId ?? null}
+				zoneName={zoneRecords?.zoneName}
+				open={!!zoneRecords}
+				onOpenChange={(nextOpen) => {
+					if (!nextOpen) setZoneRecords(null);
+				}}
+			/>
 		</div>
 	);
 };

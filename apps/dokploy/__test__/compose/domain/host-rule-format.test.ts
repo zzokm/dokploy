@@ -1,4 +1,4 @@
-import type { Domain } from "@dokploy/server";
+﻿import type { Domain } from "@dokploy/server";
 import { createDomainLabels } from "@dokploy/server";
 import { describe, expect, it } from "vitest";
 import { parse, stringify } from "yaml";
@@ -28,6 +28,12 @@ describe("Host rule format regression tests", () => {
 		cfDnsRecordId: null,
 		cfProxied: true,
 		cfStatus: "pending",
+		dnsCredentialId: null,
+		dnsZoneId: null,
+		dnsZoneName: null,
+		dnsRecordId: null,
+		dnsStatus: "pending",
+		dnsOptions: {},
 		applicationId: "",
 		composeId: "",
 		domainType: "compose",

@@ -1,4 +1,4 @@
-import type { ApplicationNested, Domain } from "@dokploy/server";
+﻿import type { ApplicationNested, Domain } from "@dokploy/server";
 import {
 	buildForwardAuthEnv,
 	createRouterConfig,
@@ -24,6 +24,12 @@ const baseDomain: Domain = {
 	cfDnsRecordId: null,
 	cfProxied: true,
 	cfStatus: "pending",
+	dnsCredentialId: null,
+	dnsZoneId: null,
+	dnsZoneName: null,
+	dnsRecordId: null,
+	dnsStatus: "pending",
+	dnsOptions: {},
 	createdAt: "",
 	domainId: "domain-1",
 	host: "app.example.com",

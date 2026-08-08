@@ -1,5 +1,11 @@
 # Changelog — Operator MCP / domain DNS race
 
+## 2026-08-08 (later) — Multi-provider Auto DNS MCP
+
+- Prefer `dns.*` tools; keep `cloudflare.*` as aliases
+- Cloudflare Auto DNS always forces proxied + DNS-01 in upsert/provision
+- Docs aligned with `docs/dns/`
+
 ## 2026-08-08 — Operator MCP + `domain.provision`
 
 ### Why
@@ -14,8 +20,8 @@ The stock `@dokploy/mcp` package also lacked first-class Cloudflare zone/DNS too
 - Stable error codes: `dns_missing`, `dns_mismatch`, `cert_failed`, `backend_down`, `unauthorized`, …
 - Curated MCP package `@dokploy/operator-mcp` (`packages/mcp`) with opinionated tool names
 - Docs under `docs/mcp/` (catalog, auth, provisioning guide)
-- Default **DNS-only** (`proxied: false`) so Traefik **HTTP-01** works; document DNS-01 path for orange-cloud
+- Cloudflare Auto DNS: always proxied + DNS-01
 
 ### Race prevention
 
-`domain.provision` / `operator.domainProvision` **always** upserts Cloudflare DNS and waits for public resolution **before** creating the Dokploy/Traefik domain binding. That ordering is the product fix for the NXDOMAIN-before-DNS failure mode.
+`domain.provision` / `operator.domainProvision` **always** upserts DNS and waits for public resolution **before** creating the Dokploy/Traefik domain binding.

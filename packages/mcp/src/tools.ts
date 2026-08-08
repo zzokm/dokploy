@@ -45,12 +45,12 @@ export const tools: ToolDef[] = [
 		handler: async () => formatToolResult(await apiGet("/operator.whoami")),
 	},
 	{
-		name: "cloudflare.status",
+		name: "dns.status",
 		description:
-			"Show whether Cloudflare integration is configured/healthy for the org. Returns apiTokenLast4 only — never the token. Example: {}",
+			"Show whether Auto DNS / DNS provider credentials are configured for the org. Returns last4 only — never the token. Alias of cloudflare.status. Example: {}",
 		schema: empty,
 		annotations: {
-			title: "Cloudflare Status",
+			title: "DNS Provider Status",
 			readOnlyHint: true,
 			idempotentHint: true,
 			openWorldHint: true,
@@ -59,12 +59,26 @@ export const tools: ToolDef[] = [
 			formatToolResult(await apiGet("/operator.cloudflareStatus")),
 	},
 	{
-		name: "cloudflare.listZones",
+		name: "cloudflare.status",
 		description:
-			"List Cloudflare zones accessible via the configured Dokploy Cloudflare credential. Example: {}",
+			"Deprecated alias of dns.status. Show Cloudflare/DNS credential status (last4 only). Example: {}",
 		schema: empty,
 		annotations: {
-			title: "List Cloudflare Zones",
+			title: "Cloudflare Status (alias)",
+			readOnlyHint: true,
+			idempotentHint: true,
+			openWorldHint: true,
+		},
+		handler: async () =>
+			formatToolResult(await apiGet("/operator.cloudflareStatus")),
+	},
+	{
+		name: "dns.listZones",
+		description:
+			"List DNS zones accessible via the configured provider credential. Alias of cloudflare.listZones. Example: {}",
+		schema: empty,
+		annotations: {
+			title: "List DNS Zones",
 			readOnlyHint: true,
 			idempotentHint: true,
 			openWorldHint: true,
@@ -72,14 +86,50 @@ export const tools: ToolDef[] = [
 		handler: async () => formatToolResult(await apiGet("/operator.listZones")),
 	},
 	{
+		name: "cloudflare.listZones",
+		description:
+			"Deprecated alias of dns.listZones. List Cloudflare zones. Example: {}",
+		schema: empty,
+		annotations: {
+			title: "List Cloudflare Zones (alias)",
+			readOnlyHint: true,
+			idempotentHint: true,
+			openWorldHint: true,
+		},
+		handler: async () => formatToolResult(await apiGet("/operator.listZones")),
+	},
+	{
+		name: "dns.listRecords",
+		description:
+			"List DNS records in a zone. Params: cfZoneId or dnsZoneId. Example: {\"dnsZoneId\":\"abc123\"}",
+		schema: z.object({
+			dnsZoneId: z.string().min(1).optional().describe("Provider zone id"),
+			cfZoneId: z.string().min(1).optional().describe("Alias of dnsZoneId"),
+		}),
+		annotations: {
+			title: "List Zone DNS Records",
+			readOnlyHint: true,
+			idempotentHint: true,
+			openWorldHint: true,
+		},
+		handler: async (input) => {
+			const cfZoneId =
+				(input.dnsZoneId as string | undefined) ||
+				(input.cfZoneId as string | undefined);
+			return formatToolResult(
+				await apiGet("/operator.listZoneDnsRecords", { cfZoneId }),
+			);
+		},
+	},
+	{
 		name: "cloudflare.listDnsRecords",
 		description:
-			"List DNS records in a Cloudflare zone. Params: cfZoneId (required). Example: {\"cfZoneId\":\"abc123\"}",
+			"Deprecated alias of dns.listRecords. Params: cfZoneId. Example: {\"cfZoneId\":\"abc123\"}",
 		schema: z.object({
 			cfZoneId: z.string().min(1).describe("Cloudflare zone id"),
 		}),
 		annotations: {
-			title: "List Zone DNS Records",
+			title: "List Zone DNS Records (alias)",
 			readOnlyHint: true,
 			idempotentHint: true,
 			openWorldHint: true,
@@ -90,10 +140,11 @@ export const tools: ToolDef[] = [
 			),
 	},
 	{
-		name: "cloudflare.upsertDnsRecord",
+		name: "dns.upsertRecord",
 		description:
-			"Idempotent create/update of A/AAAA/CNAME/TXT/MX by zone+name. Default proxied=false (DNS-only) for Traefik HTTP-01. Example: {\"name\":\"app.example.com\",\"type\":\"A\",\"content\":\"23.94.107.153\",\"proxied\":false}",
+			"Idempotent create/update of A/AAAA/CNAME/TXT/MX by zone+name. Cloudflare Auto DNS forces proxied=true (ignore proxied:false). Example: {\"name\":\"app.example.com\",\"type\":\"A\",\"content\":\"23.94.107.153\"}",
 		schema: z.object({
+			dnsZoneId: z.string().optional(),
 			cfZoneId: z.string().optional(),
 			name: z.string().min(1),
 			type: z.enum(["A", "AAAA", "CNAME", "TXT", "MX"]),
@@ -107,19 +158,81 @@ export const tools: ToolDef[] = [
 			idempotentHint: true,
 			openWorldHint: true,
 		},
+		handler: async (input) => {
+			const { dnsZoneId, ...rest } = input;
+			return formatToolResult(
+				await apiPost("/operator.upsertDnsRecord", {
+					...rest,
+					cfZoneId: (dnsZoneId as string | undefined) || rest.cfZoneId,
+					// CF policy: always proxied
+					proxied: true,
+				}),
+			);
+		},
+	},
+	{
+		name: "cloudflare.upsertDnsRecord",
+		description:
+			"Deprecated alias of dns.upsertRecord. Cloudflare always forces proxied=true.",
+		schema: z.object({
+			cfZoneId: z.string().optional(),
+			name: z.string().min(1),
+			type: z.enum(["A", "AAAA", "CNAME", "TXT", "MX"]),
+			content: z.string().min(1),
+			proxied: z.boolean().optional(),
+			ttl: z.union([z.literal(1), z.number().int()]).optional(),
+			priority: z.number().int().optional(),
+		}),
+		annotations: {
+			title: "Upsert DNS Record (alias)",
+			idempotentHint: true,
+			openWorldHint: true,
+		},
 		handler: async (input) =>
-			formatToolResult(await apiPost("/operator.upsertDnsRecord", input)),
+			formatToolResult(
+				await apiPost("/operator.upsertDnsRecord", {
+					...input,
+					proxied: true,
+				}),
+			),
+	},
+	{
+		name: "dns.deleteRecord",
+		description:
+			"Delete a DNS record by zone+record ids. Example: {\"dnsZoneId\":\"z\",\"dnsRecordId\":\"r\"}",
+		schema: z.object({
+			dnsZoneId: z.string().min(1).optional(),
+			cfZoneId: z.string().min(1).optional(),
+			dnsRecordId: z.string().min(1).optional(),
+			cfRecordId: z.string().min(1).optional(),
+		}),
+		annotations: {
+			title: "Delete DNS Record",
+			destructiveHint: true,
+			openWorldHint: true,
+		},
+		handler: async (input) =>
+			formatToolResult(
+				await apiPost("/operator.deleteDnsRecord", {
+					cfZoneId:
+						(input.dnsZoneId as string | undefined) ||
+						(input.cfZoneId as string | undefined),
+					cfRecordId:
+						(input.dnsRecordId as string | undefined) ||
+						(input.cfRecordId as string | undefined),
+				}),
+			),
 	},
 	{
 		name: "cloudflare.deleteDnsRecord",
 		description:
-			"Delete a DNS record by Cloudflare ids. Example: {\"cfZoneId\":\"z\",\"cfRecordId\":\"r\"}",
+			"Deprecated alias of dns.deleteRecord. Example: {\"cfZoneId\":\"z\",\"cfRecordId\":\"r\"}",
 		schema: z.object({
 			cfZoneId: z.string().min(1),
 			cfRecordId: z.string().min(1),
 		}),
 		annotations: {
-			title: "Delete DNS Record",
+			title: "Delete DNS Record (alias)",
 			destructiveHint: true,
 			openWorldHint: true,
 		},

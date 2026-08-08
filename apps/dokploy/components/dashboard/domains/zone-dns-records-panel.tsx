@@ -57,10 +57,19 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { api, type RouterOutputs } from "@/utils/api";
+import { api } from "@/utils/api";
 
-type ZoneRecord =
-	RouterOutputs["cloudflareSettings"]["listZoneDnsRecords"]["records"][number];
+type ZoneRecord = {
+	cfRecordId: string;
+	type: string;
+	name: string;
+	content: string;
+	ttl: number;
+	proxied: boolean;
+	priority: number | null;
+	managedBy: "app_domain" | "mail_stack" | "manual";
+	lastSyncedAt: Date | string | null;
+};
 
 const RECORD_TYPES = ["A", "AAAA", "CNAME", "TXT", "MX"] as const;
 
@@ -126,21 +135,50 @@ type ZoneDnsRecordsPanelProps = {
 	id?: string;
 	cfZoneId: string;
 	zoneName: string;
+	/** Provider id; defaults to cloudflare for legacy call sites. */
+	provider?: string;
+	credentialId?: string | null;
 };
 
 /**
- * Inline DNS record manager rendered directly beneath a Cloudflare zone row.
- * Editor and delete confirmation are separate dialogs, so dismissing either one
- * never collapses the expanded list.
+ * Inline DNS record manager beneath a zone row (any Auto DNS provider).
  */
 export const ZoneDnsRecordsPanel = ({
 	id,
 	cfZoneId,
 	zoneName,
+	provider = "cloudflare",
+	credentialId,
 }: ZoneDnsRecordsPanelProps) => {
 	const utils = api.useUtils();
-	const { data, isPending, isError, error, refetch } =
-		api.cloudflareSettings.listZoneDnsRecords.useQuery({ cfZoneId });
+	const isCloudflare = provider === "cloudflare";
+
+	const cfQuery = api.cloudflareSettings.listZoneDnsRecords.useQuery(
+		{ cfZoneId },
+		{ enabled: isCloudflare },
+	);
+	const genericQuery = api.dnsProviders.listZoneRecords.useQuery(
+		{
+			provider: provider as
+				| "cloudflare"
+				| "digitalocean"
+				| "hetzner"
+				| "route53"
+				| "gcloud"
+				| "ns1"
+				| "akamai",
+			zoneExternalId: cfZoneId,
+			credentialId: credentialId ?? undefined,
+			live: true,
+		},
+		{ enabled: !isCloudflare },
+	);
+
+	const data = isCloudflare ? cfQuery.data : genericQuery.data;
+	const isPending = isCloudflare ? cfQuery.isPending : genericQuery.isPending;
+	const isError = isCloudflare ? cfQuery.isError : genericQuery.isError;
+	const error = isCloudflare ? cfQuery.error : genericQuery.error;
+	const refetch = isCloudflare ? cfQuery.refetch : genericQuery.refetch;
 
 	const [isRefreshing, setIsRefreshing] = useState(false);
 	const [editorOpen, setEditorOpen] = useState(false);
@@ -149,7 +187,11 @@ export const ZoneDnsRecordsPanel = ({
 	const [deleteTarget, setDeleteTarget] = useState<ZoneRecord | null>(null);
 
 	const afterMutation = async () => {
-		await utils.cloudflareSettings.listZoneDnsRecords.invalidate({ cfZoneId });
+		if (isCloudflare) {
+			await utils.cloudflareSettings.listZoneDnsRecords.invalidate({ cfZoneId });
+		} else {
+			await utils.dnsProviders.listZoneRecords.invalidate();
+		}
 		await utils.domain.listInventory.invalidate();
 	};
 
@@ -180,10 +222,32 @@ export const ZoneDnsRecordsPanel = ({
 		onError: (e) => toast.error(e.message),
 	});
 
-	const titleZone = data?.zoneName || zoneName;
-	const records = data?.records ?? [];
-	const canProxy = isProxyableDnsRecordType(form.type);
-	const isSaving = createMutation.isPending || updateMutation.isPending;
+	const upsertGeneric = api.dnsProviders.upsertZoneRecord.useMutation({
+		onSuccess: async () => {
+			toast.success(editing ? "DNS record updated" : "DNS record created");
+			setEditorOpen(false);
+			await afterMutation();
+		},
+		onError: (e) => toast.error(e.message),
+	});
+
+	const deleteGeneric = api.dnsProviders.deleteZoneRecord.useMutation({
+		onSuccess: async () => {
+			toast.success("DNS record deleted");
+			setDeleteTarget(null);
+			await afterMutation();
+		},
+		onError: (e) => toast.error(e.message),
+	});
+
+	const titleZone =
+		(isCloudflare ? cfQuery.data?.zoneName : undefined) || zoneName;
+	const records = (data?.records ?? []) as ZoneRecord[];
+	const canProxy = isCloudflare && isProxyableDnsRecordType(form.type);
+	const isSaving =
+		createMutation.isPending ||
+		updateMutation.isPending ||
+		upsertGeneric.isPending;
 
 	const handleRefresh = async () => {
 		setIsRefreshing(true);
@@ -235,6 +299,27 @@ export const ZoneDnsRecordsPanel = ({
 			priority: form.type === "MX" ? Number(form.priority) || 0 : undefined,
 		};
 
+		if (!isCloudflare) {
+			upsertGeneric.mutate({
+				provider: provider as
+					| "digitalocean"
+					| "hetzner"
+					| "route53"
+					| "gcloud"
+					| "ns1"
+					| "akamai"
+					| "cloudflare",
+				zoneExternalId: cfZoneId,
+				credentialId: credentialId ?? undefined,
+				name,
+				type: form.type,
+				content,
+				ttl: parseDnsTtl(form.ttl),
+				priority: form.type === "MX" ? Number(form.priority) || 0 : undefined,
+			});
+			return;
+		}
+
 		if (editing) {
 			updateMutation.mutate({
 				cfZoneId,
@@ -262,7 +347,7 @@ export const ZoneDnsRecordsPanel = ({
 						{data
 							? `${records.length} record${records.length === 1 ? "" : "s"} · `
 							: null}
-						Cloudflare is the source of truth
+						Provider is the source of truth
 					</p>
 					<div className="flex flex-wrap items-center gap-2">
 						<Button
@@ -296,7 +381,7 @@ export const ZoneDnsRecordsPanel = ({
 						</div>
 					) : isError ? (
 						<AlertBlock type="error">
-							{error.message || "Could not load DNS records."}
+							{error?.message || "Could not load DNS records."}
 						</AlertBlock>
 					) : !records.length ? (
 						<div className="flex min-h-[8rem] flex-col items-center justify-center gap-3 rounded-lg border border-dashed text-center">
@@ -540,24 +625,43 @@ export const ZoneDnsRecordsPanel = ({
 							<span className="font-mono">
 								{deleteTarget?.type} {deleteTarget?.name}
 							</span>{" "}
-							from Cloudflare. This cannot be undone.
+							from {isCloudflare ? "Cloudflare" : "the DNS provider"}. This
+							cannot be undone.
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel>Cancel</AlertDialogCancel>
 						<AlertDialogAction
 							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-							disabled={deleteMutation.isPending}
+							disabled={deleteMutation.isPending || deleteGeneric.isPending}
 							onClick={(event) => {
 								event.preventDefault();
 								if (!deleteTarget) return;
+								if (!isCloudflare) {
+									deleteGeneric.mutate({
+										provider: provider as
+											| "digitalocean"
+											| "hetzner"
+											| "route53"
+											| "gcloud"
+											| "ns1"
+											| "akamai"
+											| "cloudflare",
+										zoneExternalId: cfZoneId,
+										recordExternalId: deleteTarget.cfRecordId,
+										credentialId: credentialId ?? undefined,
+									});
+									return;
+								}
 								deleteMutation.mutate({
 									cfZoneId,
 									cfRecordId: deleteTarget.cfRecordId,
 								});
 							}}
 						>
-							{deleteMutation.isPending ? "Deleting…" : "Delete"}
+							{deleteMutation.isPending || deleteGeneric.isPending
+								? "Deleting…"
+								: "Delete"}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

@@ -11,6 +11,12 @@ import {
 	getRegisteredAdapter,
 	resolveAcmeForProvider,
 } from "@dokploy/server/services/dns/orchestration";
+import {
+	listMirroredDnsRecords,
+	listMirroredDnsZones,
+	syncAllDnsZonesForOrg,
+	syncDnsZonesForCredential,
+} from "@dokploy/server/services/dns/sync-zones";
 import { DNS_PROVIDER_CAPABILITIES } from "@dokploy/server/services/dns/types";
 import { ensureTraefikDnsProviderToken } from "@dokploy/server/services/dns/ensure-traefik-dns-token";
 import { canSealSecrets } from "@dokploy/server/utils/crypto/seal";
@@ -91,6 +97,16 @@ export const dnsProvidersRouter = createTRPCRouter({
 					provider: input.provider,
 					credentialId: row.id,
 				}).catch(() => {});
+			}
+
+			// Best-effort zone mirror sync
+			try {
+				await syncDnsZonesForCredential({
+					organizationId: ctx.session.activeOrganizationId,
+					credentialId: row.id,
+				});
+			} catch {
+				// Token valid but zone list may fail transiently
 			}
 
 			return row;
@@ -178,5 +194,222 @@ export const dnsProvidersRouter = createTRPCRouter({
 				});
 			}
 			return adapter.listZones({ secret: resolved.secret });
+		}),
+
+	/** Sync vault credentials into dns_zone mirrors (+ optional CF legacy sync). */
+	syncZones: protectedProcedure
+		.input(
+			z
+				.object({
+					credentialId: z.string().min(1).optional(),
+					syncRecords: z.boolean().optional(),
+				})
+				.optional(),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const orgId = ctx.session.activeOrganizationId;
+			try {
+				if (input?.credentialId) {
+					const result = await syncDnsZonesForCredential({
+						organizationId: orgId,
+						credentialId: input.credentialId,
+						syncRecords: input.syncRecords,
+					});
+					return { ...result, credentials: 1 };
+				}
+				return await syncAllDnsZonesForOrg(orgId);
+			} catch (e) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: e instanceof Error ? e.message : "Failed to sync DNS zones",
+				});
+			}
+		}),
+
+	/** List mirrored zones from all providers (generic dns_zone table). */
+	listZones: protectedProcedure.query(async ({ ctx }) => {
+		const rows = await listMirroredDnsZones(ctx.session.activeOrganizationId);
+		return rows.map((z) => ({
+			id: z.id,
+			provider: z.provider,
+			zoneExternalId: z.externalId,
+			/** Compat alias for CF UI that still expects cfZoneId */
+			cfZoneId: z.externalId,
+			name: z.name,
+			status: z.status,
+			paused: z.paused,
+			lastSyncedAt: z.lastSyncedAt,
+			credentialId: z.credentialId,
+		}));
+	}),
+
+	listZoneRecords: protectedProcedure
+		.input(
+			z.object({
+				provider: providerIdSchema,
+				zoneExternalId: z.string().min(1),
+				credentialId: z.string().min(1).optional(),
+				live: z.boolean().optional(),
+			}),
+		)
+		.query(async ({ ctx, input }) => {
+			const orgId = ctx.session.activeOrganizationId;
+			if (input.live) {
+				ensureDnsAdaptersRegistered();
+				const resolved = await resolveDnsProviderSecret({
+					organizationId: orgId,
+					credentialId: input.credentialId,
+					provider: input.provider,
+				});
+				if (!resolved) {
+					throw new TRPCError({
+						code: "NOT_FOUND",
+						message: "DNS provider credential not found",
+					});
+				}
+				const adapter = getRegisteredAdapter(resolved.provider);
+				if (!adapter) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: `Adapter not registered for ${resolved.provider}`,
+					});
+				}
+				const records = await adapter.listRecords(
+					{ secret: resolved.secret },
+					input.zoneExternalId,
+				);
+				return {
+					records: records.map((r) => ({
+						cfRecordId: r.id,
+						externalId: r.id,
+						type: String(r.type),
+						name: r.name,
+						content: r.content,
+						ttl: r.ttl ?? 1,
+						proxied: r.options?.proxied === true,
+						priority:
+							typeof r.options?.priority === "number"
+								? r.options.priority
+								: null,
+						managedBy: "manual" as const,
+						lastSyncedAt: null,
+					})),
+				};
+			}
+
+			const rows = await listMirroredDnsRecords({
+				organizationId: orgId,
+				provider: input.provider,
+				zoneExternalId: input.zoneExternalId,
+			});
+			return {
+				records: rows.map((r) => ({
+					cfRecordId: r.externalId,
+					externalId: r.externalId,
+					type: r.type,
+					name: r.name,
+					content: r.content,
+					ttl: r.ttl,
+					proxied: (r.options as { proxied?: boolean } | null)?.proxied === true,
+					priority:
+						typeof (r.options as { priority?: number } | null)?.priority ===
+						"number"
+							? (r.options as { priority?: number }).priority ?? null
+							: null,
+					managedBy: r.managedBy,
+					lastSyncedAt: r.lastSyncedAt,
+				})),
+			};
+		}),
+
+	upsertZoneRecord: protectedProcedure
+		.input(
+			z.object({
+				provider: providerIdSchema,
+				zoneExternalId: z.string().min(1),
+				credentialId: z.string().min(1).optional(),
+				name: z.string().min(1),
+				type: z.enum(["A", "AAAA", "CNAME", "TXT", "MX"]),
+				content: z.string().min(1),
+				ttl: z.number().int().optional(),
+				priority: z.number().int().optional(),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			ensureDnsAdaptersRegistered();
+			const resolved = await resolveDnsProviderSecret({
+				organizationId: ctx.session.activeOrganizationId,
+				credentialId: input.credentialId,
+				provider: input.provider,
+			});
+			if (!resolved) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "DNS provider credential not found",
+				});
+			}
+			const adapter = getRegisteredAdapter(resolved.provider);
+			if (!adapter) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: `Adapter not registered for ${resolved.provider}`,
+				});
+			}
+			const record = await adapter.upsertRecord(
+				{ secret: resolved.secret },
+				{
+					zoneId: input.zoneExternalId,
+					name: input.name,
+					type: input.type,
+					content: input.content,
+					ttl: input.ttl,
+					options:
+						input.priority !== undefined
+							? { priority: input.priority }
+							: undefined,
+				},
+			);
+			return {
+				cfRecordId: record.id,
+				externalId: record.id,
+				...record,
+			};
+		}),
+
+	deleteZoneRecord: protectedProcedure
+		.input(
+			z.object({
+				provider: providerIdSchema,
+				zoneExternalId: z.string().min(1),
+				recordExternalId: z.string().min(1),
+				credentialId: z.string().min(1).optional(),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			ensureDnsAdaptersRegistered();
+			const resolved = await resolveDnsProviderSecret({
+				organizationId: ctx.session.activeOrganizationId,
+				credentialId: input.credentialId,
+				provider: input.provider,
+			});
+			if (!resolved) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "DNS provider credential not found",
+				});
+			}
+			const adapter = getRegisteredAdapter(resolved.provider);
+			if (!adapter) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: `Adapter not registered for ${resolved.provider}`,
+				});
+			}
+			await adapter.deleteRecord(
+				{ secret: resolved.secret },
+				input.zoneExternalId,
+				input.recordExternalId,
+			);
+			return { ok: true as const };
 		}),
 });

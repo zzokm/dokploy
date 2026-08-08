@@ -192,8 +192,11 @@ describe("provisionDomain ordering", () => {
 
 		expect(order).toEqual(["dns", "wait", "domain"])
 		expect(result.ok).toBe(true)
-		expect(result.acmeChallenge).toBe("http-01")
-		expect(result.steps[0]).toMatch(/resolved_target_ip/)
+		// CF Auto DNS always forces proxied + DNS-01 (input.proxied ignored)
+		expect(result.acmeChallenge).toBe("dns-01")
+		expect(result.proxied).toBe(true)
+		expect(result.steps).toContain("dns_proxy_policy:coerced_proxied_true")
+		expect(result.steps.some((s) => /resolved_target_ip/.test(s))).toBe(true)
 	})
 
 	it("dryRun stops before domain create", async () => {
@@ -209,15 +212,16 @@ describe("provisionDomain ordering", () => {
 		expect(result.steps).toContain("dry_run_stop")
 	})
 
-	it("defaults to DNS-only (proxied=false) for HTTP-01", async () => {
+	it("forces Cloudflare proxied=true + DNS-01 (ignores proxied=false)", async () => {
 		await provisionDomain({
 			organizationId: "org1",
 			host: "jelly.example.com",
 			domainType: "application",
 			applicationId: "app1",
+			proxied: false,
 		})
 		expect(upsertDnsRecordByName).toHaveBeenCalledWith(
-			expect.objectContaining({ proxied: false, type: "A" }),
+			expect.objectContaining({ proxied: true, type: "A" }),
 		)
 	})
 })

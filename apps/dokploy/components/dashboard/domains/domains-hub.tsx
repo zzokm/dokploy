@@ -161,35 +161,118 @@ export const DomainsHub = () => {
 	const [tokenInput, setTokenInput] = useState("");
 	const [expandedZoneIds, setExpandedZoneIds] = useState<string[]>([]);
 	const { data: settings } = api.cloudflareSettings.get.useQuery();
+	const { data: vaultCreds } = api.dnsProviders.list.useQuery();
 	const { data: inventory, isPending: inventoryPending } =
 		api.domain.listInventory.useQuery();
-	const { data: zones, refetch, isPending: zonesPending } =
+	const { data: cfZones, refetch: refetchCfZones, isPending: cfZonesPending } =
 		api.cloudflareSettings.listZones.useQuery(undefined, {
 			enabled: !!settings?.connected,
 		});
+	const {
+		data: mirroredZones,
+		refetch: refetchMirrored,
+		isPending: mirroredPending,
+	} = api.dnsProviders.listZones.useQuery(undefined, {
+		enabled: (vaultCreds?.length ?? 0) > 0 || !!settings?.connected,
+	});
+
+	const hasAnyProvider =
+		!!settings?.connected || (vaultCreds?.length ?? 0) > 0;
+
+	const zones = useMemo(() => {
+		const byKey = new Map<
+			string,
+			{
+				key: string;
+				provider: string;
+				zoneExternalId: string;
+				cfZoneId: string;
+				name: string;
+				status: "active" | "pending" | "disabled";
+				paused: boolean;
+				lastSyncedAt: Date | string | null;
+				credentialId: string | null;
+			}
+		>();
+
+		for (const z of mirroredZones ?? []) {
+			const key = `${z.provider}:${z.zoneExternalId}`;
+			byKey.set(key, {
+				key,
+				provider: z.provider,
+				zoneExternalId: z.zoneExternalId,
+				cfZoneId: z.zoneExternalId,
+				name: z.name,
+				status: z.status,
+				paused: z.paused,
+				lastSyncedAt: z.lastSyncedAt,
+				credentialId: z.credentialId,
+			});
+		}
+
+		// CF legacy table may have zones before vault mirror is populated
+		for (const z of cfZones ?? []) {
+			const key = `cloudflare:${z.cfZoneId}`;
+			if (!byKey.has(key)) {
+				byKey.set(key, {
+					key,
+					provider: "cloudflare",
+					zoneExternalId: z.cfZoneId,
+					cfZoneId: z.cfZoneId,
+					name: z.name,
+					status: z.status,
+					paused: z.paused,
+					lastSyncedAt: z.lastSyncedAt,
+					credentialId: null,
+				});
+			}
+		}
+
+		return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
+	}, [mirroredZones, cfZones]);
 
 	const setToken = api.cloudflareSettings.setToken.useMutation({
 		onSuccess: async (result) => {
-			toast.success("Cloudflare connected — syncing domains…");
+			toast.success("Cloudflare connected — syncing zones…");
 			if (result.validation?.warning) {
 				toast.message(result.validation.warning);
 			}
 			setTokenInput("");
 			await utils.cloudflareSettings.get.invalidate();
 			await utils.cloudflareSettings.listZones.invalidate();
+			await utils.dnsProviders.listZones.invalidate();
+			await utils.dnsProviders.list.invalidate();
 			await utils.domain.listInventory.invalidate();
-			await refetch();
+			await refetchCfZones();
+			await refetchMirrored();
 		},
 		onError: (e) => toast.error(e.message),
 	});
 
-	const syncZones = api.cloudflareSettings.syncZones.useMutation({
-		onSuccess: async () => {
-			toast.success("Domains synced");
-			await refetch();
+	const syncCfZones = api.cloudflareSettings.syncZones.useMutation();
+	const syncVaultZones = api.dnsProviders.syncZones.useMutation();
+
+	const syncZones = {
+		isPending: syncCfZones.isPending || syncVaultZones.isPending,
+		mutate: () => {
+			void (async () => {
+				try {
+					if (settings?.connected) {
+						await syncCfZones.mutateAsync();
+					}
+					if ((vaultCreds?.length ?? 0) > 0) {
+						await syncVaultZones.mutateAsync({});
+					}
+					toast.success("Zones synced");
+					await refetchCfZones();
+					await refetchMirrored();
+					await utils.dnsProviders.listZones.invalidate();
+				} catch (e) {
+					toast.error(e instanceof Error ? e.message : "Failed to sync zones");
+				}
+			})();
 		},
-		onError: (e) => toast.error(e.message),
-	});
+	};
 
 	const syncDns = api.cloudflareSettings.syncDns.useMutation({
 		onSuccess: async (data) => {
@@ -208,6 +291,7 @@ export const DomainsHub = () => {
 			await utils.cloudflareSettings.previewAppDns.invalidate();
 			await utils.cloudflareSettings.previewAppDnsForDomain.invalidate();
 			await utils.cloudflareSettings.listZones.invalidate();
+			await utils.dnsProviders.listZones.invalidate();
 			await utils.domain.byApplicationId.invalidate();
 			await utils.domain.byComposeId.invalidate();
 			await utils.domain.listInventory.invalidate();
@@ -215,11 +299,11 @@ export const DomainsHub = () => {
 		onError: (e) => toast.error(e.message),
 	});
 
-	const toggleZoneRecords = (cfZoneId: string) => {
+	const toggleZoneRecords = (zoneKey: string) => {
 		setExpandedZoneIds((prev) =>
-			prev.includes(cfZoneId)
-				? prev.filter((id) => id !== cfZoneId)
-				: [...prev, cfZoneId],
+			prev.includes(zoneKey)
+				? prev.filter((id) => id !== zoneKey)
+				: [...prev, zoneKey],
 		);
 	};
 
@@ -235,20 +319,21 @@ export const DomainsHub = () => {
 	const provisionedCount =
 		inventory?.filter((row) => row.kind !== "web-server").length ?? 0;
 	const hasInventory = (inventory?.length ?? 0) > 0;
-	const zoneCount = zones?.length ?? 0;
+	const zoneCount = zones.length;
+	const zonesPending = cfZonesPending || mirroredPending;
 	const showConnectedThinEmpty =
 		!inventoryPending && provisionedCount === 0 && zoneCount > 0;
 
 	const lastSyncedAt = useMemo(() => {
 		return latestSyncIso([
 			settings?.updatedAt ?? null,
-			...(zones?.map((z) =>
+			...zones.map((z) =>
 				z.lastSyncedAt
 					? z.lastSyncedAt instanceof Date
 						? z.lastSyncedAt.toISOString()
 						: String(z.lastSyncedAt)
 					: null,
-			) ?? []),
+			),
 			...(inventory?.map((row) => row.lastSyncedAt) ?? []),
 		]);
 	}, [settings?.updatedAt, zones, inventory]);
@@ -257,7 +342,7 @@ export const DomainsHub = () => {
 		? `Last synced ${formatDistanceToNow(new Date(lastSyncedAt), { addSuffix: true })}`
 		: "Not synced yet";
 
-	if (!settings?.connected) {
+	if (!hasAnyProvider) {
 		return (
 			<div className="flex w-full flex-col gap-4">
 				<Card className="mx-auto h-full w-full max-w-5xl rounded-xl bg-sidebar p-2.5">
@@ -315,8 +400,10 @@ export const DomainsHub = () => {
 								Domains
 							</CardTitle>
 							<CardDescription className="break-words">
-								All hostnames across apps, compose, and the web server · Auto
-								DNS ****{settings.apiTokenLast4}
+								All hostnames across apps, compose, and the web server
+								{settings?.apiTokenLast4
+									? ` · Auto DNS ****${settings.apiTokenLast4}`
+									: ""}
 								<span className="text-muted-foreground"> · {lastSyncedLabel}</span>
 							</CardDescription>
 						</div>
@@ -393,11 +480,11 @@ export const DomainsHub = () => {
 							) : (
 								<div className="flex w-full flex-col gap-2">
 									{zones.map((z, index) => {
-										const expanded = expandedZoneIds.includes(z.cfZoneId);
-										const panelId = `zone-records-${z.cfZoneId}`;
+										const expanded = expandedZoneIds.includes(z.key);
+										const panelId = `zone-records-${z.key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 										return (
 											<div
-												key={z.cfZoneId}
+												key={z.key}
 												className="w-full animate-in fade-in-0 slide-in-from-bottom-1 rounded-lg bg-sidebar p-1 duration-300 fill-mode-both"
 												style={{
 													animationDelay: `${Math.min(index, 8) * 40}ms`,
@@ -410,10 +497,14 @@ export const DomainsHub = () => {
 																{z.name}
 															</span>
 															<span className="text-xs text-muted-foreground">
-																Proxy managed per application domain
+																{z.provider}
+																{z.provider === "cloudflare"
+																	? " · CDN proxy on (policy)"
+																	: " · managed DNS"}
 															</span>
 														</div>
 														<div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+															<Badge variant="outline">{z.provider}</Badge>
 															<Badge variant={statusVariant(z.status)}>
 																{z.status}
 															</Badge>
@@ -427,7 +518,7 @@ export const DomainsHub = () => {
 																className="h-8"
 																aria-expanded={expanded}
 																aria-controls={panelId}
-																onClick={() => toggleZoneRecords(z.cfZoneId)}
+																onClick={() => toggleZoneRecords(z.key)}
 															>
 																<ListTree
 																	className="mr-1.5 size-3.5"
@@ -449,6 +540,8 @@ export const DomainsHub = () => {
 															id={panelId}
 															cfZoneId={z.cfZoneId}
 															zoneName={z.name}
+															provider={z.provider}
+															credentialId={z.credentialId}
 														/>
 													) : null}
 												</div>

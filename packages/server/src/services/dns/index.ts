@@ -3,6 +3,7 @@ export * from "./registry";
 export * from "./credentials";
 export * from "./orchestration";
 export * from "./traefik-dns-env";
+export * from "./sync-zones";
 export { ensureTraefikDnsProviderToken } from "./ensure-traefik-dns-token";
 export {
 	registerBuiltinDnsAdapters,

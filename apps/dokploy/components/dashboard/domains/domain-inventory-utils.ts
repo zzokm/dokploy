@@ -28,7 +28,15 @@ export const isRecentlyCreatedDomain = (createdAt?: string) => {
 
 /** Fallback DNS badge from Cloudflare sync fields before live validation finishes. */
 export const inventoryDnsBadgeFromCfStatus = (input: {
-	dnsProvider: "none" | "cloudflare";
+	dnsProvider:
+		| "none"
+		| "cloudflare"
+		| "digitalocean"
+		| "hetzner"
+		| "route53"
+		| "gcloud"
+		| "ns1"
+		| "akamai";
 	cfStatus: "synced" | "pending" | "error" | null;
 }): InventoryDnsBadge => {
 	if (input.dnsProvider !== "cloudflare") {

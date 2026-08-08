@@ -14,7 +14,7 @@ import { ShowStorageActions } from "./servers/actions/show-storage-actions";
 import { ShowTraefikActions } from "./servers/actions/show-traefik-actions";
 import { ToggleDockerCleanup } from "./servers/actions/toggle-docker-cleanup";
 import { UpdateServer } from "./web-server/update-server";
-import { CloudflareSettingsCard } from "./dns-providers/cloudflare-settings-card";
+import { DnsProvidersSection } from "./dns-providers/dns-providers-section";
 
 export const WebServer = () => {
 	const { data: webServerSettings } =
@@ -52,9 +52,7 @@ export const WebServer = () => {
 						</div>
 
 						<div className="animate-in fade-in-0 slide-in-from-bottom-2 space-y-3 duration-300">
-							<div className="grid gap-4 md:grid-cols-2">
-								<CloudflareSettingsCard />
-							</div>
+							<DnsProvidersSection />
 						</div>
 
 						<div className="flex items-center flex-wrap justify-between gap-4">

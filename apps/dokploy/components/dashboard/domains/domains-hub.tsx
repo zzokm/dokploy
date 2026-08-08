@@ -39,7 +39,7 @@ const statusVariant = (status: "active" | "pending" | "disabled") => {
 	return "outline";
 };
 
-const ConnectCloudflareEmpty = ({
+const ConnectDnsProviderEmpty = ({
 	tokenInput,
 	setTokenInput,
 	onConnect,
@@ -57,11 +57,11 @@ const ConnectCloudflareEmpty = ({
 			</div>
 			<div className="space-y-1.5">
 				<p className="text-base font-medium text-foreground">
-					Connect Cloudflare
+					Connect a DNS provider
 				</p>
 				<p className="text-sm leading-relaxed text-muted-foreground">
-					Import your domains and automate A records for applications,
-					compose services, and the web server.
+					Import zones and automate A records for applications, compose
+					services, and the web server (Auto DNS).
 				</p>
 			</div>
 		</div>
@@ -74,8 +74,8 @@ const ConnectCloudflareEmpty = ({
 				<div className="min-w-0 space-y-0.5">
 					<p className="font-medium">1. Create an API token</p>
 					<p className="text-xs text-muted-foreground">
-						In Cloudflare: My Profile → API Tokens. Include Zone → Zone → Read
-						and Zone → DNS → Edit (includes read/write).
+						For Cloudflare: Zone → Zone → Read and Zone → DNS → Edit. Other
+						providers use their DNS token scopes.
 					</p>
 				</div>
 			</li>
@@ -86,7 +86,7 @@ const ConnectCloudflareEmpty = ({
 				<div className="min-w-0 space-y-0.5">
 					<p className="font-medium">2. Connect here</p>
 					<p className="text-xs text-muted-foreground">
-						Paste the token below. We store it encrypted and sync your domains.
+						Paste the token below. We store it sealed and sync your zones.
 					</p>
 				</div>
 			</li>
@@ -97,7 +97,7 @@ const ConnectCloudflareEmpty = ({
 				<div className="min-w-0 space-y-0.5">
 					<p className="font-medium">3. Attach from a project</p>
 					<p className="text-xs text-muted-foreground">
-						Open a service Domains tab and add a hostname under a synced domain.
+						Open a service Domains tab and add a hostname under a synced zone.
 					</p>
 				</div>
 			</li>
@@ -124,12 +124,8 @@ const ConnectCloudflareEmpty = ({
 				Connect Cloudflare
 			</Button>
 			<p className="text-xs leading-relaxed text-muted-foreground">
-				Required permissions:{" "}
-				<span className="font-medium text-foreground">Zone → Zone → Read</span>{" "}
-				and{" "}
-				<span className="font-medium text-foreground">
-					Zone → DNS → Edit (includes read/write)
-				</span>
+				Add DigitalOcean / Hetzner from Web Server → DNS providers. Cloudflare
+				Auto DNS always uses CDN proxy + DNS-01.
 			</p>
 		</div>
 	</div>
@@ -150,8 +146,8 @@ const ConnectedNoAppDomainsEmpty = ({
 				project.
 			</p>
 			<p className="text-xs leading-relaxed text-muted-foreground">
-				Cloudflare domains are ready. Open any application or compose service,
-				go to Domains, and add a hostname.
+				Synced zones are ready. Open any application or compose service, go to
+				Domains, and add a hostname with Auto DNS enabled.
 			</p>
 		</div>
 		<Button type="button" variant="secondary" asChild>
@@ -272,8 +268,8 @@ export const DomainsHub = () => {
 								Domains
 							</CardTitle>
 							<CardDescription>
-								Connect Cloudflare to import domains and automate DNS for your
-								applications.
+								Connect a DNS provider to import zones and automate DNS for your
+								applications (Auto DNS).
 							</CardDescription>
 						</CardHeader>
 						<CardContent className="space-y-8 border-t py-8 sm:py-10">
@@ -295,7 +291,7 @@ export const DomainsHub = () => {
 								</section>
 							) : null}
 
-							<ConnectCloudflareEmpty
+							<ConnectDnsProviderEmpty
 								tokenInput={tokenInput}
 								setTokenInput={setTokenInput}
 								onConnect={handleConnect}
@@ -319,8 +315,8 @@ export const DomainsHub = () => {
 								Domains
 							</CardTitle>
 							<CardDescription className="break-words">
-								All hostnames across apps, compose, and the web server ·
-								Cloudflare ****{settings.apiTokenLast4}
+								All hostnames across apps, compose, and the web server · Auto
+								DNS ****{settings.apiTokenLast4}
 								<span className="text-muted-foreground"> · {lastSyncedLabel}</span>
 							</CardDescription>
 						</div>
@@ -343,7 +339,7 @@ export const DomainsHub = () => {
 								onClick={() => syncZones.mutate()}
 							>
 								<RefreshCw className="mr-2 size-4" aria-hidden />
-								Sync domains
+								Sync zones
 							</Button>
 						</div>
 					</CardHeader>
@@ -367,22 +363,22 @@ export const DomainsHub = () => {
 
 						<section className="space-y-3 border-t pt-6">
 							<div className="space-y-1">
-								<h3 className="text-sm font-medium">Cloudflare account</h3>
+								<h3 className="text-sm font-medium">DNS zones</h3>
 								<p className="text-xs text-muted-foreground">
-									Imported zones available for DNS automation.
+									Imported zones available for Auto DNS automation.
 								</p>
 							</div>
 							{zonesPending ? (
 								<div className="flex min-h-[12vh] w-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground sm:flex-row">
 									<Loader2 className="size-5 animate-spin" aria-hidden />
-									<span>Loading Cloudflare domains…</span>
+									<span>Loading zones…</span>
 								</div>
 							) : !zones?.length ? (
 								<div className="flex min-h-[12vh] w-full flex-col items-center justify-center gap-3 px-2 text-center">
 									<Cloud className="size-8 text-muted-foreground" aria-hidden />
 									<span className="max-w-md text-sm text-muted-foreground">
-										No domains imported yet. Sync domains from your Cloudflare
-										account to get started.
+										No zones imported yet. Sync zones from your DNS provider to
+										get started.
 									</span>
 									<Button
 										type="button"
@@ -391,7 +387,7 @@ export const DomainsHub = () => {
 										onClick={() => syncZones.mutate()}
 									>
 										<RefreshCw className="mr-2 size-4" aria-hidden />
-										Sync domains
+										Sync zones
 									</Button>
 								</div>
 							) : (

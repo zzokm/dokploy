@@ -16,7 +16,7 @@
 		}
 	},
 	"include": ["next-env.d.ts", "./src/**/*"],
-	"exclude": ["**/dist", "tsup.ts", "src/lib/auth-cli.ts"],
+	"exclude": ["**/dist", "tsup.ts", "src/lib/auth-cli.ts", "./src/**/*.test.ts"],
 	"tsc-alias": {
 		"resolveFullPaths": true,
 		"verbose": false

@@ -92,8 +92,24 @@ export const createApplication = async (
 };
 
 export const findApplicationById = async (applicationId: string) => {
-	const application = await db.query.applications.findFirst({
+	// Regular SELECT avoids Postgres json_build_array's 100-arg limit (application
+	// has 101+ columns). Relations are loaded with PK-only columns on the root row.
+	const [base] = await db
+		.select()
+		.from(applications)
+		.where(eq(applications.applicationId, applicationId))
+		.limit(1);
+
+	if (!base) {
+		throw new TRPCError({
+			code: "NOT_FOUND",
+			message: "Application not found",
+		});
+	}
+
+	const relations = await db.query.applications.findFirst({
 		where: eq(applications.applicationId, applicationId),
+		columns: { applicationId: true },
 		with: {
 			environment: { with: { project: true } },
 			domains: true,
@@ -127,13 +143,15 @@ export const findApplicationById = async (applicationId: string) => {
 			rollbackRegistry: { columns: { password: false } },
 		},
 	});
-	if (!application) {
+
+	if (!relations) {
 		throw new TRPCError({
 			code: "NOT_FOUND",
 			message: "Application not found",
 		});
 	}
-	return application;
+
+	return { ...base, ...relations };
 };
 
 export const findApplicationByName = async (appName: string) => {

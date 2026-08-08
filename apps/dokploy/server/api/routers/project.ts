@@ -121,6 +121,17 @@ export const projectRouter = createTRPCRouter({
 					});
 				}
 
+				// Must use explicit columns: application has 101+ fields and
+				// drizzle relational queries hit Postgres json_build_array's 100-arg limit.
+				const serviceColumns = {
+					name: true,
+					description: true,
+					appName: true,
+					createdAt: true,
+					serverId: true,
+					applicationStatus: true,
+				} as const;
+
 				const project = await db.query.projects.findFirst({
 					where: and(
 						eq(projects.projectId, input.projectId),
@@ -134,36 +145,64 @@ export const projectRouter = createTRPCRouter({
 										applications.applicationId,
 										accessedServices,
 									),
+									columns: {
+										...serviceColumns,
+										applicationId: true,
+										icon: true,
+									},
+									with: { server: { columns: { name: true } } },
 								},
 								compose: {
 									where: buildServiceFilter(
 										compose.composeId,
 										accessedServices,
 									),
+									columns: {
+										name: true,
+										description: true,
+										appName: true,
+										createdAt: true,
+										serverId: true,
+										composeId: true,
+										composeStatus: true,
+									},
+									with: { server: { columns: { name: true } } },
 								},
 								libsql: {
 									where: buildServiceFilter(libsql.libsqlId, accessedServices),
+									columns: { ...serviceColumns, libsqlId: true },
+									with: { server: { columns: { name: true } } },
 								},
 								mariadb: {
 									where: buildServiceFilter(
 										mariadb.mariadbId,
 										accessedServices,
 									),
+									columns: { ...serviceColumns, mariadbId: true },
+									with: { server: { columns: { name: true } } },
 								},
 								mongo: {
 									where: buildServiceFilter(mongo.mongoId, accessedServices),
+									columns: { ...serviceColumns, mongoId: true },
+									with: { server: { columns: { name: true } } },
 								},
 								mysql: {
 									where: buildServiceFilter(mysql.mysqlId, accessedServices),
+									columns: { ...serviceColumns, mysqlId: true },
+									with: { server: { columns: { name: true } } },
 								},
 								postgres: {
 									where: buildServiceFilter(
 										postgres.postgresId,
 										accessedServices,
 									),
+									columns: { ...serviceColumns, postgresId: true },
+									with: { server: { columns: { name: true } } },
 								},
 								redis: {
 									where: buildServiceFilter(redis.redisId, accessedServices),
+									columns: { ...serviceColumns, redisId: true },
+									with: { server: { columns: { name: true } } },
 								},
 							},
 						},

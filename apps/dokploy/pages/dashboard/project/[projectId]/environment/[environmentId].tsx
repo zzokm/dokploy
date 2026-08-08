@@ -1878,31 +1878,39 @@ export async function getServerSideProps(
 					environmentId: params.environmentId,
 				});
 			} catch (error) {
-				console.log(error);
+				console.error("[environment GSSP] environment.one failed", error);
 				// If user doesn't have access to requested environment, redirect to accessible one
-				const accessibleEnvironments =
-					await helpers.environment.byProjectId.fetch({
-						projectId: params.projectId,
-					});
+				try {
+					const accessibleEnvironments =
+						await helpers.environment.byProjectId.fetch({
+							projectId: params.projectId,
+						});
 
-				if (accessibleEnvironments.length > 0) {
-					// Try to find default, otherwise use first accessible
-					const targetEnv =
-						accessibleEnvironments.find((env) => env.isDefault) ||
-						accessibleEnvironments[0]!;
+					if (accessibleEnvironments.length > 0) {
+						const targetEnv =
+							accessibleEnvironments.find((env) => env.isDefault) ||
+							accessibleEnvironments[0]!;
 
-					return {
-						redirect: {
-							permanent: false,
-							destination: `/dashboard/project/${params.projectId}/environment/${targetEnv.environmentId}`,
-						},
-					};
+						// Avoid redirect loop when the failing env is the only accessible one
+						if (targetEnv.environmentId !== params.environmentId) {
+							return {
+								redirect: {
+									permanent: false,
+									destination: `/dashboard/project/${params.projectId}/environment/${targetEnv.environmentId}`,
+								},
+							};
+						}
+					}
+				} catch (byProjectError) {
+					console.error(
+						"[environment GSSP] byProjectId fallback failed",
+						byProjectError,
+					);
 				}
-				// No accessible environments, redirect to projects
 				return {
 					redirect: {
 						permanent: false,
-						destination: "/dashboard/home",
+						destination: "/dashboard/projects",
 					},
 				};
 			}
@@ -1919,11 +1927,11 @@ export async function getServerSideProps(
 				},
 			};
 		} catch (error) {
-			console.log(error);
+			console.error("[environment GSSP] project.one / page load failed", error);
 			return {
 				redirect: {
 					permanent: false,
-					destination: "/",
+					destination: "/dashboard/projects",
 				},
 			};
 		}
@@ -1932,7 +1940,7 @@ export async function getServerSideProps(
 	return {
 		redirect: {
 			permanent: false,
-			destination: "/",
+			destination: "/dashboard/projects",
 		},
 	};
 }

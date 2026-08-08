@@ -1317,6 +1317,13 @@
       "when": 1776146400005,
       "tag": "0187_repair_domain_cloudflare_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 188,
+      "version": "7",
+      "when": 1776146400006,
+      "tag": "0188_dns_provider_generalization",
+      "breakpoints": true
     }
   ]
 }

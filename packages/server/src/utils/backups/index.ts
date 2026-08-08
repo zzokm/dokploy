@@ -5,6 +5,7 @@ import { findDestinationById } from "@dokploy/server/services/destination";
 import { getAllServers } from "@dokploy/server/services/server";
 import { getWebServerSettings } from "@dokploy/server/services/web-server-settings";
 import { pollDomainConnectionsOnce } from "@dokploy/server/services/domain-connection";
+import { syncAllDnsZonesAndRecords } from "@dokploy/server/services/dns/sync-zones";
 import { eq } from "drizzle-orm";
 import { scheduleJob } from "node-schedule";
 import { db } from "../../db/index";
@@ -14,6 +15,9 @@ import { sendDockerCleanupNotifications } from "../notifications/docker-cleanup"
 import { execAsync, execAsyncRemote } from "../process/execAsync";
 import { redactRcloneCredentials } from "./redact";
 import { getS3Credentials, normalizeS3Path, scheduleBackup } from "./utils";
+
+/** Every 6 hours: refresh mirrored DNS zones + records for all orgs with vault credentials. */
+const DNS_ZONE_SYNC_CRON = "0 */6 * * *";
 
 export const initCronJobs = async () => {
 	console.log("Setting up cron jobs....");
@@ -120,6 +124,18 @@ export const initCronJobs = async () => {
 		});
 	} catch (error) {
 		console.error("[Domain] Poll schedule error", error);
+	}
+
+	try {
+		scheduleJob("dns-zones-sync", DNS_ZONE_SYNC_CRON, async () => {
+			const result = await syncAllDnsZonesAndRecords();
+			console.log(
+				`[DNS] Auto sync finished orgs=${result.orgs} zones=${result.zonesSynced} records=${result.recordsSynced} errors=${result.errors}`,
+			);
+		});
+		console.log(`[DNS] Auto sync enabled with cron: [${DNS_ZONE_SYNC_CRON}]`);
+	} catch (error) {
+		console.error("[DNS] Auto sync schedule error", error);
 	}
 };
 

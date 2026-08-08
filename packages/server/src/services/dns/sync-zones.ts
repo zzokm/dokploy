@@ -1,10 +1,12 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@dokploy/server/db";
 import {
+	cloudflareSettings,
 	dnsProviderCredential,
 	dnsRecord,
 	dnsZone,
 } from "@dokploy/server/db/schema";
+import { syncCloudflareZonesForOrg } from "@dokploy/server/services/cloudflare/sync-zones";
 import { nanoid } from "nanoid";
 import { resolveDnsProviderSecret } from "./credentials";
 import {
@@ -174,7 +176,11 @@ export const syncDnsZonesForCredential = async (input: {
  * Sync all vault credentials for an org (skips legacy-only CF virtual rows
  * without a real vault id — those still use cloudflare sync).
  */
-export const syncAllDnsZonesForOrg = async (organizationId: string) => {
+export const syncAllDnsZonesForOrg = async (
+	organizationId: string,
+	opts?: { syncRecords?: boolean },
+) => {
+	const syncRecords = opts?.syncRecords ?? false;
 	const rows = await db
 		.select({
 			id: dnsProviderCredential.id,
@@ -194,7 +200,7 @@ export const syncAllDnsZonesForOrg = async (organizationId: string) => {
 		const result = await syncDnsZonesForCredential({
 			organizationId,
 			credentialId: row.id,
-			syncRecords: false,
+			syncRecords,
 		});
 		results.push({
 			credentialId: row.id,
@@ -207,8 +213,61 @@ export const syncAllDnsZonesForOrg = async (organizationId: string) => {
 	return {
 		credentials: results.length,
 		zonesSynced: results.reduce((n, r) => n + r.zonesSynced, 0),
+		recordsSynced: results.reduce((n, r) => n + r.recordsSynced, 0),
 		results,
 	};
+};
+
+/**
+ * Org-scoped cron entrypoint: sync every vault credential's zones + records,
+ * and refresh legacy Cloudflare zone mirrors. Idempotent; never logs secrets.
+ */
+export const syncAllDnsZonesAndRecords = async () => {
+	const vaultOrgs = await db
+		.select({
+			organizationId: dnsProviderCredential.organizationId,
+		})
+		.from(dnsProviderCredential);
+	const cfOrgs = await db
+		.select({
+			organizationId: cloudflareSettings.organizationId,
+		})
+		.from(cloudflareSettings);
+
+	const orgIds = [
+		...new Set([
+			...vaultOrgs.map((r) => r.organizationId),
+			...cfOrgs.map((r) => r.organizationId),
+		]),
+	];
+
+	let orgs = 0;
+	let zonesSynced = 0;
+	let recordsSynced = 0;
+	let errors = 0;
+
+	for (const organizationId of orgIds) {
+		try {
+			const vaultResult = await syncAllDnsZonesForOrg(organizationId, {
+				syncRecords: true,
+			});
+			zonesSynced += vaultResult.zonesSynced;
+			recordsSynced += vaultResult.recordsSynced;
+
+			const cfResult = await syncCloudflareZonesForOrg(organizationId);
+			zonesSynced += cfResult.synced;
+
+			orgs += 1;
+		} catch (error) {
+			errors += 1;
+			console.error(
+				`[DNS] Auto sync failed for org ${organizationId}:`,
+				error instanceof Error ? error.message : "unknown error",
+			);
+		}
+	}
+
+	return { orgs, zonesSynced, recordsSynced, errors };
 };
 
 export const listMirroredDnsZones = async (organizationId: string) => {

@@ -55,10 +55,6 @@
 			"label": "Dokploy: Dev server",
 			"type": "shell",
 			"command": "corepack pnpm --filter=dokploy run dev",
-			"dependsOn": [
-				"Dokploy: Ensure Postgres"
-			],
-			"dependsOrder": "sequence",
 			"isBackground": true,
 			"presentation": {
 				"reveal": "always",

@@ -10,7 +10,12 @@ export const OperatorErrorCode = {
 	cert_failed: "cert_failed",
 	cert_pending: "cert_pending",
 	backend_down: "backend_down",
+	/** @deprecated Prefer dns_provider_unconfigured — kept for MCP compat. */
 	cloudflare_unconfigured: "cloudflare_unconfigured",
+	dns_provider_unconfigured: "dns_provider_unconfigured",
+	dns_rate_limited: "dns_rate_limited",
+	/** Attempt to disable CF proxy / violate forcesProxy policy. */
+	dns_proxy_policy: "dns_proxy_policy",
 	zone_not_found: "zone_not_found",
 	validation_error: "validation_error",
 	not_found: "not_found",

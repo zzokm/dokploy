@@ -225,7 +225,7 @@ export const tools: ToolDef[] = [
 	{
 		name: "domain.provision",
 		description:
-			"SAFE workflow: (1) upsert Cloudflare A record (2) wait until DNS resolves (3) attach Dokploy domain+HTTPS (4) observe ACME cert (5) HTTPS health. Prevents NXDOMAIN-before-DNS races that broke hydro/jelly. Default proxied=false (HTTP-01). Example: {\"host\":\"hydro.example.com\",\"domainType\":\"compose\",\"composeId\":\"...\",\"serviceName\":\"web\",\"port\":3000,\"proxied\":false}",
+			"SAFE Auto DNS workflow: (1) upsert A record (2) wait until DNS resolves (3) attach Dokploy domain+HTTPS (4) observe ACME cert (5) HTTPS health. DNS-before-domain prevents NXDOMAIN races. Cloudflare Auto DNS always forces proxied=true + DNS-01 (letsencrypt-cloudflare); `proxied` input is ignored for CF. Example: {\"host\":\"app.example.com\",\"domainType\":\"compose\",\"composeId\":\"...\",\"serviceName\":\"web\",\"port\":3000}",
 		schema: z.object({
 			host: z.string().min(1),
 			domainType: z.enum(["application", "compose"]),
@@ -235,6 +235,7 @@ export const tools: ToolDef[] = [
 			port: z.number().int().optional(),
 			path: z.string().optional(),
 			https: z.boolean().optional(),
+			/** Ignored for Cloudflare — always proxied+DNS-01. Kept for compat. */
 			proxied: z.boolean().optional(),
 			targetIp: z.string().optional(),
 			waitDnsTimeoutMs: z.number().int().optional(),

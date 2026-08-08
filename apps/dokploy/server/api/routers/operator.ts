@@ -347,9 +347,8 @@ export const operatorRouter = createTRPCRouter({
 				proxied: z
 					.boolean()
 					.optional()
-					.default(false)
 					.describe(
-						"Default false (DNS-only / HTTP-01). true uses DNS-01 + Cloudflare proxy.",
+						"Ignored for Cloudflare Auto DNS (always proxied + DNS-01). Kept for MCP compat.",
 					),
 				targetIp: z.string().optional(),
 				waitDnsTimeoutMs: z.number().int().optional(),

@@ -34,7 +34,14 @@
 		{
 			"label": "Dokploy: Ensure Postgres",
 			"type": "shell",
-			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/.vscode/ensure-postgres.ps1\"",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				".\\.vscode\\ensure-postgres.ps1"
+			],
 			"presentation": {
 				"reveal": "silent",
 				"panel": "shared",

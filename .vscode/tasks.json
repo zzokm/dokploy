@@ -32,9 +32,26 @@
 			"problemMatcher": []
 		},
 		{
+			"label": "Dokploy: Ensure Postgres",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}/.vscode/ensure-postgres.ps1\"",
+			"presentation": {
+				"reveal": "silent",
+				"panel": "shared",
+				"showReuseMessage": false,
+				"close": true
+			},
+			"group": "none",
+			"problemMatcher": []
+		},
+		{
 			"label": "Dokploy: Dev server",
 			"type": "shell",
 			"command": "corepack pnpm --filter=dokploy run dev",
+			"dependsOn": [
+				"Dokploy: Ensure Postgres"
+			],
+			"dependsOrder": "sequence",
 			"isBackground": true,
 			"presentation": {
 				"reveal": "always",

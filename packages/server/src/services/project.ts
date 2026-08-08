@@ -72,7 +72,11 @@ export const findProjectById = async (projectId: string) => {
 					},
 					compose: {
 						columns: {
-							...serviceColumns,
+							name: true,
+							description: true,
+							appName: true,
+							createdAt: true,
+							serverId: true,
 							composeId: true,
 							composeStatus: true,
 						},

@@ -14,28 +14,24 @@ import { api } from "@/utils/api";
 type CloudflareDomainControlsProps = {
 	domainId: string;
 	currentDnsProvider: string | null | undefined;
-	currentProxied: boolean | null | undefined;
+	/** @deprecated Ignored — CF Auto DNS always proxied. Kept for call-site compat. */
+	currentProxied?: boolean | null | undefined;
 };
 
 export const CloudflareDomainControls = ({
 	domainId,
 	currentDnsProvider,
-	currentProxied,
 }: CloudflareDomainControlsProps) => {
 	const utils = api.useUtils();
 	const settings = api.cloudflareSettings.get.useQuery();
 
-	// Optimistic overlays cleared once the refetch lands, so an error falls back
-	// to server truth instead of a guessed previous value.
 	const [pendingManaged, setPendingManaged] = useState<boolean | null>(null);
-	const [pendingProxied, setPendingProxied] = useState<boolean | null>(null);
 	const [syncDialogOpen, setSyncDialogOpen] = useState(false);
 
 	const managed = resolveCloudflareManagedState({
 		pendingManaged,
 		dnsProvider: currentDnsProvider,
 	});
-	const proxied = pendingProxied ?? currentProxied ?? true;
 	const isConnected = !!settings.data?.connected;
 
 	const onSettled = async () => {
@@ -45,7 +41,6 @@ export const CloudflareDomainControls = ({
 			utils.domain.byComposeId.invalidate(),
 		]);
 		setPendingManaged(null);
-		setPendingProxied(null);
 	};
 
 	const setProvider = api.domain.setDnsProviderCloudflare.useMutation({
@@ -62,15 +57,11 @@ export const CloudflareDomainControls = ({
 	const handleManagedChange = (checked: boolean) => {
 		setPendingManaged(checked);
 		if (checked) {
-			setProvider.mutate({ domainId, proxied });
+			// CF policy: always proxied
+			setProvider.mutate({ domainId, proxied: true });
 		} else {
 			disableProvider.mutate({ domainId });
 		}
-	};
-
-	const handleProxiedChange = (checked: boolean) => {
-		setPendingProxied(checked);
-		setProvider.mutate({ domainId, proxied: checked });
 	};
 
 	const visibility = deriveCloudflareDomainControlsVisibility({
@@ -90,52 +81,41 @@ export const CloudflareDomainControls = ({
 				onOpenChange={setSyncDialogOpen}
 			/>
 			<div className="mb-2 flex w-full animate-in fade-in-0 slide-in-from-bottom-1 flex-col gap-3 duration-300">
-				<p className="text-sm font-medium">Cloudflare DNS settings</p>
+				<p className="text-sm font-medium">Auto DNS</p>
 				{visibility.showReconnectHint ? (
 					<p className="text-xs text-muted-foreground">
-						Reconnect Cloudflare on the Domains page to sync or update proxy
-						settings for this hostname.
+						Connect a DNS provider on the Domains page to manage this hostname.
 					</p>
 				) : null}
 				{visibility.showManagedToggle ? (
 					<div className="flex flex-row items-center justify-between gap-4 rounded-lg border p-3 shadow-xs">
-						<p className="text-sm font-medium leading-none">
-							Cloudflare managed domain
-						</p>
+						<div className="space-y-1">
+							<p className="text-sm font-medium leading-none">Managed DNS</p>
+							<p className="text-xs text-muted-foreground">
+								Dokploy upserts the record and uses DNS-01 for TLS when the
+								provider requires it.
+							</p>
+						</div>
 						<Switch
 							checked={managed}
 							onCheckedChange={handleManagedChange}
 							disabled={isPending}
-							aria-label="Cloudflare managed domain"
+							aria-label="Managed DNS"
 							className="shrink-0"
 						/>
 					</div>
 				) : null}
-				{visibility.showProxyToggle ? (
-					<>
-						<div className="flex animate-in fade-in-0 slide-in-from-top-1 flex-row items-center justify-between gap-4 rounded-lg border p-3 shadow-xs duration-200">
-							<p className="text-sm font-medium leading-none">
-								Proxied (orange cloud)
-							</p>
-							<Switch
-								checked={proxied}
-								onCheckedChange={handleProxiedChange}
-								disabled={isPending}
-								aria-label="Cloudflare proxy enabled"
-								className="shrink-0"
-							/>
-						</div>
-						<div className="flex justify-end">
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								onClick={() => setSyncDialogOpen(true)}
-							>
-								Sync DNS
-							</Button>
-						</div>
-					</>
+				{visibility.showSyncAction ? (
+					<div className="flex justify-end">
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							onClick={() => setSyncDialogOpen(true)}
+						>
+							Sync DNS
+						</Button>
+					</div>
 				) : null}
 			</div>
 		</>

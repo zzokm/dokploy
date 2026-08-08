@@ -30,9 +30,8 @@ export type DomainProvisionInput = {
 	path?: string
 	https?: boolean
 	/**
-	 * Cloudflare orange-cloud. Default **false** (DNS-only) so Traefik can use
-	 * HTTP-01 (`letsencrypt`). Set true only when DNS-01 (`letsencrypt-cloudflare`)
-	 * is configured via the Cloudflare token in Traefik.
+	 * @deprecated Ignored for Cloudflare Auto DNS — adapter always forces proxied:true
+	 * and DNS-01 (`letsencrypt-cloudflare`). Kept for MCP input compat.
 	 */
 	proxied?: boolean
 	/** Override A-record target; otherwise resolved from the service's server IP */
@@ -43,17 +42,22 @@ export type DomainProvisionInput = {
 	skipHealthCheck?: boolean
 	/** When true, only upsert DNS + wait — do not create Dokploy domain */
 	dryRun?: boolean
+	/** DNS provider id; default cloudflare until multi-provider provision UI lands */
+	provider?: "cloudflare" | "digitalocean" | "hetzner" | "route53" | "gcloud"
 }
 
 export type DomainProvisionResult = {
 	ok: true
 	host: string
+	/** Always true for Cloudflare Auto DNS (policy). */
 	proxied: boolean
 	acmeChallenge: "http-01" | "dns-01"
 	dns: {
 		cfZoneId: string
+		dnsZoneId: string
 		zoneName: string
 		cfRecordId: string
+		dnsRecordId: string
 		content: string
 		proxied: boolean
 	}
@@ -189,15 +193,22 @@ export const provisionDomain = async (
 		)
 	}
 
-	const proxied = input.proxied ?? false
+	// Cloudflare Auto DNS policy: always proxied + DNS-01 (ignore input.proxied)
+	const provider = input.provider ?? "cloudflare"
+	const proxied = provider === "cloudflare" ? true : (input.proxied ?? false)
 	const https = input.https ?? true
-	const acmeChallenge = proxied ? "dns-01" : "http-01"
+	const acmeChallenge =
+		provider === "cloudflare" || proxied ? "dns-01" : "http-01"
+
+	if (provider === "cloudflare" && input.proxied === false) {
+		steps.push("dns_proxy_policy:coerced_proxied_true")
+	}
 
 	const targetIp = await resolveTargetIp(input)
 	steps.push(`resolved_target_ip:${targetIp}`)
 
 	// 1. DNS first — never create Traefik router before this succeeds
-	const dns = await upsertDnsRecordByName({
+	const dnsRaw = await upsertDnsRecordByName({
 		organizationId: input.organizationId,
 		name: host,
 		type: "A",
@@ -205,7 +216,13 @@ export const provisionDomain = async (
 		proxied,
 		ttl: 1,
 	})
-	steps.push(`dns_upserted:${dns.cfRecordId}`)
+	const dns = {
+		...dnsRaw,
+		dnsZoneId: dnsRaw.cfZoneId,
+		dnsRecordId: dnsRaw.cfRecordId,
+		proxied: provider === "cloudflare" ? true : dnsRaw.proxied,
+	}
+	steps.push(`dns_upserted:${dns.dnsRecordId}`)
 
 	// 2. Wait for resolution (skip exact IP match when proxied — Cloudflare anycast)
 	const resolution = await waitForHostnameResolution({
@@ -246,13 +263,18 @@ export const provisionDomain = async (
 			port: input.port ?? 3000,
 			https,
 			certificateType: https ? "letsencrypt" : "none",
-			customCertResolver: proxied ? "letsencrypt-cloudflare" : null,
+			customCertResolver: acmeChallenge === "dns-01" ? "letsencrypt-cloudflare" : null,
 			domainType: input.domainType,
 			applicationId: input.applicationId,
 			composeId: input.composeId,
 			serviceName: input.serviceName,
 			dnsProvider: "cloudflare",
-			cfProxied: proxied,
+			cfProxied: true,
+			dnsZoneId: dns.dnsZoneId,
+			dnsZoneName: dns.zoneName,
+			dnsRecordId: dns.dnsRecordId,
+			dnsStatus: "pending",
+			dnsOptions: { proxied: true },
 		})
 		created = true
 		domainId = createdDomain.domainId
@@ -265,9 +287,14 @@ export const provisionDomain = async (
 			.set({
 				https,
 				certificateType: https ? "letsencrypt" : "none",
-				customCertResolver: proxied ? "letsencrypt-cloudflare" : null,
+				customCertResolver: acmeChallenge === "dns-01" ? "letsencrypt-cloudflare" : null,
 				dnsProvider: "cloudflare",
-				cfProxied: proxied,
+				cfProxied: true,
+				dnsZoneId: dns.dnsZoneId,
+				dnsZoneName: dns.zoneName,
+				dnsRecordId: dns.dnsRecordId,
+				dnsStatus: "pending",
+				dnsOptions: { proxied: true },
 				port: input.port ?? existing.port,
 				path: input.path ?? existing.path,
 				serviceName: input.serviceName ?? existing.serviceName,
@@ -277,11 +304,11 @@ export const provisionDomain = async (
 
 	const domainRow = await findDomainById(domainId)
 
-	// Sync CF mirror + Traefik labels (idempotent)
+	// Sync CF mirror + Traefik labels (idempotent) — always proxied for CF
 	await ensureCloudflareAppDnsForDomain({
 		organizationId: input.organizationId,
 		domainId: domainRow.domainId,
-		proxiedDefault: proxied,
+		proxiedDefault: true,
 	})
 	steps.push("cloudflare_domain_synced")
 
@@ -292,7 +319,7 @@ export const provisionDomain = async (
 		steps.push("traefik_domain_applied")
 	}
 
-	if (proxied) {
+	if (acmeChallenge === "dns-01") {
 		void ensureTraefikCloudflareDnsToken({
 			organizationId: input.organizationId,
 		}).catch(() => {})

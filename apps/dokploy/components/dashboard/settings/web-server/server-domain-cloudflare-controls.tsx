@@ -2,7 +2,7 @@
 
 import { ArrowRight, Cloud, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
 import { api } from "@/utils/api";
 
 type ServerDomainCloudflareControlsProps = {
@@ -31,7 +30,6 @@ export const ServerDomainCloudflareControls = ({
 	const utils = api.useUtils();
 	const { data: settings } = api.cloudflareSettings.get.useQuery();
 	const [manageOpen, setManageOpen] = useState(false);
-	const [proxied, setProxied] = useState(true);
 
 	const host = savedHost.trim();
 	const formMatchesSaved =
@@ -42,17 +40,6 @@ export const ServerDomainCloudflareControls = ({
 		undefined,
 		{ enabled: isConnected && !!host },
 	);
-
-	useEffect(() => {
-		if (previewQuery.data?.desiredProxied !== undefined) {
-			setProxied(previewQuery.data.desiredProxied);
-		} else if (
-			previewQuery.data?.currentProxied !== null &&
-			previewQuery.data?.currentProxied !== undefined
-		) {
-			setProxied(previewQuery.data.currentProxied);
-		}
-	}, [previewQuery.data]);
 
 	const applyMutation = api.cloudflareSettings.applyServerDomainDns.useMutation(
 		{
@@ -88,9 +75,10 @@ export const ServerDomainCloudflareControls = ({
 						<Cloud className="size-4 text-muted-foreground" aria-hidden />
 					</div>
 					<div className="min-w-0 space-y-1">
-						<p className="text-sm font-medium leading-none">Cloudflare DNS</p>
+						<p className="text-sm font-medium leading-none">Auto DNS</p>
 						<p className="text-xs leading-relaxed text-muted-foreground">
-							Manage DNS sync and proxy settings only when you need them.
+							Sync the server hostname via managed DNS (always proxied + DNS-01
+							for Cloudflare).
 						</p>
 					</div>
 				</div>
@@ -105,7 +93,7 @@ export const ServerDomainCloudflareControls = ({
 						className="w-full sm:w-auto"
 						onClick={() => setManageOpen(true)}
 					>
-						Manage in Cloudflare
+						Manage DNS
 					</Button>
 				</div>
 			</div>
@@ -113,20 +101,18 @@ export const ServerDomainCloudflareControls = ({
 			<Dialog open={manageOpen} onOpenChange={setManageOpen}>
 				<DialogContent>
 					<DialogHeader>
-						<DialogTitle>Manage server domain in Cloudflare</DialogTitle>
+						<DialogTitle>Manage server domain DNS</DialogTitle>
 						<DialogDescription>
-							Review DNS status, choose proxied or DNS-only mode, then sync the
-							saved host when you are ready.
+							Review DNS status, then sync the saved host. Cloudflare records
+							are always proxied (provider policy).
 						</DialogDescription>
 					</DialogHeader>
 					<ServerDomainCloudflareManageContent
 						savedHost={savedHost}
 						formHost={formHost}
-						proxied={proxied}
-						onProxiedChange={setProxied}
 						onClose={() => setManageOpen(false)}
 						applyMutationPending={applyMutation.isPending}
-						onApply={() => applyMutation.mutate({ proxied })}
+						onApply={() => applyMutation.mutate({ proxied: true })}
 					/>
 				</DialogContent>
 			</Dialog>
@@ -137,8 +123,6 @@ export const ServerDomainCloudflareControls = ({
 type ManageContentProps = {
 	savedHost: string;
 	formHost: string;
-	proxied: boolean;
-	onProxiedChange: (proxied: boolean) => void;
 	onApply: () => void;
 	onClose: () => void;
 	applyMutationPending: boolean;
@@ -147,8 +131,6 @@ type ManageContentProps = {
 const ServerDomainCloudflareManageContent = ({
 	savedHost,
 	formHost,
-	proxied,
-	onProxiedChange,
 	onApply,
 	onClose,
 	applyMutationPending,
@@ -165,12 +147,6 @@ const ServerDomainCloudflareManageContent = ({
 
 	const current = preview?.currentIp ?? "—";
 	const desired = preview?.desiredIp ?? "—";
-	const proxyChanged =
-		preview?.currentProxied !== null && preview?.currentProxied !== undefined
-			? preview.currentProxied !== proxied
-			: preview?.desiredProxied !== undefined
-				? preview.desiredProxied !== proxied
-				: false;
 	const canApply =
 		isConnected &&
 		formMatchesSaved &&
@@ -179,24 +155,13 @@ const ServerDomainCloudflareManageContent = ({
 		preview.state !== "no_target" &&
 		preview.state !== "no_host" &&
 		!!preview.desiredIp &&
-		(preview.wouldChange || proxyChanged);
-
-	useEffect(() => {
-		if (preview?.desiredProxied !== undefined) {
-			onProxiedChange(preview.desiredProxied);
-		} else if (
-			preview?.currentProxied !== null &&
-			preview?.currentProxied !== undefined
-		) {
-			onProxiedChange(preview.currentProxied);
-		}
-	}, [preview, onProxiedChange]);
+		(preview.wouldChange || preview.currentProxied === false);
 
 	return (
 		<div className="space-y-4 text-sm text-muted-foreground">
 			{!isConnected ? (
 				<p>
-					Connect Cloudflare below (DNS providers) or on the{" "}
+					Connect a DNS provider on the{" "}
 					<Link
 						href="/dashboard/domains"
 						className="text-foreground underline underline-offset-2"
@@ -208,44 +173,22 @@ const ServerDomainCloudflareManageContent = ({
 			) : !host ? (
 				<p>Save a server domain before syncing DNS.</p>
 			) : !formMatchesSaved ? (
-				<p>
-					Save your domain changes first, then reopen Cloudflare management.
-				</p>
+				<p>Save your domain changes first, then reopen DNS management.</p>
 			) : isFetching || applyMutationPending ? (
 				<div className="flex min-h-[5rem] items-center justify-center gap-2 py-4">
 					<Loader2 className="size-4 animate-spin" aria-hidden />
 					<span>
-						{applyMutationPending
-							? "Updating Cloudflare…"
-							: "Checking Cloudflare…"}
+						{applyMutationPending ? "Updating DNS…" : "Checking DNS…"}
 					</span>
 				</div>
 			) : preview ? (
 				<div className="animate-in fade-in-0 slide-in-from-bottom-1 space-y-4 duration-300">
-					<div className="flex flex-col gap-3 rounded-md border border-border bg-muted/30 px-3 py-3 transition-colors sm:flex-row sm:items-center sm:justify-between">
-						<div className="min-w-0 space-y-0.5">
-							<p className="text-sm font-medium text-foreground">
-								Proxy (orange cloud)
-							</p>
-							<p className="text-xs text-muted-foreground">
-								Recommended when using HTTPS. Uses Traefik DNS-01 via{" "}
-								<span className="font-mono">letsencrypt-cloudflare</span>.
-							</p>
-						</div>
-						<div className="flex items-center justify-between gap-3 sm:min-w-[9rem] sm:justify-end">
-							<span className="text-xs text-muted-foreground sm:order-first">
-								{proxied ? "Proxied" : "DNS only"}
-							</span>
-							<Switch
-								checked={proxied}
-								onCheckedChange={onProxiedChange}
-								disabled={applyMutationPending}
-								aria-label="Cloudflare proxy enabled"
-							/>
-						</div>
-					</div>
+					<p className="text-xs text-muted-foreground">
+						Cloudflare Auto DNS always uses CDN proxy and Traefik DNS-01 (
+						<span className="font-mono">letsencrypt-cloudflare</span>).
+					</p>
 
-					{preview.state === "ok" ? (
+					{preview.state === "ok" && preview.currentProxied !== false ? (
 						<p>
 							The A record for{" "}
 							<span className="font-mono text-foreground">{preview.host}</span>{" "}
@@ -255,10 +198,9 @@ const ServerDomainCloudflareManageContent = ({
 						<p>Save a server domain before syncing DNS.</p>
 					) : preview.state === "no_zone" ? (
 						<p>
-							No synced Cloudflare domain matches{" "}
+							No synced zone matches{" "}
 							<span className="font-mono text-foreground">{preview.host}</span>.
-							Open Domains and run{" "}
-							<span className="font-medium text-foreground">Sync domains</span>.
+							Open Domains and sync zones.
 						</p>
 					) : preview.state === "no_target" ? (
 						<p>
@@ -267,12 +209,11 @@ const ServerDomainCloudflareManageContent = ({
 					) : (
 						<>
 							<p>
-								Cloudflare will update the A record for{" "}
+								DNS will update the A record for{" "}
 								<span className="font-mono text-foreground">
 									{preview.host}
 								</span>{" "}
-								so traffic reaches this node
-								{proxied ? " (proxied)" : " (DNS only)"}.
+								so traffic reaches this node (proxied).
 							</p>
 							<div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2.5 font-mono text-xs text-foreground">
 								<span>{current}</span>
@@ -288,7 +229,7 @@ const ServerDomainCloudflareManageContent = ({
 					)}
 				</div>
 			) : (
-				<p>Could not load preview. Connect Cloudflare and try again.</p>
+				<p>Could not load preview. Connect a DNS provider and try again.</p>
 			)}
 
 			<DialogFooter className="flex-col gap-2 sm:flex-row">

@@ -231,7 +231,7 @@ export const ZoneDnsRecordsPanel = ({
 			name,
 			content,
 			ttl: parseDnsTtl(form.ttl),
-			proxied: canProxy ? form.proxied : undefined,
+			proxied: canProxy ? true : undefined,
 			priority: form.type === "MX" ? Number(form.priority) || 0 : undefined,
 		};
 
@@ -502,21 +502,9 @@ export const ZoneDnsRecordsPanel = ({
 							/>
 						</div>
 						{canProxy ? (
-							<div className="flex items-center gap-2">
-								<Checkbox
-									id="zone-dns-proxied"
-									checked={form.proxied}
-									onCheckedChange={(checked) =>
-										setForm((prev) => ({
-											...prev,
-											proxied: checked === true,
-										}))
-									}
-								/>
-								<Label htmlFor="zone-dns-proxied" className="font-normal">
-									Proxy through Cloudflare
-								</Label>
-							</div>
+							<p className="text-xs text-muted-foreground">
+								Cloudflare records are always proxied (provider policy).
+							</p>
 						) : (
 							<p className="text-xs text-muted-foreground">
 								{dnsProxyStateHint("not_proxyable")}

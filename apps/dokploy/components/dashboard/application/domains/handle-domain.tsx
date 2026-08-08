@@ -187,7 +187,6 @@ export const AddDomain = ({
 	const [hostInputMode, setHostInputMode] = useState<HostInputMode>("manual");
 	const [selectedCfZoneId, setSelectedCfZoneId] = useState("");
 	const [subdomainLabel, setSubdomainLabel] = useState("");
-	const [cfProxiedOnCreate, setCfProxiedOnCreate] = useState(true);
 
 	const utils = api.useUtils();
 	const { data: cfSettings } = api.cloudflareSettings.get.useQuery(undefined, {
@@ -355,7 +354,6 @@ export const AddDomain = ({
 		setHostInputMode("manual");
 		setSelectedCfZoneId("");
 		setSubdomainLabel("");
-		setCfProxiedOnCreate(true);
 	}, [isOpen, domainId]);
 
 	useEffect(() => {
@@ -477,7 +475,7 @@ export const AddDomain = ({
 			...(wantsCloudflareDns
 				? {
 						dnsProvider: "cloudflare" as const,
-						cfProxied: cfProxiedOnCreate,
+						cfProxied: true,
 						https: true,
 						certificateType: "letsencrypt" as const,
 						customCertResolver: undefined,

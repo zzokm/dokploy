@@ -68,7 +68,7 @@ describe("deriveCloudflareDomainControlsVisibility", () => {
 		expect(on.showManagedToggle).toBe(true);
 	});
 
-	it("only offers the proxy switch on a Cloudflare managed domain", () => {
+	it("never shows a proxy switch — CF proxy is adapter policy", () => {
 		expect(
 			deriveCloudflareDomainControlsVisibility({
 				isConnected: true,
@@ -80,6 +80,12 @@ describe("deriveCloudflareDomainControlsVisibility", () => {
 				isConnected: true,
 				isCloudflareManaged: true,
 			}).showProxyToggle,
+		).toBe(false);
+		expect(
+			deriveCloudflareDomainControlsVisibility({
+				isConnected: true,
+				isCloudflareManaged: true,
+			}).showSyncAction,
 		).toBe(true);
 	});
 

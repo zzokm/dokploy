@@ -10,8 +10,6 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { CloudflareHostnameLabelField } from "@/components/dashboard/domains/dns-hostname-label-field";
 import { matchHostToCloudflareZone } from "@/components/dashboard/settings/web-server/match-host-to-dns-zone";
-import { ServerDomainCloudflareControls } from "@/components/dashboard/settings/web-server/server-domain-dns-controls";
-import { shouldShowServerCloudflareControls } from "@/components/dashboard/settings/web-server/should-show-server-dns-controls";
 import { AlertBlock } from "@/components/shared/alert-block";
 import { Button } from "@/components/ui/button";
 import {
@@ -149,16 +147,9 @@ export const WebDomain = () => {
 		!!host.trim() &&
 		(!!savedHostZoneMatch || hasMirroredCloudflareDns);
 
-	const trimmedSavedHost = host.trim().toLowerCase();
-	const trimmedFormHost = domain.trim().toLowerCase();
 	const cloudflareModeEnabled =
 		hostInputMode === "cloudflare" ||
 		(!userDisabledCfMode && isCloudflareManagedHost && cfZonesPending);
-	const shouldShowCloudflareControls = shouldShowServerCloudflareControls({
-		cloudflareModeEnabled,
-		isCloudflareManagedHost,
-		formMatchesSavedHost: trimmedFormHost === trimmedSavedHost,
-	});
 
 	useEffect(() => {
 		if (data) {
@@ -171,7 +162,7 @@ export const WebDomain = () => {
 		}
 	}, [form, form.reset, data]);
 
-	// Derive Cloudflare managed toggle from zone/mirror state â€” not a stale local flag.
+	// Derive managed DNS toggle from zone/mirror state, not a stale local flag.
 	useEffect(() => {
 		if (!cfSettings?.connected) {
 			setHostInputMode("manual");
@@ -304,10 +295,10 @@ export const WebDomain = () => {
 									<div className="col-span-2 flex flex-row items-center justify-between gap-4 rounded-lg border p-3 shadow-xs">
 										<div className="min-w-0 space-y-0.5">
 											<p className="text-sm font-medium leading-none">
-												Cloudflare managed domain
+												Managed DNS domain
 											</p>
 											<p className="text-xs text-muted-foreground">
-												Build the hostname from a synced domain.
+												Build the hostname from a synced DNS domain.
 											</p>
 										</div>
 										<Switch
@@ -327,7 +318,7 @@ export const WebDomain = () => {
 													setCfHostnameLabel(savedHostZoneMatch.label);
 												}
 											}}
-											aria-label="Cloudflare managed domain"
+											aria-label="Managed DNS domain"
 											className="shrink-0"
 										/>
 									</div>
@@ -355,7 +346,8 @@ export const WebDomain = () => {
 											</Select>
 											{!enabledCfZones.length ? (
 												<p className="text-xs text-muted-foreground">
-													No domains yet. Open Domains and click Sync domains.
+													No DNS domains yet. Open Domains and click Sync DNS
+													domains.
 												</p>
 											) : null}
 										</div>
@@ -471,13 +463,6 @@ export const WebDomain = () => {
 										}}
 									/>
 								)}
-
-								{shouldShowCloudflareControls ? (
-									<ServerDomainCloudflareControls
-										savedHost={host}
-										formHost={domain}
-									/>
-								) : null}
 
 								<div className="flex w-full justify-end col-span-2">
 									<Button

@@ -81,7 +81,6 @@ export const CloudflareDomainControls = ({
 				onOpenChange={setSyncDialogOpen}
 			/>
 			<div className="mb-2 flex w-full animate-in fade-in-0 slide-in-from-bottom-1 flex-col gap-3 duration-300">
-				<p className="text-sm font-medium">Auto DNS</p>
 				{visibility.showReconnectHint ? (
 					<p className="text-xs text-muted-foreground">
 						Connect a DNS provider on the Domains page to manage this hostname.

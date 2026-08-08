@@ -97,6 +97,7 @@ export const ensureCloudflareAppDnsForDomain = async (input: {
 		await tx
 			.update(domains)
 			.set({
+				dnsProvider: "cloudflare",
 				cfZoneId: zone.cfZoneId,
 				cfZoneName: zone.name,
 				cfDnsRecordId: res.recordId,

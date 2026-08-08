@@ -389,6 +389,12 @@ export const AddDomain = ({
 				domainType: data?.domainType || type,
 				middlewares: data?.middlewares || [],
 			});
+			// Restore managed-DNS mode from persisted dnsProvider on edit.
+			if (domainId && data.dnsProvider && data.dnsProvider !== "none") {
+				setHostInputMode("cloudflare");
+			} else if (domainId) {
+				setHostInputMode("manual");
+			}
 		}
 
 		if (!domainId) {
@@ -455,11 +461,9 @@ export const AddDomain = ({
 		}
 
 		const traefikMeHost = finalHost.includes("traefik.me");
-		const wantsCloudflareDns =
-			!domainId &&
-			!traefikMeHost &&
-			(hostInputMode === "cloudflare" ||
-				(hostInputMode === "manual" && !!cfSettings?.connected));
+		// Managed DNS is opt-in via the toggle (hostInputMode), not merely CF connected.
+		const wantsManagedDns =
+			!domainId && !traefikMeHost && hostInputMode === "cloudflare";
 
 		await mutateAsync({
 			domainId,
@@ -472,7 +476,7 @@ export const AddDomain = ({
 			...data,
 			host: finalHost,
 			customEntrypoint: data.useCustomEntrypoint ? data.customEntrypoint : null,
-			...(wantsCloudflareDns
+			...(wantsManagedDns
 				? {
 						dnsProvider: "cloudflare" as const,
 						cfProxied: true,
@@ -503,7 +507,8 @@ export const AddDomain = ({
 				}
 
 				if (domainId) {
-					refetch();
+					await utils.domain.one.invalidate({ domainId });
+					await refetch();
 				}
 				onSaved?.();
 				setIsOpen(false);
@@ -552,10 +557,10 @@ export const AddDomain = ({
 					<div className="mb-2 flex flex-row items-center justify-between gap-4 rounded-lg border p-3 shadow-xs">
 						<div className="min-w-0 space-y-0.5">
 							<p className="text-sm font-medium leading-none">
-								Cloudflare managed domain
+								Managed DNS domain
 							</p>
 							<p className="text-xs text-muted-foreground">
-								Build the hostname from a synced domain.
+								Build the hostname from a synced DNS domain.
 							</p>
 						</div>
 						<Switch
@@ -567,7 +572,7 @@ export const AddDomain = ({
 									form.setValue("host", "");
 								}
 							}}
-							aria-label="Cloudflare managed domain"
+							aria-label="Managed DNS domain"
 							className="shrink-0"
 						/>
 					</div>

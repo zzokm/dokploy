@@ -4,10 +4,7 @@ import { formatDistanceToNow } from "date-fns";
 import {
 	ChevronDown,
 	Cloud,
-	FolderOpen,
 	Globe2,
-	KeyRound,
-	Link2,
 	ListTree,
 	Loader2,
 	RefreshCw,
@@ -23,6 +20,7 @@ import {
 	serializeHubZones,
 	writeDnsDomainsCache,
 } from "@/components/dashboard/domains/dns-domains-cache";
+import { DnsProviderOnboarding } from "@/components/dashboard/domains/dns-provider-onboarding";
 import { latestSyncIso } from "@/components/dashboard/domains/domain-inventory-utils";
 import { DomainsInventoryTable } from "@/components/dashboard/domains/domains-inventory-table";
 import { ZoneDnsRecordsPanel } from "@/components/dashboard/domains/zone-dns-records-panel";
@@ -35,8 +33,6 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { api } from "@/utils/api";
 
@@ -46,104 +42,7 @@ const statusVariant = (status: "active" | "pending" | "disabled") => {
 	return "outline";
 };
 
-const ConnectDnsProviderEmpty = ({
-	tokenInput,
-	setTokenInput,
-	onConnect,
-	isLoading,
-}: {
-	tokenInput: string;
-	setTokenInput: (value: string) => void;
-	onConnect: () => void;
-	isLoading: boolean;
-}) => (
-	<div className="mx-auto flex w-full max-w-lg flex-col gap-8 py-4">
-		<div className="flex flex-col items-center gap-3 text-center">
-			<div className="flex size-14 items-center justify-center rounded-xl border border-border bg-muted/40">
-				<Cloud className="size-7 text-muted-foreground" aria-hidden />
-			</div>
-			<div className="space-y-1.5">
-				<p className="text-base font-medium text-foreground">
-					Connect a DNS provider
-				</p>
-				<p className="text-sm leading-relaxed text-muted-foreground">
-					Import DNS domains and automate A records for applications, compose
-					services, and the web server.
-				</p>
-			</div>
-		</div>
-
-		<ol className="space-y-3 text-sm">
-			<li className="flex gap-3 rounded-lg border bg-sidebar/60 p-3">
-				<span className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background">
-					<KeyRound className="size-4 text-muted-foreground" aria-hidden />
-				</span>
-				<div className="min-w-0 space-y-0.5">
-					<p className="font-medium">1. Create an API token</p>
-					<p className="text-xs text-muted-foreground">
-						For Cloudflare: Zone → Zone → Read and Zone → DNS → Edit. Other
-						providers use their DNS token scopes.
-					</p>
-				</div>
-			</li>
-			<li className="flex gap-3 rounded-lg border bg-sidebar/60 p-3">
-				<span className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background">
-					<Link2 className="size-4 text-muted-foreground" aria-hidden />
-				</span>
-				<div className="min-w-0 space-y-0.5">
-					<p className="font-medium">2. Connect here</p>
-					<p className="text-xs text-muted-foreground">
-						Paste the token below. We store it sealed and sync your DNS domains.
-					</p>
-				</div>
-			</li>
-			<li className="flex gap-3 rounded-lg border bg-sidebar/60 p-3">
-				<span className="flex size-8 shrink-0 items-center justify-center rounded-md border bg-background">
-					<FolderOpen className="size-4 text-muted-foreground" aria-hidden />
-				</span>
-				<div className="min-w-0 space-y-0.5">
-					<p className="font-medium">3. Attach from a project</p>
-					<p className="text-xs text-muted-foreground">
-						Open a service Domains tab and add a hostname under a synced DNS
-						domain.
-					</p>
-				</div>
-			</li>
-		</ol>
-
-		<div className="space-y-3">
-			<div className="space-y-2">
-				<Label htmlFor="cf-token">Cloudflare API token</Label>
-				<Input
-					id="cf-token"
-					value={tokenInput}
-					onChange={(e) => setTokenInput(e.target.value)}
-					placeholder="Paste API token"
-					autoComplete="off"
-					className="font-mono text-sm"
-				/>
-			</div>
-			<Button
-				type="button"
-				isLoading={isLoading}
-				onClick={onConnect}
-				className="w-full sm:w-auto"
-			>
-				Connect Cloudflare
-			</Button>
-			<p className="text-xs leading-relaxed text-muted-foreground">
-				Add DigitalOcean / Hetzner from Web Server → DNS providers. Cloudflare
-				managed DNS always uses CDN proxy + DNS-01.
-			</p>
-		</div>
-	</div>
-);
-
-const ConnectedNoAppDomainsEmpty = ({
-	zoneCount,
-}: {
-	zoneCount: number;
-}) => (
+const ConnectedNoAppDomainsEmpty = ({ zoneCount }: { zoneCount: number }) => (
 	<div className="flex min-h-[22vh] flex-col items-center justify-center gap-4 px-2 text-center">
 		<div className="flex size-12 items-center justify-center rounded-xl border border-border bg-muted/40">
 			<Globe2 className="size-6 text-muted-foreground" aria-hidden />
@@ -166,7 +65,6 @@ const ConnectedNoAppDomainsEmpty = ({
 
 export const DomainsHub = () => {
 	const utils = api.useUtils();
-	const [tokenInput, setTokenInput] = useState("");
 	const [expandedZoneIds, setExpandedZoneIds] = useState<string[]>([]);
 	const [domainsCache, setDomainsCache] =
 		useState<DnsDomainsCachePayload | null>(null);
@@ -176,10 +74,13 @@ export const DomainsHub = () => {
 	const { data: vaultCreds } = api.dnsProviders.list.useQuery();
 	const { data: inventory, isPending: inventoryPending } =
 		api.domain.listInventory.useQuery();
-	const { data: cfZones, refetch: refetchCfZones, isPending: cfZonesPending } =
-		api.cloudflareSettings.listZones.useQuery(undefined, {
-			enabled: !!settings?.connected,
-		});
+	const {
+		data: cfZones,
+		refetch: refetchCfZones,
+		isPending: cfZonesPending,
+	} = api.cloudflareSettings.listZones.useQuery(undefined, {
+		enabled: !!settings?.connected,
+	});
 	const {
 		data: mirroredZones,
 		refetch: refetchMirrored,
@@ -290,24 +191,6 @@ export const DomainsHub = () => {
 		zones,
 	]);
 
-	const setToken = api.cloudflareSettings.setToken.useMutation({
-		onSuccess: async (result) => {
-			toast.success("Cloudflare connected, syncing DNS domains…");
-			if (result.validation?.warning) {
-				toast.message(result.validation.warning);
-			}
-			setTokenInput("");
-			await utils.cloudflareSettings.get.invalidate();
-			await utils.cloudflareSettings.listZones.invalidate();
-			await utils.dnsProviders.listZones.invalidate();
-			await utils.dnsProviders.list.invalidate();
-			await utils.domain.listInventory.invalidate();
-			await refetchCfZones();
-			await refetchMirrored();
-		},
-		onError: (e) => toast.error(e.message),
-	});
-
 	const syncCfZones = api.cloudflareSettings.syncZones.useMutation();
 	const syncVaultZones = api.dnsProviders.syncZones.useMutation();
 
@@ -368,15 +251,6 @@ export const DomainsHub = () => {
 		);
 	};
 
-	const handleConnect = () => {
-		const token = tokenInput.trim();
-		if (!token) {
-			toast.error("API token is required");
-			return;
-		}
-		setToken.mutate({ apiToken: token });
-	};
-
 	const provisionedCount =
 		inventory?.filter((row) => row.kind !== "web-server").length ?? 0;
 	const hasInventory = (inventory?.length ?? 0) > 0;
@@ -394,9 +268,7 @@ export const DomainsHub = () => {
 		!zonesPending;
 
 	const lastSyncedAt = useMemo(() => {
-		const zoneSyncSources = (
-			!zonesPending ? zones : displayZones
-		).map((z) =>
+		const zoneSyncSources = (!zonesPending ? zones : displayZones).map((z) =>
 			z.lastSyncedAt
 				? z.lastSyncedAt instanceof Date
 					? z.lastSyncedAt.toISOString()
@@ -448,12 +320,7 @@ export const DomainsHub = () => {
 								</section>
 							) : null}
 
-							<ConnectDnsProviderEmpty
-								tokenInput={tokenInput}
-								setTokenInput={setTokenInput}
-								onConnect={handleConnect}
-								isLoading={setToken.isPending}
-							/>
+							<DnsProviderOnboarding />
 						</CardContent>
 					</div>
 				</Card>
@@ -476,7 +343,10 @@ export const DomainsHub = () => {
 								{settings?.apiTokenLast4
 									? ` · Managed DNS ****${settings.apiTokenLast4}`
 									: ""}
-								<span className="text-muted-foreground"> · {lastSyncedLabel}</span>
+								<span className="text-muted-foreground">
+									{" "}
+									· {lastSyncedLabel}
+								</span>
 							</CardDescription>
 						</div>
 						<div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">

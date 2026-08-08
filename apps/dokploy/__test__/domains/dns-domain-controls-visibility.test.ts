@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import {
 	deriveCloudflareDomainControlsVisibility,
 	resolveCloudflareManagedState,
-} from "@/components/dashboard/application/domains/cloudflare-domain-controls-visibility";
+} from "@/components/dashboard/application/domains/dns-domain-controls-visibility";
 
 describe("resolveCloudflareManagedState", () => {
 	it("reads the saved provider when nothing is in flight", () => {
@@ -68,7 +68,7 @@ describe("deriveCloudflareDomainControlsVisibility", () => {
 		expect(on.showManagedToggle).toBe(true);
 	});
 
-	it("never shows a proxy switch — CF proxy is adapter policy", () => {
+	it("never shows a proxy switch â€” CF proxy is adapter policy", () => {
 		expect(
 			deriveCloudflareDomainControlsVisibility({
 				isConnected: true,

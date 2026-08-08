@@ -1,12 +1,12 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { toast } from "sonner";
 import {
 	deriveCloudflareDomainControlsVisibility,
 	resolveCloudflareManagedState,
-} from "@/components/dashboard/application/domains/cloudflare-domain-controls-visibility";
-import { CloudflareDomainSyncDialog } from "@/components/dashboard/application/domains/cloudflare-domain-sync-dialog";
+} from "@/components/dashboard/application/domains/dns-domain-controls-visibility";
+import { CloudflareDomainSyncDialog } from "@/components/dashboard/application/domains/dns-domain-sync-dialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/utils/api";

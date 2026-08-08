@@ -1,4 +1,4 @@
-import {
+﻿import {
 	INVALID_HOSTNAME_MESSAGE,
 	VALID_HOSTNAME_REGEX,
 } from "@dokploy/server/utils/hostname-validation";
@@ -9,13 +9,13 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import z from "zod";
-import { CloudflareDomainControls } from "@/components/dashboard/application/domains/cloudflare-domain-controls";
+import { CloudflareDomainControls } from "@/components/dashboard/application/domains/dns-domain-controls";
 import {
 	type DomainPortHints,
 	deriveDomainPortGuidance,
 	suggestDomainPort,
 } from "@/components/dashboard/application/domains/domain-port-guidance";
-import { CloudflareHostnameLabelField } from "@/components/dashboard/domains/cloudflare-hostname-label-field";
+import { CloudflareHostnameLabelField } from "@/components/dashboard/domains/dns-hostname-label-field";
 import { AlertBlock } from "@/components/shared/alert-block";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -953,7 +953,7 @@ export const AddDomain = ({
 												<FormLabel>Container Port</FormLabel>
 												<FormDescription>
 													The port your app listens on <em>inside</em> the
-													container — not a host publish port. Traefik reaches
+													container â€” not a host publish port. Traefik reaches
 													the container over <code>dokploy-network</code>.
 												</FormDescription>
 												<FormControl>
@@ -1096,7 +1096,7 @@ export const AddDomain = ({
 																	>
 																		Certificates
 																	</Link>{" "}
-																	section whose CN/SAN matches this host —
+																	section whose CN/SAN matches this host â€”
 																	Traefik selects it automatically via SNI.
 																</>
 															)}
@@ -1133,7 +1133,7 @@ export const AddDomain = ({
 															<FormDescription>
 																Enter the <strong>name</strong> of a Traefik
 																cert resolver defined in your static
-																configuration (e.g. <code>letsencrypt</code>) —
+																configuration (e.g. <code>letsencrypt</code>) â€”
 																not certificate or private key content. To use a
 																certificate you pasted in the Certificates
 																section, choose <strong>None</strong> instead

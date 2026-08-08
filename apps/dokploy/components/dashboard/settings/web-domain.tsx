@@ -1,4 +1,4 @@
-import {
+﻿import {
 	INVALID_HOSTNAME_MESSAGE,
 	VALID_HOSTNAME_REGEX,
 } from "@dokploy/server/utils/hostname-validation";
@@ -8,10 +8,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
-import { CloudflareHostnameLabelField } from "@/components/dashboard/domains/cloudflare-hostname-label-field";
-import { matchHostToCloudflareZone } from "@/components/dashboard/settings/web-server/match-host-to-cloudflare-zone";
-import { ServerDomainCloudflareControls } from "@/components/dashboard/settings/web-server/server-domain-cloudflare-controls";
-import { shouldShowServerCloudflareControls } from "@/components/dashboard/settings/web-server/should-show-server-cloudflare-controls";
+import { CloudflareHostnameLabelField } from "@/components/dashboard/domains/dns-hostname-label-field";
+import { matchHostToCloudflareZone } from "@/components/dashboard/settings/web-server/match-host-to-dns-zone";
+import { ServerDomainCloudflareControls } from "@/components/dashboard/settings/web-server/server-domain-dns-controls";
+import { shouldShowServerCloudflareControls } from "@/components/dashboard/settings/web-server/should-show-server-dns-controls";
 import { AlertBlock } from "@/components/shared/alert-block";
 import { Button } from "@/components/ui/button";
 import {
@@ -171,7 +171,7 @@ export const WebDomain = () => {
 		}
 	}, [form, form.reset, data]);
 
-	// Derive Cloudflare managed toggle from zone/mirror state — not a stale local flag.
+	// Derive Cloudflare managed toggle from zone/mirror state â€” not a stale local flag.
 	useEffect(() => {
 		if (!cfSettings?.connected) {
 			setHostInputMode("manual");
@@ -286,7 +286,7 @@ export const WebDomain = () => {
 						{hasChanged && (
 							<AlertBlock type="warning">
 								<div className="space-y-2">
-									<p className="font-medium">⚠️ Important: URL Change Impact</p>
+									<p className="font-medium">âš ï¸ Important: URL Change Impact</p>
 									<p>
 										If you change the Dokploy Server URL make sure to update
 										your Github Apps to keep the auto-deploy working and preview

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { matchHostToCloudflareZone } from "@/components/dashboard/settings/web-server/match-host-to-cloudflare-zone";
+﻿import { describe, expect, it } from "vitest";
+import { matchHostToCloudflareZone } from "@/components/dashboard/settings/web-server/match-host-to-dns-zone";
 
 describe("matchHostToCloudflareZone", () => {
 	const zones = [

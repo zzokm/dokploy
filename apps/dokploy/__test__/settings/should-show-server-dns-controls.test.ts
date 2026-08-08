@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { shouldShowServerCloudflareControls } from "@/components/dashboard/settings/web-server/should-show-server-cloudflare-controls";
+﻿import { describe, expect, it } from "vitest";
+import { shouldShowServerCloudflareControls } from "@/components/dashboard/settings/web-server/should-show-server-dns-controls";
 
 describe("shouldShowServerCloudflareControls", () => {
 	const managedAndSaved = {

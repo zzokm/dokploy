@@ -13,6 +13,7 @@ import { destinationRouter } from "./routers/destination";
 import { dockerRouter } from "./routers/docker";
 import { domainRouter } from "./routers/domain";
 import { environmentRouter } from "./routers/environment";
+import { operatorRouter } from "./routers/operator";
 import { gitProviderRouter } from "./routers/git-provider";
 import { giteaRouter } from "./routers/gitea";
 import { githubRouter } from "./routers/github";
@@ -63,6 +64,7 @@ export const appRouter = createTRPCRouter({
 	backup: backupRouter,
 	bitbucket: bitbucketRouter,
 	cloudflareSettings: cloudflareSettingsRouter,
+	operator: operatorRouter,
 	network: networkRouter,
 	certificates: certificateRouter,
 	cluster: clusterRouter,

@@ -32,6 +32,8 @@ async function generateOpenAPI() {
 				"cluster",
 				"user",
 				"domain",
+				"cloudflareSettings",
+				"operator",
 				"destination",
 				"backup",
 				"deployment",

@@ -53,3 +53,9 @@ yarn-error.log*
 
 .playwright-*
 .credentials
+
+# Local planning / PR drafts (never commit)
+docs/plans/
+docs/plans/**
+docs/pr-drafts/
+docs/pr-drafts/**

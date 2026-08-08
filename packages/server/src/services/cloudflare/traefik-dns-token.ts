@@ -3,6 +3,7 @@ import { cloudflareSettings } from "@dokploy/server/db/schema";
 import { unsealString } from "@dokploy/server/utils/crypto/seal";
 import { prepareEnvironmentVariables } from "@dokploy/server/utils/docker/utils";
 import { eq } from "drizzle-orm";
+import { ensureTraefikDnsProviderToken } from "../dns/ensure-traefik-dns-token";
 import {
 	readEnvironmentVariables,
 	readPorts,
@@ -21,15 +22,28 @@ export type EnsureTraefikCloudflareDnsTokenResult = {
 };
 
 /**
- * Cloudflare-proxied domains get `certresolver=letsencrypt-cloudflare`, which
- * resolves ACME over DNS-01 and therefore needs the API token in Traefik's
- * environment. Without it Traefik silently falls back to its self-signed
- * default certificate and Cloudflare answers 5xx on every request.
+ * Cloudflare-proxied domains get `certresolver=letsencrypt-cloudflare`.
+ * Prefers sealed vault credential; falls back to legacy cloudflare_settings.
  */
 export const ensureTraefikCloudflareDnsToken = async (input: {
 	organizationId: string;
 	serverId?: string;
 }): Promise<EnsureTraefikCloudflareDnsTokenResult> => {
+	const viaAdapter = await ensureTraefikDnsProviderToken({
+		organizationId: input.organizationId,
+		provider: "cloudflare",
+		serverId: input.serverId,
+	});
+	if (
+		viaAdapter.reason === "applied" ||
+		viaAdapter.reason === "already_configured"
+	) {
+		return {
+			applied: viaAdapter.applied,
+			reason: viaAdapter.reason,
+		};
+	}
+
 	const [settings] = await db
 		.select({ apiTokenEncrypted: cloudflareSettings.apiTokenEncrypted })
 		.from(cloudflareSettings)
@@ -71,3 +85,5 @@ export const ensureTraefikCloudflareDnsToken = async (input: {
 		return { applied: false, reason: "traefik_unavailable" };
 	}
 };
+
+export { ensureTraefikDnsProviderToken };

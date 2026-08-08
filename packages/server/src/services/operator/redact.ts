@@ -4,8 +4,28 @@ const SECRET_PATTERNS: Array<{ re: RegExp; replace: string }> = [
 		replace: "Bearer [REDACTED]",
 	},
 	{
-		re: /(?<=(?:api[_-]?key|token|password|secret|cf_dns_api_token)\s*[=:]\s*)[^\s"'&,;]+/gi,
+		re: /(?<=(?:api[_-]?key|token|password|secret|cf_dns_api_token|do_auth_token|hetzner_api_key|aws_secret_access_key|aws_access_key_id)\s*[=:]\s*)[^\s"'&,;]+/gi,
 		replace: "[REDACTED]",
+	},
+	{
+		re: /\bCF_DNS_API_TOKEN=[^\s"'&]+/gi,
+		replace: "CF_DNS_API_TOKEN=[REDACTED]",
+	},
+	{
+		re: /\bDO_AUTH_TOKEN=[^\s"'&]+/gi,
+		replace: "DO_AUTH_TOKEN=[REDACTED]",
+	},
+	{
+		re: /\bHETZNER_API_KEY=[^\s"'&]+/gi,
+		replace: "HETZNER_API_KEY=[REDACTED]",
+	},
+	{
+		re: /\bAWS_SECRET_ACCESS_KEY=[^\s"'&]+/gi,
+		replace: "AWS_SECRET_ACCESS_KEY=[REDACTED]",
+	},
+	{
+		re: /\bAWS_ACCESS_KEY_ID=[^\s"'&]+/gi,
+		replace: "AWS_ACCESS_KEY_ID=[REDACTED]",
 	},
 	{
 		re: /\b(sk|rk|pk|api)[_-][A-Za-z0-9]{16,}\b/g,
@@ -36,7 +56,9 @@ export const redactDeep = <T>(value: T): T => {
 		const out: Record<string, unknown> = {}
 		for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
 			if (
-				/token|password|secret|privateKey|apiKey|encryption/i.test(k) &&
+				/token|password|secret|privateKey|apiKey|encryption|authToken|accessKey/i.test(
+					k,
+				) &&
 				typeof v === "string"
 			) {
 				out[k] = "[REDACTED]"

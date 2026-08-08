@@ -1,6 +1,43 @@
 -- Multi-provider Auto DNS: sealed credential vault, generic zone/record mirrors,
 -- and additive dns_* domain columns. Keeps cloudflare_* tables and cf_* columns.
 
+-- 0181 renamed infra_dns_record → dns_record (hosted-domain shape: domain_id).
+-- This migration creates a different dns_record (provider mirror: organization_id).
+-- Rename the old table out of the way on fresh installs so CREATE IF NOT EXISTS
+-- does not skip and then fail adding organization_id FKs.
+DO $$ BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'public'
+			AND table_name = 'dns_record'
+			AND column_name = 'domain_id'
+	) AND NOT EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'public'
+			AND table_name = 'dns_record'
+			AND column_name = 'organization_id'
+	) THEN
+		ALTER TABLE "dns_record" RENAME TO "hosted_dns_record";
+		IF EXISTS (
+			SELECT 1 FROM pg_class c
+			JOIN pg_namespace n ON n.oid = c.relnamespace
+			WHERE n.nspname = 'public' AND c.relname = 'dns_record_domain_id_idx'
+		) THEN
+			ALTER INDEX "dns_record_domain_id_idx" RENAME TO "hosted_dns_record_domain_id_idx";
+		END IF;
+		IF EXISTS (
+			SELECT 1 FROM pg_constraint
+			WHERE conname = 'dns_record_domain_id_hosted_domain_id_fk'
+		) THEN
+			ALTER TABLE "hosted_dns_record"
+				RENAME CONSTRAINT "dns_record_domain_id_hosted_domain_id_fk"
+				TO "hosted_dns_record_domain_id_hosted_domain_id_fk";
+		END IF;
+	END IF;
+END $$;
+--> statement-breakpoint
 DO $$ BEGIN
  CREATE TYPE "dnsProvider" AS ENUM('cloudflare', 'digitalocean', 'hetzner', 'route53', 'gcloud', 'ns1', 'akamai');
 EXCEPTION

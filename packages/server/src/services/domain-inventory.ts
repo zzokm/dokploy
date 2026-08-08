@@ -44,7 +44,15 @@ export type DomainInventoryItem = {
 	 * application (likely confused with container targetPort).
 	 */
 	portLooksLikeHostPublish: boolean;
-	dnsProvider: "none" | "cloudflare";
+	dnsProvider:
+		| "none"
+		| "cloudflare"
+		| "digitalocean"
+		| "hetzner"
+		| "route53"
+		| "gcloud"
+		| "ns1"
+		| "akamai";
 	cfProxied: boolean | null;
 	cfStatus: "synced" | "pending" | "error" | null;
 	cfZoneName: string | null;
@@ -528,7 +536,15 @@ export type DomainDnsRecordsResult = {
 	domainId: string;
 	host: string;
 	zoneName: string | null;
-	dnsProvider: "none" | "cloudflare";
+	dnsProvider:
+		| "none"
+		| "cloudflare"
+		| "digitalocean"
+		| "hetzner"
+		| "route53"
+		| "gcloud"
+		| "ns1"
+		| "akamai";
 	records: DomainDnsRecordPreview[];
 };
 

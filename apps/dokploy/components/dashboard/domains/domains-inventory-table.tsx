@@ -22,6 +22,10 @@ import { useRouter } from "next/router";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+	readDnsDomainsCache,
+	writeDnsDomainsCache,
+} from "@/components/dashboard/domains/dns-domains-cache";
+import {
 	buildDomainEditHref,
 	buildHostnameExternalUrl,
 	deriveInventoryWarnings,
@@ -112,7 +116,17 @@ export const DomainsInventoryTable = ({
 	emptyContent?: ReactNode;
 }) => {
 	const router = useRouter();
-	const { data, isPending } = api.domain.listInventory.useQuery();
+	const { data: sessionData } = api.user.session.useQuery();
+	const orgId = sessionData?.session.activeOrganizationId ?? null;
+	const cachedInventory = useMemo(() => {
+		if (!orgId) return undefined;
+		const cached = readDnsDomainsCache(orgId);
+		if (!Array.isArray(cached?.inventory)) return undefined;
+		return cached.inventory as InventoryRow[];
+	}, [orgId]);
+	const { data, isPending } = api.domain.listInventory.useQuery(undefined, {
+		placeholderData: cachedInventory,
+	});
 	const { mutateAsync: validateDomain } =
 		api.domain.validateDomain.useMutation();
 	const [sorting, setSorting] = useState<SortingState>([
@@ -121,6 +135,11 @@ export const DomainsInventoryTable = ({
 	const [hostFilter, setHostFilter] = useState("");
 	const [dnsHealth, setDnsHealth] = useState<DnsHealthMap>({});
 	const validatedKeyRef = useRef<string>("");
+
+	useEffect(() => {
+		if (!orgId || data === undefined) return;
+		writeDnsDomainsCache(orgId, { inventory: data });
+	}, [orgId, data]);
 
 	const openProject = (row: InventoryRow) => {
 		const href = buildDomainEditHref({
@@ -376,7 +395,7 @@ export const DomainsInventoryTable = ({
 		initialState: { pagination: { pageSize: 12 } },
 	});
 
-	if (isPending) {
+	if (isPending && !data) {
 		return (
 			<div className="flex min-h-[20vh] flex-col items-center justify-center gap-3 text-sm text-muted-foreground sm:flex-row">
 				<Loader2 className="size-5 animate-spin" aria-hidden />

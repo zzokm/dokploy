@@ -14,8 +14,15 @@ import {
 	ShieldCheck,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import {
+	type CachedDnsZone,
+	type DnsDomainsCachePayload,
+	readDnsDomainsCache,
+	serializeHubZones,
+	writeDnsDomainsCache,
+} from "@/components/dashboard/domains/dns-domains-cache";
 import { latestSyncIso } from "@/components/dashboard/domains/domain-inventory-utils";
 import { DomainsInventoryTable } from "@/components/dashboard/domains/domains-inventory-table";
 import { ZoneDnsRecordsPanel } from "@/components/dashboard/domains/zone-dns-records-panel";
@@ -161,6 +168,10 @@ export const DomainsHub = () => {
 	const utils = api.useUtils();
 	const [tokenInput, setTokenInput] = useState("");
 	const [expandedZoneIds, setExpandedZoneIds] = useState<string[]>([]);
+	const [domainsCache, setDomainsCache] =
+		useState<DnsDomainsCachePayload | null>(null);
+	const { data: sessionData } = api.user.session.useQuery();
+	const orgId = sessionData?.session.activeOrganizationId ?? null;
 	const { data: settings } = api.cloudflareSettings.get.useQuery();
 	const { data: vaultCreds } = api.dnsProviders.list.useQuery();
 	const { data: inventory, isPending: inventoryPending } =
@@ -177,8 +188,20 @@ export const DomainsHub = () => {
 		enabled: (vaultCreds?.length ?? 0) > 0 || !!settings?.connected,
 	});
 
-	const hasAnyProvider =
+	useEffect(() => {
+		if (!orgId) {
+			setDomainsCache(null);
+			return;
+		}
+		setDomainsCache(readDnsDomainsCache(orgId));
+	}, [orgId]);
+
+	const providersResolved = settings !== undefined && vaultCreds !== undefined;
+	const liveHasProvider =
 		!!settings?.connected || (vaultCreds?.length ?? 0) > 0;
+	const hasAnyProvider = providersResolved
+		? liveHasProvider
+		: Boolean(domainsCache?.hasProvider);
 
 	const zones = useMemo(() => {
 		const byKey = new Map<
@@ -231,6 +254,41 @@ export const DomainsHub = () => {
 
 		return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
 	}, [mirroredZones, cfZones]);
+
+	useEffect(() => {
+		if (!orgId || !providersResolved) return;
+
+		if (!liveHasProvider) {
+			const written = writeDnsDomainsCache(orgId, {
+				hasProvider: false,
+				zones: [],
+			});
+			if (written) setDomainsCache(written);
+			return;
+		}
+
+		const cfEnabled = !!settings?.connected;
+		const mirroredEnabled =
+			(vaultCreds?.length ?? 0) > 0 || !!settings?.connected;
+		const cfReady = !cfEnabled || !cfZonesPending;
+		const mirroredReady = !mirroredEnabled || !mirroredPending;
+		if (!cfReady || !mirroredReady) return;
+
+		const written = writeDnsDomainsCache(orgId, {
+			hasProvider: true,
+			zones: serializeHubZones(zones),
+		});
+		if (written) setDomainsCache(written);
+	}, [
+		orgId,
+		providersResolved,
+		liveHasProvider,
+		settings?.connected,
+		vaultCreds?.length,
+		cfZonesPending,
+		mirroredPending,
+		zones,
+	]);
 
 	const setToken = api.cloudflareSettings.setToken.useMutation({
 		onSuccess: async (result) => {
@@ -322,24 +380,35 @@ export const DomainsHub = () => {
 	const provisionedCount =
 		inventory?.filter((row) => row.kind !== "web-server").length ?? 0;
 	const hasInventory = (inventory?.length ?? 0) > 0;
-	const zoneCount = zones.length;
 	const zonesPending = cfZonesPending || mirroredPending;
+	const hasZonesCache = Boolean(domainsCache?.hasProvider);
+	const showZonesLoading = zonesPending && !hasZonesCache;
+	const displayZones: CachedDnsZone[] = !zonesPending
+		? serializeHubZones(zones)
+		: (domainsCache?.zones ?? []);
+	const displayZoneCount = !zonesPending ? zones.length : displayZones.length;
 	const showConnectedThinEmpty =
-		!inventoryPending && provisionedCount === 0 && zoneCount > 0;
+		!inventoryPending &&
+		provisionedCount === 0 &&
+		displayZoneCount > 0 &&
+		!zonesPending;
 
 	const lastSyncedAt = useMemo(() => {
+		const zoneSyncSources = (
+			!zonesPending ? zones : displayZones
+		).map((z) =>
+			z.lastSyncedAt
+				? z.lastSyncedAt instanceof Date
+					? z.lastSyncedAt.toISOString()
+					: String(z.lastSyncedAt)
+				: null,
+		);
 		return latestSyncIso([
 			settings?.updatedAt ?? null,
-			...zones.map((z) =>
-				z.lastSyncedAt
-					? z.lastSyncedAt instanceof Date
-						? z.lastSyncedAt.toISOString()
-						: String(z.lastSyncedAt)
-					: null,
-			),
+			...zoneSyncSources,
 			...(inventory?.map((row) => row.lastSyncedAt) ?? []),
 		]);
-	}, [settings?.updatedAt, zones, inventory]);
+	}, [settings?.updatedAt, zones, displayZones, zonesPending, inventory]);
 
 	const lastSyncedLabel = lastSyncedAt
 		? `Last synced ${formatDistanceToNow(new Date(lastSyncedAt), { addSuffix: true })}`
@@ -443,7 +512,7 @@ export const DomainsHub = () => {
 							</div>
 							{showConnectedThinEmpty ? (
 								<div className="space-y-6">
-									<ConnectedNoAppDomainsEmpty zoneCount={zoneCount} />
+									<ConnectedNoAppDomainsEmpty zoneCount={displayZoneCount} />
 									{hasInventory ? <DomainsInventoryTable /> : null}
 								</div>
 							) : (
@@ -458,12 +527,12 @@ export const DomainsHub = () => {
 									Imported DNS domains available for managed DNS automation.
 								</p>
 							</div>
-							{zonesPending ? (
+							{showZonesLoading ? (
 								<div className="flex min-h-[12vh] w-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground sm:flex-row">
 									<Loader2 className="size-5 animate-spin" aria-hidden />
 									<span>Loading DNS domains…</span>
 								</div>
-							) : !zones?.length ? (
+							) : !displayZones.length ? (
 								<div className="flex min-h-[12vh] w-full flex-col items-center justify-center gap-3 px-2 text-center">
 									<Cloud className="size-8 text-muted-foreground" aria-hidden />
 									<span className="max-w-md text-sm text-muted-foreground">
@@ -482,7 +551,7 @@ export const DomainsHub = () => {
 								</div>
 							) : (
 								<div className="flex w-full flex-col gap-2">
-									{zones.map((z, index) => {
+									{displayZones.map((z, index) => {
 										const expanded = expandedZoneIds.includes(z.key);
 										const panelId = `zone-records-${z.key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 										return (

@@ -50,6 +50,20 @@ void app.prepare().then(async () => {
 			handle(req, res);
 		});
 
+		// Unhandled `error` on upgrade sockets kills the whole Node process
+		// (exit 1, often with no app stack). Dashboard pages open HMR +
+		// /drawer-logs (and service pages open more WS) — guard every upgrade
+		// before any path-specific handler touches the socket.
+		server.on("upgrade", (_req, socket) => {
+			socket.on("error", () => {
+				try {
+					socket.destroy();
+				} catch {
+					/* ignore */
+				}
+			});
+		});
+
 		// WEBSOCKET
 		setupDrawerLogsWebSocketServer(server);
 		setupDeploymentLogsWebSocketServer(server);

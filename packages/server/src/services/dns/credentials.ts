@@ -11,15 +11,9 @@ import {
 	unsealString,
 } from "@dokploy/server/utils/crypto/seal";
 import { nanoid } from "nanoid";
+import type { DnsProviderId } from "./types";
 
-export type DnsProviderId =
-	| "cloudflare"
-	| "digitalocean"
-	| "hetzner"
-	| "route53"
-	| "gcloud"
-	| "ns1"
-	| "akamai";
+export type { DnsProviderId };
 
 /** Public credential view — never includes sealed or raw secret. */
 export type DnsProviderCredentialPublic = {

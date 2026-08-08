@@ -125,7 +125,7 @@ export const DnsProvidersSection = () => {
 			? "Zone → Zone → Read and Zone → DNS → Edit. Always proxied + DNS-01."
 			: provider === "digitalocean"
 				? "Personal access token with domain scope. HTTP-01 ACME by default."
-				: "Hetzner DNS Console token (dns.hetzner.com) — not the Cloud token.";
+				: "Hetzner DNS Console token (dns.hetzner.com), not the Cloud token.";
 
 	return (
 		<>
@@ -141,7 +141,7 @@ export const DnsProvidersSection = () => {
 								DNS providers
 							</CardTitle>
 							<CardDescription className="text-xs sm:text-sm">
-								Connect a provider for Auto DNS — zones, records, and managed
+								Connect a provider for managed DNS: zones, records, and
 								hostnames.
 							</CardDescription>
 						</div>
@@ -184,7 +184,8 @@ export const DnsProvidersSection = () => {
 							</div>
 						) : (
 							<p className="text-sm text-muted-foreground">
-								No Cloudflare credential yet. Add a provider to enable Auto DNS.
+								No Cloudflare credential yet. Add a provider to enable managed
+								DNS.
 							</p>
 						)}
 

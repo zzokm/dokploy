@@ -101,7 +101,7 @@ export const CloudflareDnsPreviewDialog = ({
 			}
 			if (errCount) {
 				toast.error(
-					`${errCount} domain(s) could not be updated — see details in the table.`,
+					`${errCount} domain(s) could not be updated. See details in the table.`,
 				)
 			}
 			await utils.cloudflareSettings.previewAppDns.invalidate()

@@ -211,7 +211,7 @@ export const ShowDomains = ({ id, type }: Props) => {
 		try {
 			await deployCompose({ composeId: id });
 			setSavedSinceDeploy(false);
-			toast.success("Deployment queued — routing applies once it finishes");
+			toast.success("Deployment queued: routing applies once it finishes");
 		} catch {
 			toast.error("Error deploying compose");
 		}
@@ -376,7 +376,7 @@ export const ShowDomains = ({ id, type }: Props) => {
 			{needsApply ? (
 				<AlertBlock type="warning">
 					Domain changes are saved but not routed yet. Compose Traefik labels
-					are written on deploy — until then this hostname returns a 404.
+					are written on deploy: until then this hostname returns a 404.
 					{canCreateDomain ? (
 						<Button
 							size="sm"

@@ -60,8 +60,8 @@ const ConnectDnsProviderEmpty = ({
 					Connect a DNS provider
 				</p>
 				<p className="text-sm leading-relaxed text-muted-foreground">
-					Import zones and automate A records for applications, compose
-					services, and the web server (Auto DNS).
+					Import DNS domains and automate A records for applications, compose
+					services, and the web server.
 				</p>
 			</div>
 		</div>
@@ -86,7 +86,7 @@ const ConnectDnsProviderEmpty = ({
 				<div className="min-w-0 space-y-0.5">
 					<p className="font-medium">2. Connect here</p>
 					<p className="text-xs text-muted-foreground">
-						Paste the token below. We store it sealed and sync your zones.
+						Paste the token below. We store it sealed and sync your DNS domains.
 					</p>
 				</div>
 			</li>
@@ -97,7 +97,8 @@ const ConnectDnsProviderEmpty = ({
 				<div className="min-w-0 space-y-0.5">
 					<p className="font-medium">3. Attach from a project</p>
 					<p className="text-xs text-muted-foreground">
-						Open a service Domains tab and add a hostname under a synced zone.
+						Open a service Domains tab and add a hostname under a synced DNS
+						domain.
 					</p>
 				</div>
 			</li>
@@ -125,7 +126,7 @@ const ConnectDnsProviderEmpty = ({
 			</Button>
 			<p className="text-xs leading-relaxed text-muted-foreground">
 				Add DigitalOcean / Hetzner from Web Server → DNS providers. Cloudflare
-				Auto DNS always uses CDN proxy + DNS-01.
+				managed DNS always uses CDN proxy + DNS-01.
 			</p>
 		</div>
 	</div>
@@ -142,12 +143,12 @@ const ConnectedNoAppDomainsEmpty = ({
 		</div>
 		<div className="max-w-md space-y-1.5">
 			<p className="text-sm font-medium text-foreground">
-				Synced {zoneCount} domain{zoneCount === 1 ? "" : "s"} — attach one from a
-				project.
+				Synced {zoneCount} DNS domain{zoneCount === 1 ? "" : "s"}. Attach one
+				from a project.
 			</p>
 			<p className="text-xs leading-relaxed text-muted-foreground">
-				Synced zones are ready. Open any application or compose service, go to
-				Domains, and add a hostname with Auto DNS enabled.
+				Synced DNS domains are ready. Open any application or compose service,
+				go to Domains, and add a hostname with Managed DNS enabled.
 			</p>
 		</div>
 		<Button type="button" variant="secondary" asChild>
@@ -233,7 +234,7 @@ export const DomainsHub = () => {
 
 	const setToken = api.cloudflareSettings.setToken.useMutation({
 		onSuccess: async (result) => {
-			toast.success("Cloudflare connected — syncing zones…");
+			toast.success("Cloudflare connected, syncing DNS domains…");
 			if (result.validation?.warning) {
 				toast.message(result.validation.warning);
 			}
@@ -263,12 +264,14 @@ export const DomainsHub = () => {
 					if ((vaultCreds?.length ?? 0) > 0) {
 						await syncVaultZones.mutateAsync({});
 					}
-					toast.success("Zones synced");
+					toast.success("DNS domains synced");
 					await refetchCfZones();
 					await refetchMirrored();
 					await utils.dnsProviders.listZones.invalidate();
 				} catch (e) {
-					toast.error(e instanceof Error ? e.message : "Failed to sync zones");
+					toast.error(
+						e instanceof Error ? e.message : "Failed to sync DNS domains",
+					);
 				}
 			})();
 		},
@@ -353,8 +356,8 @@ export const DomainsHub = () => {
 								Domains
 							</CardTitle>
 							<CardDescription>
-								Connect a DNS provider to import zones and automate DNS for your
-								applications (Auto DNS).
+								Connect a DNS provider to import DNS domains and automate DNS
+								for your applications.
 							</CardDescription>
 						</CardHeader>
 						<CardContent className="space-y-8 border-t py-8 sm:py-10">
@@ -402,7 +405,7 @@ export const DomainsHub = () => {
 							<CardDescription className="break-words">
 								All hostnames across apps, compose, and the web server
 								{settings?.apiTokenLast4
-									? ` · Auto DNS ****${settings.apiTokenLast4}`
+									? ` · Managed DNS ****${settings.apiTokenLast4}`
 									: ""}
 								<span className="text-muted-foreground"> · {lastSyncedLabel}</span>
 							</CardDescription>
@@ -426,7 +429,7 @@ export const DomainsHub = () => {
 								onClick={() => syncZones.mutate()}
 							>
 								<RefreshCw className="mr-2 size-4" aria-hidden />
-								Sync zones
+								Sync DNS domains
 							</Button>
 						</div>
 					</CardHeader>
@@ -450,21 +453,21 @@ export const DomainsHub = () => {
 
 						<section className="space-y-3 border-t pt-6">
 							<div className="space-y-1">
-								<h3 className="text-sm font-medium">DNS zones</h3>
+								<h3 className="text-sm font-medium">DNS Domains</h3>
 								<p className="text-xs text-muted-foreground">
-									Imported zones available for Auto DNS automation.
+									Imported DNS domains available for managed DNS automation.
 								</p>
 							</div>
 							{zonesPending ? (
 								<div className="flex min-h-[12vh] w-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground sm:flex-row">
 									<Loader2 className="size-5 animate-spin" aria-hidden />
-									<span>Loading zones…</span>
+									<span>Loading DNS domains…</span>
 								</div>
 							) : !zones?.length ? (
 								<div className="flex min-h-[12vh] w-full flex-col items-center justify-center gap-3 px-2 text-center">
 									<Cloud className="size-8 text-muted-foreground" aria-hidden />
 									<span className="max-w-md text-sm text-muted-foreground">
-										No zones imported yet. Sync zones from your DNS provider to
+										No DNS domains imported yet. Sync from your DNS provider to
 										get started.
 									</span>
 									<Button
@@ -474,7 +477,7 @@ export const DomainsHub = () => {
 										onClick={() => syncZones.mutate()}
 									>
 										<RefreshCw className="mr-2 size-4" aria-hidden />
-										Sync zones
+										Sync DNS domains
 									</Button>
 								</div>
 							) : (

@@ -275,15 +275,15 @@ export const deriveInventoryWarnings = (input: {
 		warnings.push({
 			kind: "redeploy_traefik",
 			label: "Redeploy required",
-			hint: "Domain added after last deploy — redeploy to apply Traefik",
+			hint: "Domain added after last deploy: redeploy to apply Traefik",
 		});
 	}
 
 	if (input.portLooksLikeHostPublish) {
 		const portHint =
 			input.port != null
-				? `Port ${input.port} matches a host publish mapping — use the container listen port instead.`
-				: "Port looks like a host publish port — use the container listen port instead.";
+				? `Port ${input.port} matches a host publish mapping: use the container listen port instead.`
+				: "Port looks like a host publish port: use the container listen port instead.";
 		warnings.push({
 			kind: "host_publish_port",
 			label: "Host publish port",

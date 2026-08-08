@@ -235,11 +235,12 @@ export const provisionDomain = async (
 	}
 
 	// 3. Attach Dokploy domain only after DNS is live
-	let domainRow = await findExistingDomain(input)
+	const existing = await findExistingDomain(input)
 	let created = false
+	let domainId: string
 
-	if (!domainRow) {
-		domainRow = await createDomain({
+	if (!existing) {
+		const createdDomain = await createDomain({
 			host,
 			path: input.path ?? "/",
 			port: input.port ?? 3000,
@@ -254,9 +255,11 @@ export const provisionDomain = async (
 			cfProxied: proxied,
 		})
 		created = true
-		steps.push(`domain_created:${domainRow.domainId}`)
+		domainId = createdDomain.domainId
+		steps.push(`domain_created:${domainId}`)
 	} else {
-		steps.push(`domain_exists:${domainRow.domainId}`)
+		domainId = existing.domainId
+		steps.push(`domain_exists:${domainId}`)
 		await db
 			.update(domains)
 			.set({
@@ -265,13 +268,14 @@ export const provisionDomain = async (
 				customCertResolver: proxied ? "letsencrypt-cloudflare" : null,
 				dnsProvider: "cloudflare",
 				cfProxied: proxied,
-				port: input.port ?? domainRow.port,
-				path: input.path ?? domainRow.path,
-				serviceName: input.serviceName ?? domainRow.serviceName,
+				port: input.port ?? existing.port,
+				path: input.path ?? existing.path,
+				serviceName: input.serviceName ?? existing.serviceName,
 			})
-			.where(eq(domains.domainId, domainRow.domainId))
-		domainRow = await findDomainById(domainRow.domainId)
+			.where(eq(domains.domainId, domainId))
 	}
+
+	const domainRow = await findDomainById(domainId)
 
 	// Sync CF mirror + Traefik labels (idempotent)
 	await ensureCloudflareAppDnsForDomain({

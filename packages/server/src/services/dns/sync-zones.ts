@@ -27,6 +27,19 @@ const mapZoneStatus = (
 	return "active";
 };
 
+/** Postgres ON CONFLICT fails when migration 0189 unique indexes are missing. */
+const rethrowDnsMirrorUpsertError = (error: unknown): never => {
+	const message = error instanceof Error ? error.message : String(error);
+	if (
+		/no unique or exclusion constraint matching the ON CONFLICT/i.test(message)
+	) {
+		throw new Error(
+			"DNS sync failed: database is missing migration 0189 (dns_zone/dns_record uniqueness includes credential_id). Run migrations (pnpm --filter dokploy migration:run), then retry sync.",
+		);
+	}
+	throw error instanceof Error ? error : new Error(message);
+};
+
 /**
  * Sync zones (and optionally records) for one vault credential via its adapter
  * into generic `dns_zone` / `dns_record` mirrors.
@@ -56,64 +69,49 @@ export const syncDnsZonesForCredential = async (input: {
 	const now = new Date();
 	const credentialId = resolved.credentialId;
 
-	await db.transaction(async (tx) => {
-		for (const z of zones) {
-			await tx
-				.insert(dnsZone)
-				.values({
-					id: nanoid(),
-					organizationId: input.organizationId,
-					credentialId: credentialId ?? undefined,
-					provider: resolved.provider,
-					externalId: z.id,
-					name: z.name,
-					status: mapZoneStatus(z.status),
-					paused: !!z.paused,
-					meta: z.meta ?? {},
-					lastSyncedAt: now,
-					updatedAt: now,
-				})
-				.onConflictDoUpdate({
-					target: [
-						dnsZone.organizationId,
-						dnsZone.provider,
-						dnsZone.credentialId,
-						dnsZone.externalId,
-					],
-					set: {
+	try {
+		await db.transaction(async (tx) => {
+			for (const z of zones) {
+				await tx
+					.insert(dnsZone)
+					.values({
+						id: nanoid(),
+						organizationId: input.organizationId,
+						credentialId: credentialId ?? undefined,
+						provider: resolved.provider,
+						externalId: z.id,
 						name: z.name,
 						status: mapZoneStatus(z.status),
 						paused: !!z.paused,
 						meta: z.meta ?? {},
 						lastSyncedAt: now,
 						updatedAt: now,
-					},
-				});
-		}
+					})
+					.onConflictDoUpdate({
+						target: [
+							dnsZone.organizationId,
+							dnsZone.provider,
+							dnsZone.credentialId,
+							dnsZone.externalId,
+						],
+						set: {
+							name: z.name,
+							status: mapZoneStatus(z.status),
+							paused: !!z.paused,
+							meta: z.meta ?? {},
+							lastSyncedAt: now,
+							updatedAt: now,
+						},
+					});
+			}
 
-		const externalIds = zones.map((z) => z.id);
-		const existingQuery = tx
-			.select({
-				id: dnsZone.id,
-				externalId: dnsZone.externalId,
-			})
-			.from(dnsZone)
-			.where(
-				and(
-					eq(dnsZone.organizationId, input.organizationId),
-					eq(dnsZone.provider, resolved.provider),
-					credentialId
-						? eq(dnsZone.credentialId, credentialId)
-						: isNull(dnsZone.credentialId),
-				),
-			);
-
-		const existing = await existingQuery;
-		const missing = existing.filter((e) => !externalIds.includes(e.externalId));
-		if (missing.length > 0) {
-			await tx
-				.update(dnsZone)
-				.set({ status: "disabled", updatedAt: now })
+			const externalIds = zones.map((z) => z.id);
+			const existingQuery = tx
+				.select({
+					id: dnsZone.id,
+					externalId: dnsZone.externalId,
+				})
+				.from(dnsZone)
 				.where(
 					and(
 						eq(dnsZone.organizationId, input.organizationId),
@@ -121,59 +119,84 @@ export const syncDnsZonesForCredential = async (input: {
 						credentialId
 							? eq(dnsZone.credentialId, credentialId)
 							: isNull(dnsZone.credentialId),
-						inArray(
-							dnsZone.externalId,
-							missing.map((m) => m.externalId),
-						),
 					),
 				);
-		}
-	});
+
+			const existing = await existingQuery;
+			const missing = existing.filter(
+				(e) => !externalIds.includes(e.externalId),
+			);
+			if (missing.length > 0) {
+				await tx
+					.update(dnsZone)
+					.set({ status: "disabled", updatedAt: now })
+					.where(
+						and(
+							eq(dnsZone.organizationId, input.organizationId),
+							eq(dnsZone.provider, resolved.provider),
+							credentialId
+								? eq(dnsZone.credentialId, credentialId)
+								: isNull(dnsZone.credentialId),
+							inArray(
+								dnsZone.externalId,
+								missing.map((m) => m.externalId),
+							),
+						),
+					);
+			}
+		});
+	} catch (error) {
+		rethrowDnsMirrorUpsertError(error);
+	}
 
 	let recordsSynced = 0;
 	if (input.syncRecords) {
-		for (const z of zones) {
-			const records = await adapter.listRecords(creds, z.id);
-			const nowR = new Date();
-			for (const r of records) {
-				await db
-					.insert(dnsRecord)
-					.values({
-						id: nanoid(),
-						organizationId: input.organizationId,
-						credentialId: credentialId ?? undefined,
-						provider: resolved.provider,
-						zoneExternalId: z.id,
-						externalId: r.id,
-						type: String(r.type),
-						name: r.name,
-						content: r.content,
-						ttl: r.ttl ?? 1,
-						options: r.options ?? {},
-						managedBy: "manual",
-						lastSyncedAt: nowR,
-						updatedAt: nowR,
-					})
-					.onConflictDoUpdate({
-						target: [
-							dnsRecord.organizationId,
-							dnsRecord.provider,
-							dnsRecord.credentialId,
-							dnsRecord.externalId,
-						],
-						set: {
+		try {
+			for (const z of zones) {
+				const records = await adapter.listRecords(creds, z.id);
+				const nowR = new Date();
+				for (const r of records) {
+					await db
+						.insert(dnsRecord)
+						.values({
+							id: nanoid(),
+							organizationId: input.organizationId,
+							credentialId: credentialId ?? undefined,
+							provider: resolved.provider,
 							zoneExternalId: z.id,
+							externalId: r.id,
 							type: String(r.type),
 							name: r.name,
 							content: r.content,
 							ttl: r.ttl ?? 1,
 							options: r.options ?? {},
+							managedBy: "manual",
 							lastSyncedAt: nowR,
 							updatedAt: nowR,
-						},
-					});
-				recordsSynced += 1;
+						})
+						.onConflictDoUpdate({
+							target: [
+								dnsRecord.organizationId,
+								dnsRecord.provider,
+								dnsRecord.credentialId,
+								dnsRecord.externalId,
+							],
+							set: {
+								zoneExternalId: z.id,
+								type: String(r.type),
+								name: r.name,
+								content: r.content,
+								ttl: r.ttl ?? 1,
+								options: r.options ?? {},
+								lastSyncedAt: nowR,
+								updatedAt: nowR,
+							},
+						});
+					recordsSynced += 1;
+				}
 			}
+		} catch (error) {
+			rethrowDnsMirrorUpsertError(error);
 		}
 	}
 

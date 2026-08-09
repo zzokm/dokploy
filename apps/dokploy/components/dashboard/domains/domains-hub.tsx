@@ -509,15 +509,6 @@ export const DomainsHub = () => {
 										No DNS domains imported yet. Sync from your DNS provider to
 										get started.
 									</span>
-									<Button
-										type="button"
-										variant="secondary"
-										isLoading={syncZones.isPending}
-										onClick={() => syncZones.mutate()}
-									>
-										<RefreshCw className="mr-2 size-4" aria-hidden />
-										Sync DNS domains
-									</Button>
 								</div>
 							) : (
 								<div className="flex w-full flex-col gap-2">

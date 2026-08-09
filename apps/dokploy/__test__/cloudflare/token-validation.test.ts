@@ -23,7 +23,10 @@ vi.mock("../../../../packages/server/src/services/cloudflare/zones", () => ({
 	listCloudflareZones: vi.fn(),
 }))
 
-import { cloudflareFetch } from "../../../../packages/server/src/services/cloudflare/client"
+import {
+	CloudflareApiRequestError,
+	cloudflareFetch,
+} from "../../../../packages/server/src/services/cloudflare/client"
 import { listCloudflareZones } from "../../../../packages/server/src/services/cloudflare/zones"
 
 const mockedFetch = vi.mocked(cloudflareFetch)
@@ -72,6 +75,63 @@ describe("validateCloudflareApiToken", () => {
 		expect(result.ok).toBe(false)
 		expect(result.zoneRead).toBe(false)
 		expect(result.message).toMatch(/zone/i)
+	})
+
+	it("accepts account-owned tokens when user verify fails but zones work", async () => {
+		mockedFetch.mockImplementation(async (input) => {
+			if (input.path === "/user/tokens/verify") {
+				throw new CloudflareApiRequestError({
+					status: 401,
+					message: "Invalid API Token",
+					errors: [{ code: 1000, message: "Invalid API Token" }],
+				})
+			}
+			if (input.path.includes("/dns_records")) {
+				return []
+			}
+			throw new Error(`unexpected path ${input.path}`)
+		})
+		mockedListZones.mockResolvedValue([
+			{
+				id: "zone1",
+				name: "example.com",
+				status: "active",
+				paused: false,
+				type: "full",
+			},
+		])
+
+		const result = await validateCloudflareApiToken(
+			"cfat_" + "a".repeat(40) + "b6",
+		)
+		expect(result.ok).toBe(true)
+		expect(result.tokenActive).toBe(true)
+		expect(result.zoneRead).toBe(true)
+		expect(result.dnsRead).toBe(true)
+	})
+
+	it("rejects when both user verify and zone list fail", async () => {
+		mockedFetch.mockRejectedValue(
+			new CloudflareApiRequestError({
+				status: 401,
+				message: "Invalid API Token",
+				errors: [{ code: 1000, message: "Invalid API Token" }],
+			}),
+		)
+		mockedListZones.mockRejectedValue(
+			new CloudflareApiRequestError({
+				status: 401,
+				message: "Invalid API Token",
+				errors: [{ code: 1000, message: "Invalid API Token" }],
+			}),
+		)
+
+		const result = await validateCloudflareApiToken(
+			"cfat_" + "a".repeat(40) + "b6",
+		)
+		expect(result.ok).toBe(false)
+		expect(result.tokenActive).toBe(false)
+		expect(result.message).toMatch(/rejected this API token/i)
 	})
 })
 

@@ -48,9 +48,39 @@ const listDnsRecordsSample = async (token: string, zoneId: string) => {
 }
 
 /**
+ * Prove the token is live via `/user/tokens/verify`.
+ *
+ * Account-owned tokens (`cfat_…`) are rejected by the user verify endpoint
+ * even when valid — callers must fall back to a real API call (e.g. list zones).
+ */
+const tryUserTokenVerify = async (
+	token: string,
+): Promise<{ ok: true; status: string } | { ok: false; error: unknown }> => {
+	try {
+		const verify = await cloudflareFetch<TokenVerifyResult>({
+			token,
+			method: "GET",
+			path: "/user/tokens/verify",
+		})
+		const status = (verify?.status || "").toLowerCase()
+		if (status !== "active") {
+			return { ok: false, error: new Error("This Cloudflare API token is not active") }
+		}
+		return { ok: true, status }
+	} catch (e) {
+		return { ok: false, error: e }
+	}
+}
+
+/**
  * Validate a Cloudflare API token without mutating DNS.
  * Proves: token active, Zone Read, DNS Read (when a zone exists).
  * DNS Edit/write cannot be proven without a write — surface a clear warning.
+ *
+ * User tokens (`cfut_` / legacy) verify via `/user/tokens/verify`.
+ * Account-owned tokens (`cfat_`) fail that endpoint with "Invalid API Token"
+ * even when scoped correctly — for those we treat a successful zone list as
+ * proof the token is active.
  */
 export const validateCloudflareApiToken = async (
 	token: string,
@@ -67,40 +97,27 @@ export const validateCloudflareApiToken = async (
 		}
 	}
 
-	let verify: TokenVerifyResult
-	try {
-		verify = await cloudflareFetch<TokenVerifyResult>({
-			token: trimmed,
-			method: "GET",
-			path: "/user/tokens/verify",
-		})
-	} catch (e) {
-		return {
-			ok: false,
-			tokenActive: false,
-			zoneRead: false,
-			dnsRead: false,
-			dnsWrite: "missing",
-			message: friendlyError(e, "Cloudflare token validation failed"),
-		}
-	}
-
-	const tokenActive = (verify?.status || "").toLowerCase() === "active"
-	if (!tokenActive) {
-		return {
-			ok: false,
-			tokenActive: false,
-			zoneRead: false,
-			dnsRead: false,
-			dnsWrite: "missing",
-			message: "This Cloudflare API token is not active",
-		}
-	}
+	const verifyResult = await tryUserTokenVerify(trimmed)
+	// Do not reject yet when verify fails — account-owned tokens cannot use
+	// `/user/tokens/verify`. Zone list is the authoritative liveness check.
 
 	let zones: Awaited<ReturnType<typeof listCloudflareZones>> = []
 	try {
 		zones = await listCloudflareZones({ token: trimmed })
 	} catch {
+		if (!verifyResult.ok) {
+			return {
+				ok: false,
+				tokenActive: false,
+				zoneRead: false,
+				dnsRead: false,
+				dnsWrite: "missing",
+				message: friendlyError(
+					verifyResult.error,
+					"Cloudflare token validation failed",
+				),
+			}
+		}
 		return {
 			ok: false,
 			tokenActive: true,
@@ -112,13 +129,14 @@ export const validateCloudflareApiToken = async (
 		}
 	}
 
+	const tokenActive = true
 	const zoneRead = true
 	let dnsRead = false
 
 	if (zones.length === 0) {
 		return {
 			ok: true,
-			tokenActive: true,
+			tokenActive,
 			zoneRead,
 			dnsRead: false,
 			dnsWrite: "unverified",
@@ -132,7 +150,7 @@ export const validateCloudflareApiToken = async (
 	if (!sampleZone) {
 		return {
 			ok: true,
-			tokenActive: true,
+			tokenActive,
 			zoneRead,
 			dnsRead: false,
 			dnsWrite: "unverified",
@@ -148,7 +166,7 @@ export const validateCloudflareApiToken = async (
 	} catch (e) {
 		return {
 			ok: false,
-			tokenActive: true,
+			tokenActive,
 			zoneRead,
 			dnsRead: false,
 			dnsWrite: "missing",
@@ -161,7 +179,7 @@ export const validateCloudflareApiToken = async (
 
 	return {
 		ok: true,
-		tokenActive: true,
+		tokenActive,
 		zoneRead,
 		dnsRead,
 		dnsWrite: "unverified",

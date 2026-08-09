@@ -5,11 +5,10 @@ import { useState } from "react";
 import { toast } from "sonner";
 import {
 	type ConnectableDnsProviderId,
-	CONNECTABLE_DNS_PROVIDERS,
 	DNS_PROVIDER_LABELS,
 	dnsProviderScopeHint,
-	isConnectableDnsProvider,
 } from "@/components/dashboard/domains/dns-connectable-providers";
+import { DnsProviderPicker } from "@/components/dashboard/domains/dns-provider-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,13 +27,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/utils/api";
 
@@ -62,6 +54,7 @@ export const DnsProvidersSection = () => {
 		setAccessKeyId("");
 		setSecretAccessKey("");
 		setLabel("Default");
+		setProvider("cloudflare");
 	};
 
 	const setCfToken = api.cloudflareSettings.setToken.useMutation({
@@ -314,23 +307,7 @@ export const DnsProvidersSection = () => {
 					<div className="animate-in fade-in-0 slide-in-from-bottom-1 space-y-4 duration-300">
 						<div className="space-y-2">
 							<Label>Provider</Label>
-							<Select
-								value={provider}
-								onValueChange={(v) => {
-									if (isConnectableDnsProvider(v)) setProvider(v);
-								}}
-							>
-								<SelectTrigger>
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									{CONNECTABLE_DNS_PROVIDERS.map((id) => (
-										<SelectItem key={id} value={id}>
-											{DNS_PROVIDER_LABELS[id]}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
+							<DnsProviderPicker value={provider} onChange={setProvider} />
 						</div>
 
 						{provider !== "cloudflare" ? (

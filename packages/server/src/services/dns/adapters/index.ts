@@ -5,7 +5,7 @@ import { gcloudDnsAdapter } from "./gcloud";
 import { hetznerDnsAdapter } from "./hetzner";
 import { route53DnsAdapter } from "./route53";
 
-/** Register built-in Auto DNS adapters (P0–P2). NS1/Akamai deferred (P3). */
+/** Register built-in Auto DNS adapters (P0–P2). NS1 deferred (P3). */
 export const registerBuiltinDnsAdapters = () => {
 	registerDnsProviderAdapter(cloudflareDnsAdapter);
 	registerDnsProviderAdapter(digitaloceanDnsAdapter);

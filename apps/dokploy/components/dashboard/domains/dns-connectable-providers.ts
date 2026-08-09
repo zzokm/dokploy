@@ -1,6 +1,6 @@
 /**
  * Shared connectable DNS providers for Domains onboarding and Web Server settings.
- * Keep NS1/Akamai listed as coming soon until adapters exist.
+ * Keep NS1 listed as coming soon until an adapter exists.
  */
 
 export type ConnectableDnsProviderId =
@@ -10,7 +10,7 @@ export type ConnectableDnsProviderId =
 	| "route53"
 	| "gcloud";
 
-export type DnsProviderOptionId = ConnectableDnsProviderId | "ns1" | "akamai";
+export type DnsProviderOptionId = ConnectableDnsProviderId | "ns1";
 
 export type DnsProviderOption = {
 	id: DnsProviderOptionId;
@@ -36,7 +36,7 @@ export const CONNECTABLE_DNS_PROVIDERS: ConnectableDnsProviderId[] = [
 	"gcloud",
 ];
 
-/** Picker list including coming-soon stubs. */
+/** Picker list including coming-soon stubs (NS1 only). */
 export const DNS_PROVIDER_OPTIONS: DnsProviderOption[] = [
 	{ id: "cloudflare", name: "Cloudflare", ready: true },
 	{ id: "digitalocean", name: "DigitalOcean", ready: true },
@@ -46,12 +46,6 @@ export const DNS_PROVIDER_OPTIONS: DnsProviderOption[] = [
 	{
 		id: "ns1",
 		name: "NS1",
-		ready: false,
-		comingSoonLabel: "Coming soon",
-	},
-	{
-		id: "akamai",
-		name: "Akamai Edge DNS",
 		ready: false,
 		comingSoonLabel: "Coming soon",
 	},

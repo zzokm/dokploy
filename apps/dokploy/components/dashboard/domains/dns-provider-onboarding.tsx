@@ -5,11 +5,11 @@ import { useState } from "react";
 import { toast } from "sonner";
 import {
 	type ConnectableDnsProviderId,
-	type DnsProviderOptionId,
 	DNS_PROVIDER_LABELS,
 	DNS_PROVIDER_OPTIONS,
 } from "@/components/dashboard/domains/dns-connectable-providers";
-import { Badge } from "@/components/ui/badge";
+import { DnsProviderPicker } from "@/components/dashboard/domains/dns-provider-picker";
+import { DnsProviderLogo } from "@/components/dashboard/domains/logos/dns-provider-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +18,6 @@ import { cn } from "@/lib/utils";
 import { api } from "@/utils/api";
 
 type ConnectableProvider = ConnectableDnsProviderId;
-type ProviderOptionId = DnsProviderOptionId;
 
 const PROVIDERS = DNS_PROVIDER_OPTIONS;
 const PROVIDER_LABELS = DNS_PROVIDER_LABELS;
@@ -30,110 +29,6 @@ const STEPS = [
 ] as const;
 
 type StepId = (typeof STEPS)[number]["id"];
-
-const ProviderLogo = ({
-	id,
-	className,
-}: {
-	id: ProviderOptionId;
-	className?: string;
-}) => {
-	const common = cn("size-5 shrink-0", className);
-	switch (id) {
-		case "cloudflare":
-			return (
-				<svg viewBox="0 0 48 48" className={common} aria-hidden>
-					<title>Cloudflare</title>
-					<path
-						fill="#F38020"
-						d="M14.2 32.6h21.4c.5 0 .9-.2 1.2-.5.7-.7.8-1.8.3-2.7l-4.2-7.3c-.3-.5-.8-.8-1.4-.9l-1.4-.2c-.3-3.5-3.2-6.2-6.8-6.2-2.7 0-5.1 1.5-6.2 3.8-.7-.4-1.5-.6-2.4-.6-2.5 0-4.5 1.9-4.8 4.3-.1 0-.2 0-.3 0-2.6 0-4.7 2.1-4.7 4.7 0 .3 0 .5.1.8-.1 0-.1 0-.2 0-2.1 0-3.8 1.7-3.8 3.8 0 2 1.6 3.7 3.6 3.8h9.6z"
-					/>
-					<path
-						fill="#FAAE40"
-						d="M37.8 27.4c-.2-.8-.7-1.4-1.4-1.8l-9.9-5.2c-.3-.2-.7-.1-.9.2-.2.3-.1.7.2.9l9.9 5.2c.3.1.4.4.4.7 0 .1 0 .2-.1.3-.2.4-.7.6-1.1.4l-12.4-4.2c-.4-.1-.8.1-.9.5-.1.4.1.8.5.9l12.4 4.2c1.4.5 2.9-.3 3.3-1.7.1-.3.1-.6.1-.9-.1-.2-.1-.3-.1-.5z"
-					/>
-				</svg>
-			);
-		case "digitalocean":
-			return (
-				<svg viewBox="0 0 48 48" className={common} aria-hidden>
-					<title>DigitalOcean</title>
-					<path
-						fill="#0080FF"
-						d="M24 4C12.95 4 4 12.95 4 24c0 8.84 5.75 16.35 13.7 18.95v-7.62h-3.66V24h3.66v-2.74c0-5.36 3.19-8.32 8.08-8.32 2.34 0 4.79.42 4.79.42v5.26h-2.7c-2.66 0-3.49 1.65-3.49 3.34V24h5.94l-.95 7.33h-4.99v9.95C38.25 42.68 44 34.84 44 24 44 12.95 35.05 4 24 4z"
-					/>
-				</svg>
-			);
-		case "hetzner":
-			return (
-				<svg viewBox="0 0 48 48" className={common} aria-hidden>
-					<title>Hetzner</title>
-					<rect width="48" height="48" rx="8" fill="#D50C2D" />
-					<path
-						fill="#fff"
-						d="M14 12h6.5v9.5H28V12h6.5v24H28V27.5h-7.5V36H14V12z"
-					/>
-				</svg>
-			);
-		case "route53":
-			return (
-				<svg viewBox="0 0 48 48" className={common} aria-hidden>
-					<title>Amazon Route 53</title>
-					<path
-						fill="#FF9900"
-						d="M24 6 8 14v10c0 10.2 6.8 19.7 16 22 9.2-2.3 16-11.8 16-22V14L24 6zm0 8.2 9.5 4.7v6.1c0 6.8-4.1 13.2-9.5 15.1-5.4-1.9-9.5-8.3-9.5-15.1v-6.1L24 14.2z"
-					/>
-				</svg>
-			);
-		case "gcloud":
-			return (
-				<svg viewBox="0 0 48 48" className={common} aria-hidden>
-					<title>Google Cloud</title>
-					<path
-						fill="#4285F4"
-						d="M24.5 22.5H42v3.2c0 5.4-4.4 9.8-9.8 9.8H24.5V22.5z"
-					/>
-					<path fill="#EA4335" d="M15.3 12.2 24.5 7l9.2 5.2v7.3H15.3v-7.3z" />
-					<path
-						fill="#FBBC04"
-						d="M6 22.5h18.5v13H15.8C10.4 35.5 6 31.1 6 25.7v-3.2z"
-					/>
-					<path fill="#34A853" d="M15.3 19.5h18.4v3H15.3z" />
-				</svg>
-			);
-		case "ns1":
-			return (
-				<svg viewBox="0 0 48 48" className={common} aria-hidden>
-					<title>NS1</title>
-					<rect width="48" height="48" rx="8" fill="#1A1A1A" />
-					<text
-						x="24"
-						y="30"
-						textAnchor="middle"
-						fill="#fff"
-						fontSize="14"
-						fontWeight="700"
-						fontFamily="ui-sans-serif, system-ui, sans-serif"
-					>
-						NS1
-					</text>
-				</svg>
-			);
-		case "akamai":
-			return (
-				<svg viewBox="0 0 48 48" className={common} aria-hidden>
-					<title>Akamai</title>
-					<rect width="48" height="48" rx="8" fill="#0096D6" />
-					<path
-						fill="#fff"
-						d="M24 10c-7.7 0-14 6.3-14 14s6.3 14 14 14 14-6.3 14-14-6.3-14-14-14zm0 22.4c-4.6 0-8.4-3.8-8.4-8.4S19.4 15.6 24 15.6s8.4 3.8 8.4 8.4-3.8 8.4-8.4 8.4z"
-					/>
-				</svg>
-			);
-		default:
-			return null;
-	}
-};
 
 type InstructionBlock = {
 	title: string;
@@ -392,55 +287,11 @@ export const DnsProviderOnboarding = () => {
 						</p>
 					</div>
 
-					<div className="flex flex-col gap-2" aria-label="DNS providers">
-						{PROVIDERS.map((provider, index) => {
-							const isSelected = selected === provider.id;
-							const disabled = !provider.ready;
-							return (
-								<button
-									key={provider.id}
-									type="button"
-									aria-pressed={isSelected}
-									disabled={disabled}
-									onClick={() => {
-										if (!provider.ready) return;
-										setSelected(provider.id as ConnectableProvider);
-									}}
-									className={cn(
-										"flex w-full animate-in fade-in-0 slide-in-from-bottom-1 items-center gap-3 rounded-lg border bg-sidebar/60 px-3 py-3 text-left duration-200 fill-mode-both transition-colors",
-										!disabled && "hover:bg-muted/30 hover:shadow-sm",
-										isSelected &&
-											"border-foreground/30 bg-background ring-1 ring-foreground/15",
-										disabled && "cursor-not-allowed opacity-60",
-									)}
-									style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
-								>
-									<span className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
-										<ProviderLogo id={provider.id} />
-									</span>
-									<span className="min-w-0 flex-1">
-										<span className="block text-sm font-medium text-foreground">
-											{provider.name}
-										</span>
-										{disabled ? (
-											<span className="block text-xs text-muted-foreground">
-												Adapter not ready for connect yet
-											</span>
-										) : null}
-									</span>
-									{disabled ? (
-										<Badge variant="outline">
-											{provider.comingSoonLabel ?? "Coming soon"}
-										</Badge>
-									) : isSelected ? (
-										<span className="flex size-5 items-center justify-center rounded-full bg-foreground text-background">
-											<Check className="size-3" aria-hidden />
-										</span>
-									) : null}
-								</button>
-							);
-						})}
-					</div>
+					<DnsProviderPicker
+						value={selected}
+						onChange={setSelected}
+						options={PROVIDERS}
+					/>
 
 					<div className="flex justify-end">
 						<Button
@@ -459,7 +310,7 @@ export const DnsProviderOnboarding = () => {
 				<div className="animate-in fade-in-0 slide-in-from-bottom-2 space-y-5 duration-300">
 					<div className="flex items-center gap-3 rounded-lg border bg-sidebar/60 p-3">
 						<span className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
-							<ProviderLogo id={selected} />
+							<DnsProviderLogo id={selected} />
 						</span>
 						<div className="min-w-0">
 							<p className="text-sm font-medium">{selectedMeta?.name}</p>

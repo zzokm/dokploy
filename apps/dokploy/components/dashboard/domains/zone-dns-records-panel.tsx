@@ -425,9 +425,7 @@ export const ZoneDnsRecordsPanel = ({
 										<TableRow key={record.cfRecordId}>
 											<TableCell className="align-top">
 												<div className="flex flex-col gap-1">
-													<Badge variant="outline" className="font-mono">
-														{record.type}
-													</Badge>
+													<Badge variant="outline">{record.type}</Badge>
 													{record.type === "MX" && record.priority != null ? (
 														<span className="text-[11px] text-muted-foreground">
 															prio {record.priority}
@@ -438,7 +436,7 @@ export const ZoneDnsRecordsPanel = ({
 											<TableCell className="max-w-[12rem] align-top">
 												<div className="flex min-w-0 flex-col gap-1">
 													<span
-														className="truncate font-mono text-xs"
+														className="truncate text-sm"
 														title={record.name}
 													>
 														{record.name}
@@ -452,7 +450,7 @@ export const ZoneDnsRecordsPanel = ({
 											</TableCell>
 											<TableCell className="max-w-[14rem] align-top">
 												<span
-													className="block truncate font-mono text-xs"
+													className="block truncate text-sm"
 													title={record.content}
 												>
 													{record.content}
@@ -461,7 +459,7 @@ export const ZoneDnsRecordsPanel = ({
 											<TableCell className="align-top">
 												<ProxyStateCell record={record} />
 											</TableCell>
-											<TableCell className="hidden align-top text-xs text-muted-foreground md:table-cell">
+											<TableCell className="hidden align-top text-sm text-muted-foreground md:table-cell">
 												{record.ttl === 1 ? "Auto" : `${record.ttl}s`}
 											</TableCell>
 											<TableCell className="align-top text-right">

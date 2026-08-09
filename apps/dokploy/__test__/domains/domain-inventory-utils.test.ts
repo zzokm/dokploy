@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+	buildAttachDomainHref,
 	buildDomainEditHref,
 	buildHostnameExternalUrl,
 	deriveDnsProxyState,
@@ -12,6 +13,7 @@ import {
 	inventoryDnsBadgeFromValidation,
 	inventorySslBadge,
 	inventorySslLabel,
+	isDnsHostnameLinked,
 	isPreviewableDnsRecordType,
 	isProxyableDnsRecordType,
 	latestSyncIso,
@@ -226,6 +228,50 @@ describe("buildDomainEditHref", () => {
 			"/dashboard/project/p1/environment/e1/services/application/a1?tab=domains&domainId=d1",
 		);
 	});
+
+	it("links matched dns-hostname rows to the compose Domains tab", () => {
+		expect(
+			buildDomainEditHref({
+				kind: "dns-hostname",
+				projectId: "p1",
+				environmentId: "e1",
+				applicationId: null,
+				composeId: "c1",
+				domainId: "dns:cloudflare:r1",
+			}),
+		).toBe(
+			"/dashboard/project/p1/environment/e1/services/compose/c1?tab=domains",
+		);
+	});
+
+	it("keeps unmatched dns-hostname on the Domains hub", () => {
+		expect(
+			buildDomainEditHref({
+				kind: "dns-hostname",
+				projectId: null,
+				environmentId: null,
+				applicationId: null,
+				composeId: null,
+				domainId: "dns:cloudflare:r1",
+			}),
+		).toBe("/dashboard/domains");
+	});
+});
+
+describe("buildAttachDomainHref", () => {
+	it("prefills attachHost and compose service", () => {
+		expect(
+			buildAttachDomainHref({
+				projectId: "p1",
+				environmentId: "e1",
+				composeId: "c1",
+				host: "devdb.hiy.me",
+				suggestedServiceName: "postgres",
+			}),
+		).toBe(
+			"/dashboard/project/p1/environment/e1/services/compose/c1?tab=domains&attachHost=devdb.hiy.me&attachService=postgres",
+		);
+	});
 });
 
 describe("buildHostnameExternalUrl", () => {
@@ -248,8 +294,38 @@ describe("openProjectButtonLabel", () => {
 		expect(openProjectButtonLabel("application")).toBe("Open project");
 	});
 
-	it("labels dns-hostname as Open Domains", () => {
+	it("labels unmatched dns-hostname as Open Domains", () => {
 		expect(openProjectButtonLabel("dns-hostname")).toBe("Open Domains");
+	});
+
+	it("labels matched dns-hostname as Open project", () => {
+		expect(openProjectButtonLabel("dns-hostname", { linked: true })).toBe(
+			"Open project",
+		);
+	});
+});
+
+describe("isDnsHostnameLinked", () => {
+	it("is true when a dns-hostname row has a project target", () => {
+		expect(
+			isDnsHostnameLinked({
+				kind: "dns-hostname",
+				projectId: "p1",
+				applicationId: null,
+				composeId: "c1",
+			}),
+		).toBe(true);
+	});
+
+	it("is false for unbound dns-hostname rows", () => {
+		expect(
+			isDnsHostnameLinked({
+				kind: "dns-hostname",
+				projectId: null,
+				applicationId: null,
+				composeId: null,
+			}),
+		).toBe(false);
 	});
 });
 

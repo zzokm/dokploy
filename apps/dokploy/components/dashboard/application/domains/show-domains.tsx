@@ -121,6 +121,12 @@ export const ShowDomains = ({ id, type }: Props) => {
 	const router = useRouter();
 	const deepLinkDomainId =
 		typeof router.query.domainId === "string" ? router.query.domainId : "";
+	const attachHost =
+		typeof router.query.attachHost === "string" ? router.query.attachHost : "";
+	const attachService =
+		typeof router.query.attachService === "string"
+			? router.query.attachService
+			: "";
 	const { data: permissions } = api.user.getPermissions.useQuery();
 	const canCreateDomain = permissions?.domain.create ?? false;
 	const canDeleteDomain = permissions?.domain.delete ?? false;
@@ -371,6 +377,32 @@ export const ShowDomains = ({ id, type }: Props) => {
 					}}
 				>
 					<span className="sr-only">Edit domain</span>
+				</AddDomain>
+			) : null}
+			{!deepLinkDomainId && attachHost && canCreateDomain ? (
+				<AddDomain
+					id={id}
+					type={type}
+					defaultOpen
+					initialHost={attachHost}
+					initialServiceName={attachService}
+					onSaved={() => setSavedSinceDeploy(true)}
+					onOpenChange={(open) => {
+						if (open) return;
+						const nextQuery = { ...router.query };
+						delete nextQuery.attachHost;
+						delete nextQuery.attachService;
+						void router.replace(
+							{
+								pathname: router.pathname,
+								query: nextQuery,
+							},
+							undefined,
+							{ shallow: true },
+						);
+					}}
+				>
+					<span className="sr-only">Attach domain</span>
 				</AddDomain>
 			) : null}
 			{needsApply ? (

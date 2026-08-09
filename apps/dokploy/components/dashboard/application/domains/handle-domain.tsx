@@ -170,6 +170,10 @@ interface Props {
 	onOpenChange?: (open: boolean) => void;
 	/** Fired after a successful save so the parent can prompt to apply routing. */
 	onSaved?: () => void;
+	/** Prefill hostname when opening create flow (e.g. Attach from inventory). */
+	initialHost?: string;
+	/** Prefill compose serviceName when attaching. */
+	initialServiceName?: string;
 }
 
 export const AddDomain = ({
@@ -180,6 +184,8 @@ export const AddDomain = ({
 	defaultOpen = false,
 	onOpenChange,
 	onSaved,
+	initialHost = "",
+	initialServiceName = "",
 }: Props) => {
 	const [isOpen, setIsOpen] = useState(defaultOpen);
 	const [cacheType, setCacheType] = useState<CacheType>("cache");
@@ -264,7 +270,7 @@ export const AddDomain = ({
 	const form = useForm<Domain>({
 		resolver: zodResolver(domain),
 		defaultValues: {
-			host: "",
+			host: initialHost.trim(),
 			path: undefined,
 			internalPath: undefined,
 			stripPath: false,
@@ -274,7 +280,7 @@ export const AddDomain = ({
 			https: false,
 			certificateType: undefined,
 			customCertResolver: undefined,
-			serviceName: undefined,
+			serviceName: initialServiceName.trim() || undefined,
 			domainType: type,
 			middlewares: [],
 		},
@@ -351,10 +357,54 @@ export const AddDomain = ({
 		if (!isOpen || domainId) {
 			return;
 		}
+		const prefill = initialHost.trim().toLowerCase().replace(/\.$/, "");
+		const zones =
+			cfZones?.filter((z) => z.status !== "disabled" && !z.paused) ?? [];
+		if (prefill && cfSettings?.connected && zones.length) {
+			const zone = zones
+				.slice()
+				.sort((a, b) => b.name.length - a.name.length)
+				.find(
+					(z) =>
+						prefill === z.name.toLowerCase() ||
+						prefill.endsWith(`.${z.name.toLowerCase()}`),
+				);
+			if (zone) {
+				const zoneName = zone.name.toLowerCase();
+				const label =
+					prefill === zoneName
+						? "@"
+						: prefill.slice(0, -(zoneName.length + 1));
+				setHostInputMode("cloudflare");
+				setSelectedCfZoneId(zone.cfZoneId);
+				setSubdomainLabel(label);
+				form.setValue("host", prefill);
+				form.setValue("https", true);
+				form.setValue("certificateType", "letsencrypt");
+				if (initialServiceName.trim()) {
+					form.setValue("serviceName", initialServiceName.trim());
+				}
+				return;
+			}
+		}
 		setHostInputMode("manual");
 		setSelectedCfZoneId("");
 		setSubdomainLabel("");
-	}, [isOpen, domainId]);
+		if (prefill) {
+			form.setValue("host", prefill);
+		}
+		if (initialServiceName.trim()) {
+			form.setValue("serviceName", initialServiceName.trim());
+		}
+	}, [
+		isOpen,
+		domainId,
+		initialHost,
+		initialServiceName,
+		cfSettings?.connected,
+		cfZones,
+		form,
+	]);
 
 	useEffect(() => {
 		if (!domainId && hostInputMode === "cloudflare") {
@@ -399,7 +449,7 @@ export const AddDomain = ({
 
 		if (!domainId) {
 			form.reset({
-				host: "",
+				host: initialHost.trim(),
 				path: undefined,
 				internalPath: undefined,
 				stripPath: false,
@@ -409,11 +459,12 @@ export const AddDomain = ({
 				https: false,
 				certificateType: undefined,
 				customCertResolver: undefined,
+				serviceName: initialServiceName.trim() || undefined,
 				domainType: type,
 				middlewares: [],
 			});
 		}
-	}, [form, data, isPending, domainId]);
+	}, [form, data, isPending, domainId, initialHost, initialServiceName, type]);
 
 	// Separate effect for handling custom cert resolver validation
 	useEffect(() => {

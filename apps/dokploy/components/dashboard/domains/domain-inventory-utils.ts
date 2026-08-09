@@ -150,11 +150,32 @@ export const buildDomainEditHref = (input: {
 	applicationId: string | null;
 	composeId: string | null;
 	domainId: string;
+	/** Prefill create-domain for matched dns-hostname rows. */
+	attachHost?: string | null;
+	suggestedServiceName?: string | null;
 }): string | null => {
 	if (input.kind === "web-server") {
 		return "/dashboard/settings/server";
 	}
 	if (input.kind === "dns-hostname") {
+		if (input.projectId && input.environmentId) {
+			const params = new URLSearchParams();
+			params.set("tab", "domains");
+			// Only prefill create when explicitly attaching (Attach domain CTA).
+			if (input.attachHost) {
+				params.set("attachHost", input.attachHost);
+				if (input.suggestedServiceName) {
+					params.set("attachService", input.suggestedServiceName);
+				}
+			}
+			const qs = params.toString();
+			if (input.composeId) {
+				return `/dashboard/project/${input.projectId}/environment/${input.environmentId}/services/compose/${input.composeId}?${qs}`;
+			}
+			if (input.applicationId) {
+				return `/dashboard/project/${input.projectId}/environment/${input.environmentId}/services/application/${input.applicationId}?${qs}`;
+			}
+		}
 		return "/dashboard/domains";
 	}
 	if (!input.projectId || !input.environmentId) {
@@ -165,6 +186,33 @@ export const buildDomainEditHref = (input: {
 	}
 	if (input.applicationId) {
 		return `/dashboard/project/${input.projectId}/environment/${input.environmentId}/services/application/${input.applicationId}?tab=domains&domainId=${encodeURIComponent(input.domainId)}`;
+	}
+	return null;
+};
+
+/**
+ * Build Attach domain deep-link for a dns-hostname row (matched or picker target).
+ */
+export const buildAttachDomainHref = (input: {
+	projectId: string;
+	environmentId: string;
+	applicationId?: string | null;
+	composeId?: string | null;
+	host: string;
+	suggestedServiceName?: string | null;
+}): string | null => {
+	const params = new URLSearchParams();
+	params.set("tab", "domains");
+	params.set("attachHost", input.host);
+	if (input.suggestedServiceName) {
+		params.set("attachService", input.suggestedServiceName);
+	}
+	const qs = params.toString();
+	if (input.composeId) {
+		return `/dashboard/project/${input.projectId}/environment/${input.environmentId}/services/compose/${input.composeId}?${qs}`;
+	}
+	if (input.applicationId) {
+		return `/dashboard/project/${input.projectId}/environment/${input.environmentId}/services/application/${input.applicationId}?${qs}`;
 	}
 	return null;
 };
@@ -181,11 +229,24 @@ export const buildHostnameExternalUrl = (input: {
 
 export const openProjectButtonLabel = (
 	kind: "application" | "compose" | "preview" | "web-server" | "dns-hostname",
+	options?: { linked?: boolean },
 ) => {
 	if (kind === "web-server") return "Open settings";
-	if (kind === "dns-hostname") return "Open Domains";
+	if (kind === "dns-hostname") {
+		return options?.linked ? "Open project" : "Open Domains";
+	}
 	return "Open project";
 };
+
+export const isDnsHostnameLinked = (input: {
+	kind: "application" | "compose" | "preview" | "web-server" | "dns-hostname";
+	projectId: string | null;
+	applicationId: string | null;
+	composeId: string | null;
+}) =>
+	input.kind === "dns-hostname" &&
+	!!input.projectId &&
+	!!(input.applicationId || input.composeId);
 
 export const dnsRecordManagedByLabel = (managedBy: string) => {
 	if (managedBy === "app_domain") return "App domain";

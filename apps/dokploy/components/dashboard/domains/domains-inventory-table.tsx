@@ -14,6 +14,7 @@ import {
 	ExternalLink,
 	FolderOpen,
 	Globe2,
+	Link2,
 	Loader2,
 	Search,
 	Settings2,
@@ -21,17 +22,20 @@ import {
 import { useRouter } from "next/router";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AttachDomainFromHostnameDialog } from "@/components/dashboard/domains/attach-domain-from-hostname-dialog";
 import {
 	readDnsDomainsCache,
 	writeDnsDomainsCache,
 } from "@/components/dashboard/domains/dns-domains-cache";
 import {
+	buildAttachDomainHref,
 	buildDomainEditHref,
 	buildHostnameExternalUrl,
 	deriveInventoryWarnings,
 	inventoryDnsBadgeFromCfStatus,
 	inventoryDnsBadgeFromValidation,
 	inventorySslBadge,
+	isDnsHostnameLinked,
 	openProjectButtonLabel,
 	sanitizeDnsValidationError,
 } from "@/components/dashboard/domains/domain-inventory-utils";
@@ -125,9 +129,20 @@ export const DomainsInventoryTable = ({
 		if (!Array.isArray(cached?.inventory)) return undefined;
 		return cached.inventory as InventoryRow[];
 	}, [orgId]);
-	const { data, isPending } = api.domain.listInventory.useQuery(undefined, {
-		placeholderData: cachedInventory,
+	const { data: mirrorData, isPending } = api.domain.listInventory.useQuery(
+		undefined,
+		{
+			placeholderData: cachedInventory,
+		},
+	);
+	// Background live CF refresh — does not block first paint (mirrors first).
+	const { data: liveData } = api.domain.listInventoryLive.useQuery(undefined, {
+		enabled: mirrorData !== undefined,
+		staleTime: 60_000,
+		refetchOnWindowFocus: false,
+		retry: false,
 	});
+	const data = liveData ?? mirrorData;
 	const { mutateAsync: validateDomain } =
 		api.domain.validateDomain.useMutation();
 	const [sorting, setSorting] = useState<SortingState>([
@@ -143,6 +158,7 @@ export const DomainsInventoryTable = ({
 	}, [orgId, data]);
 
 	const openProject = (row: InventoryRow) => {
+		const linked = isDnsHostnameLinked(row);
 		const href = buildDomainEditHref({
 			kind: row.kind,
 			projectId: row.projectId,
@@ -150,6 +166,9 @@ export const DomainsInventoryTable = ({
 			applicationId: row.applicationId,
 			composeId: row.composeId,
 			domainId: row.domainId,
+			// Open project → domains tab only; Attach domain handles prefill.
+			attachHost: null,
+			suggestedServiceName: linked ? row.suggestedServiceName : null,
 		});
 		if (!href) return;
 		void router.push(href);
@@ -343,6 +362,7 @@ export const DomainsInventoryTable = ({
 				id: "actions",
 				header: "Actions",
 				cell: ({ row }) => {
+					const linked = isDnsHostnameLinked(row.original);
 					const href = buildDomainEditHref({
 						kind: row.original.kind,
 						projectId: row.original.projectId,
@@ -351,30 +371,66 @@ export const DomainsInventoryTable = ({
 						composeId: row.original.composeId,
 						domainId: row.original.domainId,
 					});
-					const label = openProjectButtonLabel(row.original.kind);
+					const label = openProjectButtonLabel(row.original.kind, {
+						linked,
+					});
 					const Icon =
 						row.original.kind === "web-server"
 							? Settings2
-							: row.original.kind === "dns-hostname"
+							: row.original.kind === "dns-hostname" && !linked
 								? Globe2
 								: FolderOpen;
+
+					const matchedAttachHref =
+						row.original.kind === "dns-hostname" && linked
+							? buildAttachDomainHref({
+									projectId: row.original.projectId!,
+									environmentId: row.original.environmentId!,
+									applicationId: row.original.applicationId,
+									composeId: row.original.composeId,
+									host: row.original.host,
+									suggestedServiceName: row.original.suggestedServiceName,
+								})
+							: null;
+
 					return (
-						<Button
-							type="button"
-							variant="secondary"
-							size="sm"
-							className="h-8 whitespace-nowrap"
-							disabled={!href}
-							onClick={() => openProject(row.original)}
-						>
-							<Icon className="mr-1.5 size-3.5" aria-hidden />
-							{label}
-						</Button>
+						<div className="flex flex-wrap items-center gap-1.5">
+							<Button
+								type="button"
+								variant="secondary"
+								size="sm"
+								className="h-8 whitespace-nowrap"
+								disabled={!href}
+								onClick={() => openProject(row.original)}
+							>
+								<Icon className="mr-1.5 size-3.5" aria-hidden />
+								{label}
+							</Button>
+							{row.original.kind === "dns-hostname" ? (
+								matchedAttachHref ? (
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="h-8 whitespace-nowrap"
+										onClick={() => void router.push(matchedAttachHref)}
+									>
+										<Link2 className="mr-1.5 size-3.5" aria-hidden />
+										Attach domain
+									</Button>
+								) : (
+									<AttachDomainFromHostnameDialog
+										host={row.original.host}
+										suggestedServiceName={row.original.suggestedServiceName}
+									/>
+								)
+							) : null}
+						</div>
 					);
 				},
 			},
 		],
-		[dnsHealth],
+		[dnsHealth, router],
 	);
 
 	const filtered = useMemo(() => {

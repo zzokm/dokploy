@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "@dokploy/server/db";
 import {
 	cloudflareSettings,
@@ -11,9 +11,18 @@ import {
 	unsealString,
 } from "@dokploy/server/utils/crypto/seal";
 import { nanoid } from "nanoid";
+import {
+	isPostgresUniqueViolation,
+	pickDefaultDnsCredential,
+} from "./credential-policy";
 import type { DnsProviderId } from "./types";
 
 export type { DnsProviderId };
+export {
+	dnsZoneMirrorKey,
+	isPostgresUniqueViolation,
+	pickDefaultDnsCredential,
+} from "./credential-policy";
 
 /** Public credential view — never includes sealed or raw secret. */
 export type DnsProviderCredentialPublic = {
@@ -30,6 +39,9 @@ export type DnsProviderCredentialPublic = {
 };
 
 const LEGACY_CLOUDFLARE_ID_PREFIX = "legacy-cf:";
+
+const DUPLICATE_LABEL_MESSAGE =
+	"A credential with this label already exists for this provider. Choose a different label.";
 
 const toPublic = (
 	row: typeof dnsProviderCredential.$inferSelect,
@@ -71,21 +83,24 @@ const findVaultRowsForOrg = async (organizationId: string) => {
 	return db
 		.select()
 		.from(dnsProviderCredential)
-		.where(eq(dnsProviderCredential.organizationId, organizationId));
+		.where(eq(dnsProviderCredential.organizationId, organizationId))
+		.orderBy(asc(dnsProviderCredential.createdAt));
 };
 
-const findVaultCloudflare = async (organizationId: string) => {
-	const [row] = await db
+const findVaultRowsForProvider = async (
+	organizationId: string,
+	provider: DnsProviderId,
+) => {
+	return db
 		.select()
 		.from(dnsProviderCredential)
 		.where(
 			and(
 				eq(dnsProviderCredential.organizationId, organizationId),
-				eq(dnsProviderCredential.provider, "cloudflare"),
+				eq(dnsProviderCredential.provider, provider),
 			),
 		)
-		.limit(1);
-	return row ?? null;
+		.orderBy(asc(dnsProviderCredential.createdAt));
 };
 
 const findLegacyCloudflareSettings = async (organizationId: string) => {
@@ -104,21 +119,73 @@ const legacyCloudflarePublic = (
 	id: `${LEGACY_CLOUDFLARE_ID_PREFIX}${organizationId}`,
 	organizationId,
 	provider: "cloudflare",
-	label: "Cloudflare",
+	label: "Default",
 	secretLast4: settings.apiTokenLast4,
-	meta: {},
+	meta: { isDefault: true },
 	createdAt: settings.createdAt,
 	updatedAt: settings.updatedAt,
 	legacyCloudflare: true,
 });
 
 /**
+ * If legacy cloudflare_settings exists and no vault Cloudflare row yet,
+ * copy the sealed token into the vault (label Default). Idempotent.
+ */
+export const migrateLegacyCloudflareToVault = async (
+	organizationId: string,
+): Promise<DnsProviderCredentialPublic | null> => {
+	const existing = await findVaultRowsForProvider(organizationId, "cloudflare");
+	if (existing.length > 0) {
+		return toPublic(existing[0]!);
+	}
+
+	const legacy = await findLegacyCloudflareSettings(organizationId);
+	if (!legacy) {
+		return null;
+	}
+
+	const now = new Date();
+	const id = `dns-cf-${organizationId}`;
+
+	try {
+		const [row] = await db
+			.insert(dnsProviderCredential)
+			.values({
+				id,
+				organizationId,
+				provider: "cloudflare",
+				label: "Default",
+				secretEncrypted: legacy.apiTokenEncrypted,
+				secretLast4: legacy.apiTokenLast4,
+				meta: { isDefault: true, migratedFrom: "cloudflare_settings" },
+				createdAt: legacy.createdAt ?? now,
+				updatedAt: now,
+			})
+			.onConflictDoNothing()
+			.returning();
+
+		if (row) {
+			return toPublic(row);
+		}
+	} catch (error) {
+		if (!isPostgresUniqueViolation(error)) {
+			throw error;
+		}
+	}
+
+	const [again] = await findVaultRowsForProvider(organizationId, "cloudflare");
+	return again ? toPublic(again) : null;
+};
+
+/**
  * List credentials for an org (last4 only).
- * Dual-read: if vault has no cloudflare row, surface legacy `cloudflare_settings`.
+ * Dual-read: migrates/surfaces legacy `cloudflare_settings` when needed.
  */
 export const listDnsProviderCredentials = async (
 	organizationId: string,
 ): Promise<DnsProviderCredentialPublic[]> => {
+	await migrateLegacyCloudflareToVault(organizationId);
+
 	const rows = await findVaultRowsForOrg(organizationId);
 	const publicRows = rows.map((r) => toPublic(r));
 
@@ -141,9 +208,9 @@ export const getDnsProviderCredential = async (
 	credentialId: string,
 ): Promise<DnsProviderCredentialPublic | null> => {
 	if (credentialId === `${LEGACY_CLOUDFLARE_ID_PREFIX}${organizationId}`) {
-		const vaultCf = await findVaultCloudflare(organizationId);
-		if (vaultCf) {
-			return toPublic(vaultCf);
+		const migrated = await migrateLegacyCloudflareToVault(organizationId);
+		if (migrated) {
+			return migrated;
 		}
 		const legacy = await findLegacyCloudflareSettings(organizationId);
 		return legacy ? legacyCloudflarePublic(organizationId, legacy) : null;
@@ -172,7 +239,8 @@ export type SetDnsProviderCredentialInput = {
 };
 
 /**
- * Create a vault credential. Fails closed if sealing is unavailable.
+ * Create a vault credential (always inserts a new account row).
+ * Fails closed if sealing is unavailable. Duplicate labels get a clear error.
  * Never returns the raw secret — last4 only.
  */
 export const setDnsProviderCredential = async (
@@ -181,27 +249,63 @@ export const setDnsProviderCredential = async (
 	const secretEncrypted = sealOrThrow(input.secret);
 	const now = new Date();
 	const id = nanoid();
-
-	const [row] = await db
-		.insert(dnsProviderCredential)
-		.values({
-			id,
-			organizationId: input.organizationId,
-			provider: input.provider,
-			label: input.label,
-			secretEncrypted,
-			secretLast4: last4(input.secret),
-			meta: input.meta ?? {},
-			createdAt: now,
-			updatedAt: now,
-		})
-		.returning();
-
-	if (!row) {
-		throw new Error("Failed to persist DNS provider credential");
+	const label = input.label.trim();
+	if (!label) {
+		throw new Error("Label is required");
 	}
 
-	return toPublic(row);
+	if (input.provider === "cloudflare") {
+		await migrateLegacyCloudflareToVault(input.organizationId);
+	}
+
+	try {
+		const [row] = await db
+			.insert(dnsProviderCredential)
+			.values({
+				id,
+				organizationId: input.organizationId,
+				provider: input.provider,
+				label,
+				secretEncrypted,
+				secretLast4: last4(input.secret),
+				meta: input.meta ?? {},
+				createdAt: now,
+				updatedAt: now,
+			})
+			.returning();
+
+		if (!row) {
+			throw new Error("Failed to persist DNS provider credential");
+		}
+
+		// Keep legacy CF row in sync with the Default vault account for dual-read paths
+		if (input.provider === "cloudflare" && label.toLowerCase() === "default") {
+			await db
+				.insert(cloudflareSettings)
+				.values({
+					organizationId: input.organizationId,
+					apiTokenEncrypted: secretEncrypted,
+					apiTokenLast4: last4(input.secret),
+					createdAt: now,
+					updatedAt: now,
+				})
+				.onConflictDoUpdate({
+					target: cloudflareSettings.organizationId,
+					set: {
+						apiTokenEncrypted: secretEncrypted,
+						apiTokenLast4: last4(input.secret),
+						updatedAt: now,
+					},
+				});
+		}
+
+		return toPublic(row);
+	} catch (error) {
+		if (isPostgresUniqueViolation(error)) {
+			throw new Error(DUPLICATE_LABEL_MESSAGE);
+		}
+		throw error;
+	}
 };
 
 export type RotateDnsProviderCredentialInput = {
@@ -226,80 +330,104 @@ export const rotateDnsProviderCredential = async (
 		input.credentialId ===
 		`${LEGACY_CLOUDFLARE_ID_PREFIX}${input.organizationId}`
 	) {
-		const existing = await findVaultCloudflare(input.organizationId);
-		if (existing) {
-			const [updated] = await db
-				.update(dnsProviderCredential)
-				.set({
-					secretEncrypted,
-					secretLast4: last4(input.secret),
-					...(input.label !== undefined ? { label: input.label } : {}),
-					...(input.meta !== undefined ? { meta: input.meta } : {}),
-					updatedAt: now,
-				})
-				.where(
-					and(
-						eq(dnsProviderCredential.id, existing.id),
-						eq(
-							dnsProviderCredential.organizationId,
-							input.organizationId,
-						),
-					),
-				)
-				.returning();
-			if (!updated) {
-				throw new Error("Failed to rotate DNS provider credential");
-			}
-			return toPublic(updated);
+		const migrated = await migrateLegacyCloudflareToVault(
+			input.organizationId,
+		);
+		if (migrated) {
+			return rotateDnsProviderCredential({
+				...input,
+				credentialId: migrated.id,
+			});
 		}
 
 		return setDnsProviderCredential({
 			organizationId: input.organizationId,
 			provider: "cloudflare",
-			label: input.label ?? "Cloudflare",
+			label: input.label ?? "Default",
 			secret: input.secret,
-			meta: input.meta,
+			meta: input.meta ?? { isDefault: true },
 		});
 	}
 
-	const [updated] = await db
-		.update(dnsProviderCredential)
-		.set({
-			secretEncrypted,
-			secretLast4: last4(input.secret),
-			...(input.label !== undefined ? { label: input.label } : {}),
-			...(input.meta !== undefined ? { meta: input.meta } : {}),
-			updatedAt: now,
-		})
-		.where(
-			and(
-				eq(dnsProviderCredential.id, input.credentialId),
-				eq(dnsProviderCredential.organizationId, input.organizationId),
-			),
-		)
-		.returning();
+	try {
+		const [updated] = await db
+			.update(dnsProviderCredential)
+			.set({
+				secretEncrypted,
+				secretLast4: last4(input.secret),
+				...(input.label !== undefined ? { label: input.label.trim() } : {}),
+				...(input.meta !== undefined ? { meta: input.meta } : {}),
+				updatedAt: now,
+			})
+			.where(
+				and(
+					eq(dnsProviderCredential.id, input.credentialId),
+					eq(dnsProviderCredential.organizationId, input.organizationId),
+				),
+			)
+			.returning();
 
-	if (!updated) {
-		throw new Error("DNS provider credential not found");
+		if (!updated) {
+			throw new Error("DNS provider credential not found");
+		}
+
+		if (updated.provider === "cloudflare") {
+			const cfRows = await findVaultRowsForProvider(
+				input.organizationId,
+				"cloudflare",
+			);
+			const defaultRow = pickDefaultDnsCredential(
+				cfRows.map((r) => ({
+					id: r.id,
+					label: r.label,
+					createdAt: r.createdAt,
+					meta: (r.meta ?? {}) as DnsProviderMeta,
+				})),
+			);
+			if (defaultRow?.id === updated.id) {
+				await db
+					.insert(cloudflareSettings)
+					.values({
+						organizationId: input.organizationId,
+						apiTokenEncrypted: secretEncrypted,
+						apiTokenLast4: last4(input.secret),
+						createdAt: now,
+						updatedAt: now,
+					})
+					.onConflictDoUpdate({
+						target: cloudflareSettings.organizationId,
+						set: {
+							apiTokenEncrypted: secretEncrypted,
+							apiTokenLast4: last4(input.secret),
+							updatedAt: now,
+						},
+					});
+			}
+		}
+
+		return toPublic(updated);
+	} catch (error) {
+		if (isPostgresUniqueViolation(error)) {
+			throw new Error(DUPLICATE_LABEL_MESSAGE);
+		}
+		throw error;
 	}
-
-	return toPublic(updated);
 };
 
 /**
- * Delete a vault credential. Legacy virtual ids are a no-op on vault
- * (caller may separately clear `cloudflare_settings`).
+ * Delete a vault credential. Legacy virtual ids resolve to the Default vault
+ * row when present; caller may separately clear `cloudflare_settings`.
  */
 export const deleteDnsProviderCredential = async (
 	organizationId: string,
 	credentialId: string,
 ): Promise<{ deleted: boolean }> => {
 	if (credentialId === `${LEGACY_CLOUDFLARE_ID_PREFIX}${organizationId}`) {
-		const vaultCf = await findVaultCloudflare(organizationId);
-		if (!vaultCf) {
+		const migrated = await migrateLegacyCloudflareToVault(organizationId);
+		if (!migrated) {
 			return { deleted: false };
 		}
-		credentialId = vaultCf.id;
+		credentialId = migrated.id;
 	}
 
 	const deleted = await db
@@ -310,7 +438,25 @@ export const deleteDnsProviderCredential = async (
 				eq(dnsProviderCredential.organizationId, organizationId),
 			),
 		)
-		.returning({ id: dnsProviderCredential.id });
+		.returning({
+			id: dnsProviderCredential.id,
+			provider: dnsProviderCredential.provider,
+		});
+
+	if (
+		deleted.length > 0 &&
+		deleted[0]?.provider === "cloudflare"
+	) {
+		const remaining = await findVaultRowsForProvider(
+			organizationId,
+			"cloudflare",
+		);
+		if (remaining.length === 0) {
+			await db
+				.delete(cloudflareSettings)
+				.where(eq(cloudflareSettings.organizationId, organizationId));
+		}
+	}
 
 	return { deleted: deleted.length > 0 };
 };
@@ -318,6 +464,7 @@ export const deleteDnsProviderCredential = async (
 /**
  * Internal: unseal secret for adapters. Prefer vault; dual-read
  * `cloudflare_settings` when vault has no cloudflare credential.
+ * When credentialId is omitted, uses Traefik multi-token default policy.
  * Never expose via tRPC/MCP response shapes.
  */
 export const resolveDnsProviderSecret = async (input: {
@@ -334,14 +481,21 @@ export const resolveDnsProviderSecret = async (input: {
 
 	if (credentialId) {
 		if (credentialId === `${LEGACY_CLOUDFLARE_ID_PREFIX}${organizationId}`) {
-			const vaultCf = await findVaultCloudflare(organizationId);
-			if (vaultCf) {
-				return {
-					credentialId: vaultCf.id,
-					provider: "cloudflare",
-					secret: unsealString(vaultCf.secretEncrypted),
-					legacyCloudflare: false,
-				};
+			const migrated = await migrateLegacyCloudflareToVault(organizationId);
+			if (migrated) {
+				const [row] = await db
+					.select()
+					.from(dnsProviderCredential)
+					.where(eq(dnsProviderCredential.id, migrated.id))
+					.limit(1);
+				if (row) {
+					return {
+						credentialId: row.id,
+						provider: "cloudflare",
+						secret: unsealString(row.secretEncrypted),
+						legacyCloudflare: false,
+					};
+				}
 			}
 			const legacy = await findLegacyCloudflareSettings(organizationId);
 			if (!legacy) {
@@ -379,28 +533,39 @@ export const resolveDnsProviderSecret = async (input: {
 	}
 
 	const targetProvider = provider ?? "cloudflare";
+	const vaultRows = await findVaultRowsForProvider(
+		organizationId,
+		targetProvider,
+	);
 
-	const [vaultRow] = await db
-		.select()
-		.from(dnsProviderCredential)
-		.where(
-			and(
-				eq(dnsProviderCredential.organizationId, organizationId),
-				eq(dnsProviderCredential.provider, targetProvider),
-			),
-		)
-		.limit(1);
-
-	if (vaultRow) {
+	if (vaultRows.length > 0) {
+		const picked = pickDefaultDnsCredential(
+			vaultRows.map((r) => ({
+				id: r.id,
+				label: r.label,
+				createdAt: r.createdAt,
+				meta: (r.meta ?? {}) as DnsProviderMeta,
+				row: r,
+			})),
+		);
+		const row = picked?.row ?? vaultRows[0]!;
 		return {
-			credentialId: vaultRow.id,
-			provider: vaultRow.provider as DnsProviderId,
-			secret: unsealString(vaultRow.secretEncrypted),
+			credentialId: row.id,
+			provider: row.provider as DnsProviderId,
+			secret: unsealString(row.secretEncrypted),
 			legacyCloudflare: false,
 		};
 	}
 
 	if (targetProvider === "cloudflare") {
+		const migrated = await migrateLegacyCloudflareToVault(organizationId);
+		if (migrated) {
+			return resolveDnsProviderSecret({
+				organizationId,
+				credentialId: migrated.id,
+				provider: "cloudflare",
+			});
+		}
 		const legacy = await findLegacyCloudflareSettings(organizationId);
 		if (legacy) {
 			return {

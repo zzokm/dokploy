@@ -24,7 +24,9 @@ export const dnsZoneStatus = pgEnum("dnsZoneStatus", [
 ]);
 
 /**
- * Provider-agnostic zone mirror. Unique per (organization_id, provider, external_id).
+ * Provider-agnostic zone mirror.
+ * Unique per (organization_id, provider, credential_id, external_id) so two
+ * accounts under the same provider can mirror the same external zone id.
  */
 export const dnsZone = pgTable(
 	"dns_zone",
@@ -53,9 +55,10 @@ export const dnsZone = pgTable(
 	(table) => [
 		index("dns_zone_org_idx").on(table.organizationId),
 		index("dns_zone_external_id_idx").on(table.externalId),
-		uniqueIndex("dns_zone_org_provider_external_id_uq").on(
+		uniqueIndex("dns_zone_org_provider_credential_external_id_uq").on(
 			table.organizationId,
 			table.provider,
+			table.credentialId,
 			table.externalId,
 		),
 	],

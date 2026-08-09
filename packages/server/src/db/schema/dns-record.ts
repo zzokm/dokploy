@@ -11,7 +11,10 @@ import {
 } from "drizzle-orm/pg-core";
 import { nanoid } from "nanoid";
 import { organization } from "./account";
-import { dnsProvider } from "./dns-provider-credential";
+import {
+	dnsProvider,
+	dnsProviderCredential,
+} from "./dns-provider-credential";
 
 export const dnsRecordManagedBy = pgEnum("dnsRecordManagedBy", [
 	"app_domain",
@@ -28,7 +31,7 @@ export type DnsRecordOptions = {
 
 /**
  * Provider-agnostic DNS record mirror.
- * Unique per (organization_id, provider, external_id).
+ * Unique per (organization_id, provider, credential_id, external_id).
  * CF proxied lives in `options`, not as a user preference column.
  */
 export const dnsRecord = pgTable(
@@ -41,6 +44,10 @@ export const dnsRecord = pgTable(
 		organizationId: text("organization_id")
 			.notNull()
 			.references(() => organization.id, { onDelete: "cascade" }),
+		credentialId: text("credential_id").references(
+			() => dnsProviderCredential.id,
+			{ onDelete: "set null" },
+		),
 		provider: dnsProvider("provider").notNull(),
 		zoneExternalId: text("zone_external_id").notNull(),
 		externalId: text("external_id").notNull(),
@@ -58,9 +65,11 @@ export const dnsRecord = pgTable(
 		index("dns_record_org_idx").on(table.organizationId),
 		index("dns_record_zone_idx").on(table.zoneExternalId),
 		index("dns_record_external_id_idx").on(table.externalId),
-		uniqueIndex("dns_record_org_provider_external_id_uq").on(
+		index("dns_record_credential_id_idx").on(table.credentialId),
+		uniqueIndex("dns_record_org_provider_credential_external_id_uq").on(
 			table.organizationId,
 			table.provider,
+			table.credentialId,
 			table.externalId,
 		),
 	],

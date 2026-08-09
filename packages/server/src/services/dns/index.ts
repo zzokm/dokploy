@@ -1,5 +1,6 @@
 export * from "./types";
 export * from "./registry";
+export * from "./credential-policy";
 export * from "./credentials";
 export * from "./orchestration";
 export * from "./traefik-dns-env";

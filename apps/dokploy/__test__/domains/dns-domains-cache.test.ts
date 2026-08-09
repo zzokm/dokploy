@@ -11,7 +11,7 @@ import {
 const ORG = "org_test_1";
 
 const sampleZone = {
-	key: "cloudflare:zone1",
+	key: "cloudflare:none:zone1",
 	provider: "cloudflare",
 	zoneExternalId: "zone1",
 	cfZoneId: "zone1",
@@ -20,6 +20,7 @@ const sampleZone = {
 	paused: false,
 	lastSyncedAt: "2026-01-01T00:00:00.000Z",
 	credentialId: null,
+	credentialLabel: null,
 };
 
 function installMemoryLocalStorage() {

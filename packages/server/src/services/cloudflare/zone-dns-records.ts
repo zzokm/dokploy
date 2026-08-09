@@ -2,10 +2,8 @@ import { and, eq } from "drizzle-orm"
 import { db } from "@dokploy/server/db"
 import {
 	cloudflareDnsRecord,
-	cloudflareSettings,
 	cloudflareZone,
 } from "@dokploy/server/db/schema"
-import { unsealString } from "@dokploy/server/utils/crypto/seal"
 import { cloudflareFetch } from "./client"
 import {
 	type CloudflareDnsRecord,
@@ -38,24 +36,21 @@ export type ZoneDnsRecordView = {
 	lastSyncedAt: string | null
 }
 
-const getOrgToken = async (organizationId: string) => {
-	const [settings] = await db
-		.select({ apiTokenEncrypted: cloudflareSettings.apiTokenEncrypted })
-		.from(cloudflareSettings)
-		.where(eq(cloudflareSettings.organizationId, organizationId))
-		.limit(1)
+import { resolveDnsProviderSecret } from "@dokploy/server/services/dns/credentials"
 
-	if (!settings) {
+const getOrgToken = async (
+	organizationId: string,
+	credentialId?: string | null,
+) => {
+	const resolved = await resolveDnsProviderSecret({
+		organizationId,
+		credentialId: credentialId ?? undefined,
+		provider: "cloudflare",
+	})
+	if (!resolved) {
 		throw new Error("Connect Cloudflare first")
 	}
-
-	try {
-		return unsealString(settings.apiTokenEncrypted)
-	} catch {
-		throw new Error(
-			"Cloudflare token could not be decrypted. Check DOKPLOY_ENCRYPTION_KEY and restart Dokploy.",
-		)
-	}
+	return resolved.secret
 }
 
 const assertOrgOwnsZone = async (organizationId: string, cfZoneId: string) => {

@@ -113,23 +113,13 @@ export const DnsProviderOnboarding = () => {
 		setSecret("");
 		setAccessKeyId("");
 		setSecretAccessKey("");
+		setLabel("Default");
 		await utils.cloudflareSettings.get.invalidate();
 		await utils.cloudflareSettings.listZones.invalidate();
 		await utils.dnsProviders.list.invalidate();
 		await utils.dnsProviders.listZones.invalidate();
 		await utils.domain.listInventory.invalidate();
 	};
-
-	const setCfToken = api.cloudflareSettings.setToken.useMutation({
-		onSuccess: async (result) => {
-			toast.success("Cloudflare connected, syncing DNS domains…");
-			if (result.validation?.warning) {
-				toast.message(result.validation.warning);
-			}
-			await invalidateAfterConnect();
-		},
-		onError: (e) => toast.error(e.message),
-	});
 
 	const setVault = api.dnsProviders.setCredential.useMutation({
 		onSuccess: async () => {
@@ -144,7 +134,7 @@ export const DnsProviderOnboarding = () => {
 		? PROVIDERS.find((p) => p.id === selected)
 		: null;
 	const instructions = selected ? CREDENTIAL_INSTRUCTIONS[selected] : null;
-	const isPending = setCfToken.isPending || setVault.isPending;
+	const isPending = setVault.isPending;
 
 	const goNextFromChoose = () => {
 		if (!selected) {
@@ -157,13 +147,9 @@ export const DnsProviderOnboarding = () => {
 	const handleConnect = () => {
 		if (!selected) return;
 
-		if (selected === "cloudflare") {
-			const token = secret.trim();
-			if (!token) {
-				toast.error("API token is required");
-				return;
-			}
-			setCfToken.mutate({ apiToken: token });
+		const nextLabel = label.trim();
+		if (!nextLabel) {
+			toast.error("Label is required");
 			return;
 		}
 
@@ -184,7 +170,7 @@ export const DnsProviderOnboarding = () => {
 			}
 			setVault.mutate({
 				provider: "route53",
-				label: label.trim() || PROVIDER_LABELS.route53,
+				label: nextLabel,
 				secret: payload,
 			});
 			return;
@@ -204,7 +190,7 @@ export const DnsProviderOnboarding = () => {
 			}
 			setVault.mutate({
 				provider: "gcloud",
-				label: label.trim() || PROVIDER_LABELS.gcloud,
+				label: nextLabel,
 				secret: json,
 			});
 			return;
@@ -219,7 +205,7 @@ export const DnsProviderOnboarding = () => {
 		}
 		setVault.mutate({
 			provider: selected,
-			label: label.trim() || PROVIDER_LABELS[selected],
+			label: nextLabel,
 			secret: token,
 		});
 	};
@@ -398,17 +384,18 @@ export const DnsProviderOnboarding = () => {
 					</div>
 
 					<div className="space-y-4">
-						{selected !== "cloudflare" ? (
-							<div className="space-y-2">
-								<Label htmlFor="dns-onboard-label">Label</Label>
-								<Input
-									id="dns-onboard-label"
-									value={label}
-									onChange={(e) => setLabel(e.target.value)}
-									placeholder="Production"
-								/>
-							</div>
-						) : null}
+						<div className="space-y-2">
+							<Label htmlFor="dns-onboard-label">Label</Label>
+							<Input
+								id="dns-onboard-label"
+								value={label}
+								onChange={(e) => setLabel(e.target.value)}
+								placeholder="Production"
+							/>
+							<p className="text-xs text-muted-foreground">
+								Must be unique per provider in this organization.
+							</p>
+						</div>
 
 						{selected === "route53" ? (
 							<>

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@dokploy/server/db";
 import {
 	cloudflareSettings,
@@ -8,7 +8,10 @@ import {
 } from "@dokploy/server/db/schema";
 import { syncCloudflareZonesForOrg } from "@dokploy/server/services/cloudflare/sync-zones";
 import { nanoid } from "nanoid";
-import { resolveDnsProviderSecret } from "./credentials";
+import {
+	migrateLegacyCloudflareToVault,
+	resolveDnsProviderSecret,
+} from "./credentials";
 import {
 	ensureDnsAdaptersRegistered,
 	getRegisteredAdapter,
@@ -74,10 +77,10 @@ export const syncDnsZonesForCredential = async (input: {
 					target: [
 						dnsZone.organizationId,
 						dnsZone.provider,
+						dnsZone.credentialId,
 						dnsZone.externalId,
 					],
 					set: {
-						credentialId: credentialId ?? null,
 						name: z.name,
 						status: mapZoneStatus(z.status),
 						paused: !!z.paused,
@@ -89,7 +92,7 @@ export const syncDnsZonesForCredential = async (input: {
 		}
 
 		const externalIds = zones.map((z) => z.id);
-		const existing = await tx
+		const existingQuery = tx
 			.select({
 				id: dnsZone.id,
 				externalId: dnsZone.externalId,
@@ -99,9 +102,13 @@ export const syncDnsZonesForCredential = async (input: {
 				and(
 					eq(dnsZone.organizationId, input.organizationId),
 					eq(dnsZone.provider, resolved.provider),
+					credentialId
+						? eq(dnsZone.credentialId, credentialId)
+						: isNull(dnsZone.credentialId),
 				),
 			);
 
+		const existing = await existingQuery;
 		const missing = existing.filter((e) => !externalIds.includes(e.externalId));
 		if (missing.length > 0) {
 			await tx
@@ -111,6 +118,9 @@ export const syncDnsZonesForCredential = async (input: {
 					and(
 						eq(dnsZone.organizationId, input.organizationId),
 						eq(dnsZone.provider, resolved.provider),
+						credentialId
+							? eq(dnsZone.credentialId, credentialId)
+							: isNull(dnsZone.credentialId),
 						inArray(
 							dnsZone.externalId,
 							missing.map((m) => m.externalId),
@@ -131,6 +141,7 @@ export const syncDnsZonesForCredential = async (input: {
 					.values({
 						id: nanoid(),
 						organizationId: input.organizationId,
+						credentialId: credentialId ?? undefined,
 						provider: resolved.provider,
 						zoneExternalId: z.id,
 						externalId: r.id,
@@ -147,6 +158,7 @@ export const syncDnsZonesForCredential = async (input: {
 						target: [
 							dnsRecord.organizationId,
 							dnsRecord.provider,
+							dnsRecord.credentialId,
 							dnsRecord.externalId,
 						],
 						set: {
@@ -180,6 +192,8 @@ export const syncAllDnsZonesForOrg = async (
 	organizationId: string,
 	opts?: { syncRecords?: boolean },
 ) => {
+	await migrateLegacyCloudflareToVault(organizationId);
+
 	const syncRecords = opts?.syncRecords ?? false;
 	const rows = await db
 		.select({
@@ -282,6 +296,7 @@ export const listMirroredDnsRecords = async (input: {
 	organizationId: string;
 	provider: DnsProviderId;
 	zoneExternalId: string;
+	credentialId?: string | null;
 }) => {
 	return db
 		.select()
@@ -291,6 +306,9 @@ export const listMirroredDnsRecords = async (input: {
 				eq(dnsRecord.organizationId, input.organizationId),
 				eq(dnsRecord.provider, input.provider),
 				eq(dnsRecord.zoneExternalId, input.zoneExternalId),
+				input.credentialId
+					? eq(dnsRecord.credentialId, input.credentialId)
+					: undefined,
 			),
 		);
 };

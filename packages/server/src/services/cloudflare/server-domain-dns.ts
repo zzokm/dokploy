@@ -1,10 +1,7 @@
 import { and, eq } from "drizzle-orm"
 import { db } from "@dokploy/server/db"
-import {
-	cloudflareDnsRecord,
-	cloudflareSettings,
-} from "@dokploy/server/db/schema"
-import { unsealString } from "@dokploy/server/utils/crypto/seal"
+import { cloudflareDnsRecord } from "@dokploy/server/db/schema"
+import { resolveDnsProviderSecret } from "@dokploy/server/services/dns/credentials"
 import { updateServerTraefik } from "@dokploy/server/utils/traefik/web-server"
 import { getWebServerSettings } from "../web-server-settings"
 import { findBestZoneMatch } from "./app-domain-automation"
@@ -28,22 +25,16 @@ export type CloudflareServerDomainDnsPreview = {
 	errorMessage?: string | null
 }
 
-const getOrgToken = async (organizationId: string) => {
-	const [settings] = await db
-		.select({ apiTokenEncrypted: cloudflareSettings.apiTokenEncrypted })
-		.from(cloudflareSettings)
-		.where(eq(cloudflareSettings.organizationId, organizationId))
-		.limit(1)
-
-	if (!settings) {
-		return null
-	}
-
-	try {
-		return unsealString(settings.apiTokenEncrypted)
-	} catch {
-		return null
-	}
+const getOrgToken = async (
+	organizationId: string,
+	credentialId?: string | null,
+) => {
+	const resolved = await resolveDnsProviderSecret({
+		organizationId,
+		credentialId: credentialId ?? undefined,
+		provider: "cloudflare",
+	})
+	return resolved?.secret ?? null
 }
 
 const getStoredServerDomainProxied = async (
@@ -70,11 +61,6 @@ export const previewServerDomainDns = async (
 	organizationId: string,
 	proxiedDefault = true,
 ): Promise<CloudflareServerDomainDnsPreview | null> => {
-	const token = await getOrgToken(organizationId)
-	if (!token) {
-		return null
-	}
-
 	const settings = await getWebServerSettings()
 	const host = settings?.host?.trim() ? normalizeHost(settings.host) : ""
 	const desiredIp = settings?.serverIp?.trim() ? settings.serverIp.trim() : null
@@ -110,6 +96,11 @@ export const previewServerDomainDns = async (
 			state: "no_zone",
 			wouldChange: false,
 		}
+	}
+
+	const token = await getOrgToken(organizationId, zone.credentialId)
+	if (!token) {
+		return null
 	}
 
 	if (!desiredIp) {
@@ -204,11 +195,6 @@ export const applyServerDomainDns = async (input: {
 	organizationId: string
 	proxied?: boolean
 }) => {
-	const token = await getOrgToken(input.organizationId)
-	if (!token) {
-		throw new Error("Connect Cloudflare first")
-	}
-
 	const settings = await getWebServerSettings()
 	const host = settings?.host?.trim() ? normalizeHost(settings.host) : ""
 	if (!host) {
@@ -227,6 +213,11 @@ export const applyServerDomainDns = async (input: {
 		throw new Error(
 			`No synced Cloudflare zone matches ${host}. Sync zones on the Domains page first.`,
 		)
+	}
+
+	const token = await getOrgToken(input.organizationId, zone.credentialId)
+	if (!token) {
+		throw new Error("Connect Cloudflare first")
 	}
 
 	const storedProxied = await getStoredServerDomainProxied(

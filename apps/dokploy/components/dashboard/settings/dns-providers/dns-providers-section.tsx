@@ -1,7 +1,7 @@
 "use client";
 
-import { Cloud, KeyRound, Network } from "lucide-react";
-import { useState } from "react";
+import { KeyRound, Network } from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
 	type ConnectableDnsProviderId,
@@ -30,18 +30,25 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/utils/api";
 
+type VaultCred = {
+	id: string;
+	provider: string;
+	label: string;
+	secretLast4: string;
+	legacyCloudflare?: boolean;
+};
+
 /**
  * Provider-agnostic DNS providers settings section.
- * Cloudflare still uses the legacy cloudflareSettings connect path for zone sync;
- * other providers write to the sealed vault.
+ * Every connect adds another vault account (label required for all providers).
  */
 export const DnsProvidersSection = () => {
 	const utils = api.useUtils();
 	const { data: capabilities } = api.dnsProviders.listCapabilities.useQuery();
 	const { data: vaultCreds } = api.dnsProviders.list.useQuery();
-	const { data: cfSettings } = api.cloudflareSettings.get.useQuery();
 
 	const [open, setOpen] = useState(false);
+	const [rotateCred, setRotateCred] = useState<VaultCred | null>(null);
 	const [provider, setProvider] =
 		useState<ConnectableDnsProviderId>("cloudflare");
 	const [label, setLabel] = useState("Default");
@@ -57,122 +64,121 @@ export const DnsProvidersSection = () => {
 		setProvider("cloudflare");
 	};
 
-	const setCfToken = api.cloudflareSettings.setToken.useMutation({
-		onSuccess: async (result) => {
-			toast.success("Cloudflare connected");
-			if (result.validation?.warning) toast.message(result.validation.warning);
-			resetForm();
-			setOpen(false);
-			await utils.cloudflareSettings.get.invalidate();
-			await utils.cloudflareSettings.listZones.invalidate();
-			await utils.dnsProviders.list.invalidate();
-			await utils.dnsProviders.listZones.invalidate();
-		},
-		onError: (e) => toast.error(e.message),
-	});
-
 	const setVault = api.dnsProviders.setCredential.useMutation({
 		onSuccess: async () => {
-			toast.success("DNS provider connected");
+			toast.success("DNS provider account added");
 			resetForm();
 			setOpen(false);
 			await utils.dnsProviders.list.invalidate();
 			await utils.dnsProviders.listZones.invalidate();
+			await utils.cloudflareSettings.get.invalidate();
+			await utils.cloudflareSettings.listZones.invalidate();
 		},
 		onError: (e) => toast.error(e.message),
 	});
 
-	const disconnectCf = api.cloudflareSettings.disconnect.useMutation({
+	const rotateVault = api.dnsProviders.rotateCredential.useMutation({
 		onSuccess: async () => {
-			toast.success("Cloudflare disconnected");
-			await utils.cloudflareSettings.get.invalidate();
+			toast.success("Credential rotated");
+			setSecret("");
+			setRotateCred(null);
 			await utils.dnsProviders.list.invalidate();
+			await utils.cloudflareSettings.get.invalidate();
 		},
 		onError: (e) => toast.error(e.message),
 	});
 
 	const deleteVault = api.dnsProviders.deleteCredential.useMutation({
 		onSuccess: async () => {
-			toast.success("Provider disconnected");
+			toast.success("Account disconnected");
 			await utils.dnsProviders.list.invalidate();
+			await utils.dnsProviders.listZones.invalidate();
+			await utils.cloudflareSettings.get.invalidate();
 		},
 		onError: (e) => toast.error(e.message),
 	});
 
-	const handleConnect = () => {
-		if (provider === "cloudflare") {
-			const next = secret.trim();
-			if (!next) {
-				toast.error("API token / secret is required");
-				return;
-			}
-			setCfToken.mutate({ apiToken: next });
-			return;
-		}
-
-		if (provider === "route53") {
+	const buildSecretPayload = (
+		selected: ConnectableDnsProviderId,
+	): string | null => {
+		if (selected === "route53") {
 			const fromJson = secret.trim();
-			let payload = fromJson;
-			if (!payload.startsWith("{")) {
-				const keyId = accessKeyId.trim();
-				const keySecret = secretAccessKey.trim();
-				if (!keyId || !keySecret) {
-					toast.error("Access key id and secret access key are required");
-					return;
-				}
-				payload = JSON.stringify({
-					accessKeyId: keyId,
-					secretAccessKey: keySecret,
-				});
+			if (fromJson.startsWith("{")) return fromJson;
+			const keyId = accessKeyId.trim();
+			const keySecret = secretAccessKey.trim();
+			if (!keyId || !keySecret) {
+				toast.error("Access key id and secret access key are required");
+				return null;
 			}
-			setVault.mutate({
-				provider: "route53",
-				label: label.trim() || DNS_PROVIDER_LABELS.route53,
-				secret: payload,
+			return JSON.stringify({
+				accessKeyId: keyId,
+				secretAccessKey: keySecret,
 			});
-			return;
 		}
 
-		if (provider === "gcloud") {
+		if (selected === "gcloud") {
 			const json = secret.trim();
 			if (!json) {
 				toast.error("Service account JSON is required");
-				return;
+				return null;
 			}
 			try {
 				JSON.parse(json);
 			} catch {
 				toast.error("Service account must be valid JSON");
-				return;
+				return null;
 			}
-			setVault.mutate({
-				provider: "gcloud",
-				label: label.trim() || DNS_PROVIDER_LABELS.gcloud,
-				secret: json,
-			});
-			return;
+			return json;
 		}
 
 		const next = secret.trim();
 		if (!next) {
 			toast.error(
-				provider === "ns1"
+				selected === "ns1"
 					? "API key is required"
 					: "API token / secret is required",
 			);
+			return null;
+		}
+		return next;
+	};
+
+	const handleConnect = () => {
+		const nextLabel = label.trim();
+		if (!nextLabel) {
+			toast.error("Label is required");
 			return;
 		}
+		const payload = buildSecretPayload(provider);
+		if (!payload) return;
 		setVault.mutate({
 			provider,
-			label: label.trim() || DNS_PROVIDER_LABELS[provider] || provider,
-			secret: next,
+			label: nextLabel,
+			secret: payload,
 		});
 	};
 
-	const isPending = setCfToken.isPending || setVault.isPending;
-	const cfConnected = !!cfSettings?.connected;
-	const otherCreds =
-		vaultCreds?.filter((c) => c.provider !== "cloudflare") ?? [];
+	const handleRotate = () => {
+		if (!rotateCred) return;
+		const selected = rotateCred.provider as ConnectableDnsProviderId;
+		const payload = buildSecretPayload(selected);
+		if (!payload) return;
+		rotateVault.mutate({
+			credentialId: rotateCred.id,
+			secret: payload,
+			label: label.trim() || rotateCred.label,
+		});
+	};
+
+	const grouped = useMemo(() => {
+		const map = new Map<string, VaultCred[]>();
+		for (const cred of vaultCreds ?? []) {
+			const list = map.get(cred.provider) ?? [];
+			list.push(cred);
+			map.set(cred.provider, list);
+		}
+		return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+	}, [vaultCreds]);
 
 	const secretFieldLabel =
 		provider === "gcloud"
@@ -182,6 +188,9 @@ export const DnsProvidersSection = () => {
 				: provider === "ns1"
 					? "API key"
 					: "API token / secret";
+
+	const rotateProvider = (rotateCred?.provider ??
+		"cloudflare") as ConnectableDnsProviderId;
 
 	return (
 		<>
@@ -197,8 +206,8 @@ export const DnsProvidersSection = () => {
 								DNS providers
 							</CardTitle>
 							<CardDescription className="text-xs sm:text-sm">
-								Connect a provider for managed DNS: zones, records, and
-								hostnames.
+								Add multiple accounts per provider. Each account syncs its own
+								DNS domains.
 							</CardDescription>
 						</div>
 						<Button
@@ -206,88 +215,88 @@ export const DnsProvidersSection = () => {
 							variant="secondary"
 							size="sm"
 							className="w-full sm:w-auto"
-							onClick={() => setOpen(true)}
+							onClick={() => {
+								resetForm();
+								setOpen(true);
+							}}
 						>
 							Add provider
 						</Button>
 					</CardHeader>
 
-					<div className="space-y-2 border-t px-6 py-4">
-						{cfConnected ? (
-							<div className="flex flex-col gap-2 rounded-lg border bg-sidebar/60 p-3 sm:flex-row sm:items-center sm:justify-between">
-								<div className="flex min-w-0 items-center gap-2">
-									<Cloud className="size-4 shrink-0 text-muted-foreground" />
-									<div className="min-w-0">
-										<p className="text-sm font-medium">Cloudflare</p>
-										<p className="font-mono text-xs text-muted-foreground">
-											****{cfSettings?.apiTokenLast4}
-										</p>
-									</div>
-								</div>
-								<div className="flex flex-wrap items-center gap-2">
-									<Badge variant="green">Connected</Badge>
-									<Badge variant="outline">DNS-01</Badge>
-									<Button
-										type="button"
-										variant="outline"
-										size="sm"
-										isLoading={disconnectCf.isPending}
-										onClick={() => disconnectCf.mutate()}
-									>
-										Disconnect
-									</Button>
-								</div>
-							</div>
-						) : (
+					<div className="space-y-4 border-t px-6 py-4">
+						{(vaultCreds?.length ?? 0) === 0 ? (
 							<p className="text-sm text-muted-foreground">
-								No Cloudflare credential yet. Add a provider to enable managed
+								No DNS provider accounts yet. Add a provider to enable managed
 								DNS.
 							</p>
-						)}
-
-						{otherCreds.map((cred) => (
-							<div
-								key={cred.id}
-								className="flex flex-col gap-2 rounded-lg border bg-sidebar/60 p-3 sm:flex-row sm:items-center sm:justify-between"
-							>
-								<div className="min-w-0">
-									<p className="text-sm font-medium">
+						) : (
+							grouped.map(([providerId, creds]) => (
+								<div key={providerId} className="space-y-2">
+									<p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
 										{DNS_PROVIDER_LABELS[
-											cred.provider as ConnectableDnsProviderId
-										] ?? cred.provider}
-										{cred.label ? (
-											<span className="text-muted-foreground">
-												{" "}
-												· {cred.label}
-											</span>
-										) : null}
+											providerId as ConnectableDnsProviderId
+										] ?? providerId}
 									</p>
-									<p className="font-mono text-xs text-muted-foreground">
-										****{cred.secretLast4}
-									</p>
+									{creds.map((cred) => (
+										<div
+											key={cred.id}
+											className="flex flex-col gap-2 rounded-lg border bg-sidebar/60 p-3 sm:flex-row sm:items-center sm:justify-between"
+										>
+											<div className="min-w-0">
+												<p className="text-sm font-medium">
+													{cred.label}
+													<span className="font-mono text-muted-foreground">
+														{" "}
+														· ****{cred.secretLast4}
+													</span>
+												</p>
+												<p className="text-xs text-muted-foreground">
+													{DNS_PROVIDER_LABELS[
+														cred.provider as ConnectableDnsProviderId
+													] ?? cred.provider}
+													{cred.legacyCloudflare ? " · legacy" : ""}
+												</p>
+											</div>
+											<div className="flex flex-wrap items-center gap-2">
+												<Badge variant="green">Connected</Badge>
+												{capabilities?.find((c) => c.id === cred.provider)
+													?.requiresDns01WhenManaged ? (
+													<Badge variant="outline">DNS-01</Badge>
+												) : (
+													<Badge variant="outline">HTTP-01</Badge>
+												)}
+												<Button
+													type="button"
+													variant="outline"
+													size="sm"
+													onClick={() => {
+														setLabel(cred.label);
+														setSecret("");
+														setAccessKeyId("");
+														setSecretAccessKey("");
+														setRotateCred(cred);
+													}}
+												>
+													Rotate
+												</Button>
+												<Button
+													type="button"
+													variant="outline"
+													size="sm"
+													isLoading={deleteVault.isPending}
+													onClick={() =>
+														deleteVault.mutate({ credentialId: cred.id })
+													}
+												>
+													Disconnect
+												</Button>
+											</div>
+										</div>
+									))}
 								</div>
-								<div className="flex flex-wrap items-center gap-2">
-									<Badge variant="green">Connected</Badge>
-									{capabilities?.find((c) => c.id === cred.provider)
-										?.requiresDns01WhenManaged ? (
-										<Badge variant="outline">DNS-01</Badge>
-									) : (
-										<Badge variant="outline">HTTP-01</Badge>
-									)}
-									<Button
-										type="button"
-										variant="outline"
-										size="sm"
-										isLoading={deleteVault.isPending}
-										onClick={() =>
-											deleteVault.mutate({ credentialId: cred.id })
-										}
-									>
-										Disconnect
-									</Button>
-								</div>
-							</div>
-						))}
+							))
+						)}
 					</div>
 				</div>
 			</Card>
@@ -303,11 +312,11 @@ export const DnsProvidersSection = () => {
 					<DialogHeader>
 						<DialogTitle className="flex items-center gap-2">
 							<KeyRound className="size-5 text-muted-foreground" aria-hidden />
-							Add DNS provider
+							Add DNS provider account
 						</DialogTitle>
 						<DialogDescription>
-							Credentials are sealed at rest. Only a short suffix is shown for
-							identification; the full secret is never returned.
+							Adds another account. Credentials are sealed at rest. Only a short
+							suffix is shown for identification.
 						</DialogDescription>
 					</DialogHeader>
 
@@ -317,17 +326,18 @@ export const DnsProvidersSection = () => {
 							<DnsProviderPicker value={provider} onChange={setProvider} />
 						</div>
 
-						{provider !== "cloudflare" ? (
-							<div className="space-y-2">
-								<Label htmlFor="dns-label">Label</Label>
-								<Input
-									id="dns-label"
-									value={label}
-									onChange={(e) => setLabel(e.target.value)}
-									placeholder="Production"
-								/>
-							</div>
-						) : null}
+						<div className="space-y-2">
+							<Label htmlFor="dns-label">Label</Label>
+							<Input
+								id="dns-label"
+								value={label}
+								onChange={(e) => setLabel(e.target.value)}
+								placeholder="Production"
+							/>
+							<p className="text-xs text-muted-foreground">
+								Must be unique per provider in this organization.
+							</p>
+						</div>
 
 						{provider === "route53" ? (
 							<>
@@ -396,8 +406,107 @@ export const DnsProvidersSection = () => {
 						>
 							Cancel
 						</Button>
-						<Button type="button" isLoading={isPending} onClick={handleConnect}>
-							Connect
+						<Button
+							type="button"
+							isLoading={setVault.isPending}
+							onClick={handleConnect}
+						>
+							Add account
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
+			<Dialog
+				open={!!rotateCred}
+				onOpenChange={(next) => {
+					if (!next) {
+						setRotateCred(null);
+						setSecret("");
+					}
+				}}
+			>
+				<DialogContent className="sm:max-w-lg">
+					<DialogHeader>
+						<DialogTitle>Rotate credential</DialogTitle>
+						<DialogDescription>
+							Updates the sealed secret for{" "}
+							<span className="font-medium text-foreground">
+								{rotateCred?.label}
+							</span>
+							. Does not create a new account.
+						</DialogDescription>
+					</DialogHeader>
+					<div className="space-y-4">
+						<div className="space-y-2">
+							<Label htmlFor="dns-rotate-label">Label</Label>
+							<Input
+								id="dns-rotate-label"
+								value={label}
+								onChange={(e) => setLabel(e.target.value)}
+							/>
+						</div>
+						{rotateProvider === "route53" ? (
+							<>
+								<div className="space-y-2">
+									<Label htmlFor="dns-rotate-access-key">Access key id</Label>
+									<Input
+										id="dns-rotate-access-key"
+										value={accessKeyId}
+										onChange={(e) => setAccessKeyId(e.target.value)}
+										autoComplete="off"
+										className="font-mono text-sm"
+									/>
+								</div>
+								<div className="space-y-2">
+									<Label htmlFor="dns-rotate-secret-key">
+										Secret access key
+									</Label>
+									<Input
+										id="dns-rotate-secret-key"
+										type="password"
+										value={secretAccessKey}
+										onChange={(e) => setSecretAccessKey(e.target.value)}
+										autoComplete="off"
+										className="font-mono text-sm"
+									/>
+								</div>
+							</>
+						) : null}
+						<div className="space-y-2">
+							<Label htmlFor="dns-rotate-secret">New secret</Label>
+							{rotateProvider === "gcloud" || rotateProvider === "route53" ? (
+								<Textarea
+									id="dns-rotate-secret"
+									value={secret}
+									onChange={(e) => setSecret(e.target.value)}
+									className="min-h-28 font-mono text-sm"
+								/>
+							) : (
+								<Input
+									id="dns-rotate-secret"
+									value={secret}
+									onChange={(e) => setSecret(e.target.value)}
+									autoComplete="off"
+									className="font-mono text-sm"
+								/>
+							)}
+						</div>
+					</div>
+					<DialogFooter>
+						<Button
+							type="button"
+							variant="secondary"
+							onClick={() => setRotateCred(null)}
+						>
+							Cancel
+						</Button>
+						<Button
+							type="button"
+							isLoading={rotateVault.isPending}
+							onClick={handleRotate}
+						>
+							Save
 						</Button>
 					</DialogFooter>
 				</DialogContent>

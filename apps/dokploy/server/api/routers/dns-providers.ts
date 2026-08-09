@@ -88,6 +88,12 @@ export const dnsProvidersRouter = createTRPCRouter({
 				label: input.label,
 				secret: input.secret,
 				meta: input.meta,
+			}).catch((e) => {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message:
+						e instanceof Error ? e.message : "Failed to save credential",
+				});
 			});
 
 			// Best-effort Traefik DNS-01 inject when provider requires it
@@ -135,6 +141,12 @@ export const dnsProvidersRouter = createTRPCRouter({
 				secret: input.secret,
 				label: input.label,
 				meta: input.meta,
+			}).catch((e) => {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message:
+						e instanceof Error ? e.message : "Failed to rotate credential",
+				});
 			});
 		}),
 
@@ -228,7 +240,12 @@ export const dnsProvidersRouter = createTRPCRouter({
 
 	/** List mirrored zones from all providers (generic dns_zone table). */
 	listZones: protectedProcedure.query(async ({ ctx }) => {
-		const rows = await listMirroredDnsZones(ctx.session.activeOrganizationId);
+		const orgId = ctx.session.activeOrganizationId;
+		const [rows, creds] = await Promise.all([
+			listMirroredDnsZones(orgId),
+			listDnsProviderCredentials(orgId),
+		]);
+		const labelById = new Map(creds.map((c) => [c.id, c.label]));
 		return rows.map((z) => ({
 			id: z.id,
 			provider: z.provider,
@@ -240,6 +257,9 @@ export const dnsProvidersRouter = createTRPCRouter({
 			paused: z.paused,
 			lastSyncedAt: z.lastSyncedAt,
 			credentialId: z.credentialId,
+			credentialLabel: z.credentialId
+				? (labelById.get(z.credentialId) ?? null)
+				: null,
 		}));
 	}),
 
@@ -301,6 +321,7 @@ export const dnsProvidersRouter = createTRPCRouter({
 				organizationId: orgId,
 				provider: input.provider,
 				zoneExternalId: input.zoneExternalId,
+				credentialId: input.credentialId,
 			});
 			return {
 				records: rows.map((r) => ({

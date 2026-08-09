@@ -79,7 +79,7 @@ export const DomainsHub = () => {
 		refetch: refetchCfZones,
 		isPending: cfZonesPending,
 	} = api.cloudflareSettings.listZones.useQuery(undefined, {
-		enabled: !!settings?.connected,
+		enabled: !!settings?.connected && (vaultCreds?.length ?? 0) === 0,
 	});
 	const {
 		data: mirroredZones,
@@ -88,6 +88,14 @@ export const DomainsHub = () => {
 	} = api.dnsProviders.listZones.useQuery(undefined, {
 		enabled: (vaultCreds?.length ?? 0) > 0 || !!settings?.connected,
 	});
+
+	const credentialLabelById = useMemo(() => {
+		const map = new Map<string, string>();
+		for (const c of vaultCreds ?? []) {
+			map.set(c.id, c.label);
+		}
+		return map;
+	}, [vaultCreds]);
 
 	useEffect(() => {
 		if (!orgId) {
@@ -117,11 +125,12 @@ export const DomainsHub = () => {
 				paused: boolean;
 				lastSyncedAt: Date | string | null;
 				credentialId: string | null;
+				credentialLabel: string | null;
 			}
 		>();
 
 		for (const z of mirroredZones ?? []) {
-			const key = `${z.provider}:${z.zoneExternalId}`;
+			const key = `${z.provider}:${z.credentialId ?? "none"}:${z.zoneExternalId}`;
 			byKey.set(key, {
 				key,
 				provider: z.provider,
@@ -132,13 +141,18 @@ export const DomainsHub = () => {
 				paused: z.paused,
 				lastSyncedAt: z.lastSyncedAt,
 				credentialId: z.credentialId,
+				credentialLabel:
+					z.credentialLabel ??
+					(z.credentialId
+						? (credentialLabelById.get(z.credentialId) ?? null)
+						: null),
 			});
 		}
 
 		// CF legacy table may have zones before vault mirror is populated
 		for (const z of cfZones ?? []) {
-			const key = `cloudflare:${z.cfZoneId}`;
-			if (!byKey.has(key)) {
+			const key = `cloudflare:legacy:${z.cfZoneId}`;
+			if (![...byKey.values()].some((e) => e.zoneExternalId === z.cfZoneId)) {
 				byKey.set(key, {
 					key,
 					provider: "cloudflare",
@@ -149,12 +163,26 @@ export const DomainsHub = () => {
 					paused: z.paused,
 					lastSyncedAt: z.lastSyncedAt,
 					credentialId: null,
+					credentialLabel: "Default",
 				});
 			}
 		}
 
 		return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
-	}, [mirroredZones, cfZones]);
+	}, [mirroredZones, cfZones, credentialLabelById]);
+
+	const accountSubtitle = useMemo(() => {
+		if (!vaultCreds?.length) {
+			return settings?.apiTokenLast4
+				? ` · Managed DNS ****${settings.apiTokenLast4}`
+				: "";
+		}
+		if (vaultCreds.length === 1) {
+			const c = vaultCreds[0]!;
+			return ` · ${c.label} ****${c.secretLast4}`;
+		}
+		return ` · ${vaultCreds.length} DNS accounts`;
+	}, [vaultCreds, settings?.apiTokenLast4]);
 
 	useEffect(() => {
 		if (!orgId || !providersResolved) return;
@@ -199,11 +227,10 @@ export const DomainsHub = () => {
 		mutate: () => {
 			void (async () => {
 				try {
-					if (settings?.connected) {
-						await syncCfZones.mutateAsync();
-					}
 					if ((vaultCreds?.length ?? 0) > 0) {
 						await syncVaultZones.mutateAsync({});
+					} else if (settings?.connected) {
+						await syncCfZones.mutateAsync();
 					}
 					toast.success("DNS domains synced");
 					await refetchCfZones();
@@ -334,9 +361,7 @@ export const DomainsHub = () => {
 							</CardTitle>
 							<CardDescription className="break-words">
 								All hostnames across apps, compose, and the web server
-								{settings?.apiTokenLast4
-									? ` · Managed DNS ****${settings.apiTokenLast4}`
-									: ""}
+								{accountSubtitle}
 								<span className="text-muted-foreground">
 									{" "}
 									· {lastSyncedLabel}
@@ -436,6 +461,9 @@ export const DomainsHub = () => {
 															</span>
 															<span className="text-xs text-muted-foreground">
 																{z.provider}
+																{z.credentialLabel
+																	? ` · ${z.credentialLabel}`
+																	: ""}
 																{z.provider === "cloudflare"
 																	? " · CDN proxy on (policy)"
 																	: " · managed DNS"}

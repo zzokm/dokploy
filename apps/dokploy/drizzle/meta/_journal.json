@@ -1324,6 +1324,13 @@
       "when": 1776146400006,
       "tag": "0188_dns_provider_generalization",
       "breakpoints": true
+    },
+    {
+      "idx": 189,
+      "version": "7",
+      "when": 1776146400007,
+      "tag": "0189_dns_multi_credential_zones",
+      "breakpoints": true
     }
   ]
 }

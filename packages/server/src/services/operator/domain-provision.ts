@@ -270,6 +270,7 @@ export const provisionDomain = async (
 			serviceName: input.serviceName,
 			dnsProvider: "cloudflare",
 			cfProxied: true,
+			dnsCredentialId: dns.credentialId ?? undefined,
 			dnsZoneId: dns.dnsZoneId,
 			dnsZoneName: dns.zoneName,
 			dnsRecordId: dns.dnsRecordId,
@@ -290,6 +291,7 @@ export const provisionDomain = async (
 				customCertResolver: acmeChallenge === "dns-01" ? "letsencrypt-cloudflare" : null,
 				dnsProvider: "cloudflare",
 				cfProxied: true,
+				dnsCredentialId: dns.credentialId ?? undefined,
 				dnsZoneId: dns.dnsZoneId,
 				dnsZoneName: dns.zoneName,
 				dnsRecordId: dns.dnsRecordId,
@@ -322,6 +324,7 @@ export const provisionDomain = async (
 	if (acmeChallenge === "dns-01") {
 		void ensureTraefikCloudflareDnsToken({
 			organizationId: input.organizationId,
+			credentialId: dns.credentialId ?? undefined,
 		}).catch(() => {})
 		steps.push("traefik_dns01_token_ensured")
 	}

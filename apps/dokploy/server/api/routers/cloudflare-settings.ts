@@ -39,29 +39,41 @@ import { createTRPCRouter, protectedProcedure } from "../trpc";
 
 export const cloudflareSettingsRouter = createTRPCRouter({
 	get: protectedProcedure.query(async ({ ctx }) => {
+		const orgId = ctx.session.activeOrganizationId;
 		const [row] = await ctx.db
 			.select({
 				apiTokenLast4: cloudflareSettings.apiTokenLast4,
 				updatedAt: cloudflareSettings.updatedAt,
 			})
 			.from(cloudflareSettings)
-			.where(
-				eq(cloudflareSettings.organizationId, ctx.session.activeOrganizationId),
-			)
+			.where(eq(cloudflareSettings.organizationId, orgId))
 			.limit(1);
 
-		if (!row) {
+		if (row) {
 			return {
-				connected: false as const,
-				apiTokenLast4: null,
-				updatedAt: null,
+				connected: true as const,
+				apiTokenLast4: row.apiTokenLast4,
+				updatedAt: row.updatedAt?.toISOString?.() ?? null,
+			};
+		}
+
+		const { listDnsProviderCredentials } = await import(
+			"@dokploy/server/services/dns/credentials"
+		);
+		const vault = await listDnsProviderCredentials(orgId);
+		const cf = vault.find((c) => c.provider === "cloudflare");
+		if (cf) {
+			return {
+				connected: true as const,
+				apiTokenLast4: cf.secretLast4,
+				updatedAt: cf.updatedAt?.toISOString?.() ?? null,
 			};
 		}
 
 		return {
-			connected: true as const,
-			apiTokenLast4: row.apiTokenLast4,
-			updatedAt: row.updatedAt?.toISOString?.() ?? null,
+			connected: false as const,
+			apiTokenLast4: null,
+			updatedAt: null,
 		};
 	}),
 
@@ -115,6 +127,42 @@ export const cloudflareSettingsRouter = createTRPCRouter({
 						updatedAt: now,
 					},
 				});
+
+			// Keep vault in sync (Default account) for multi-credential path
+			try {
+				const {
+					listDnsProviderCredentials,
+					migrateLegacyCloudflareToVault,
+					rotateDnsProviderCredential,
+					setDnsProviderCredential,
+					pickDefaultDnsCredential,
+				} = await import("@dokploy/server/services/dns/credentials");
+				await migrateLegacyCloudflareToVault(
+					ctx.session.activeOrganizationId,
+				);
+				const vault = await listDnsProviderCredentials(
+					ctx.session.activeOrganizationId,
+				);
+				const cfCreds = vault.filter((c) => c.provider === "cloudflare");
+				const picked = pickDefaultDnsCredential(cfCreds);
+				if (picked && !picked.legacyCloudflare) {
+					await rotateDnsProviderCredential({
+						organizationId: ctx.session.activeOrganizationId,
+						credentialId: picked.id,
+						secret: input.apiToken,
+					});
+				} else if (cfCreds.length === 0) {
+					await setDnsProviderCredential({
+						organizationId: ctx.session.activeOrganizationId,
+						provider: "cloudflare",
+						label: "Default",
+						secret: input.apiToken,
+						meta: { isDefault: true },
+					});
+				}
+			} catch {
+				// Vault write is best-effort; legacy row already persisted
+			}
 
 			try {
 				await syncCloudflareZonesForOrg(ctx.session.activeOrganizationId);

@@ -23,16 +23,23 @@ export type EnsureTraefikCloudflareDnsTokenResult = {
 
 /**
  * Cloudflare-proxied domains get `certresolver=letsencrypt-cloudflare`.
- * Prefers sealed vault credential; falls back to legacy cloudflare_settings.
+ * Prefers sealed vault credential (zone/domain credentialId when provided);
+ * falls back to default-policy vault pick, then legacy cloudflare_settings.
+ *
+ * Traefik multi-token policy: DNS-01 uses a single CF_DNS_API_TOKEN env var.
+ * Prefer the credential tied to the domain's zone; otherwise pickDefault
+ * (meta.isDefault, label "Default", then oldest).
  */
 export const ensureTraefikCloudflareDnsToken = async (input: {
 	organizationId: string;
 	serverId?: string;
+	credentialId?: string;
 }): Promise<EnsureTraefikCloudflareDnsTokenResult> => {
 	const viaAdapter = await ensureTraefikDnsProviderToken({
 		organizationId: input.organizationId,
 		provider: "cloudflare",
 		serverId: input.serverId,
+		credentialId: input.credentialId,
 	});
 	if (
 		viaAdapter.reason === "applied" ||

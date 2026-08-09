@@ -3,7 +3,7 @@
  * Org-scoped so multi-org sessions do not leak lists across tenants.
  */
 
-export const DNS_DOMAINS_CACHE_VERSION = 1 as const;
+export const DNS_DOMAINS_CACHE_VERSION = 2 as const;
 
 export type CachedDnsZone = {
 	key: string;
@@ -15,6 +15,7 @@ export type CachedDnsZone = {
 	paused: boolean;
 	lastSyncedAt: string | null;
 	credentialId: string | null;
+	credentialLabel: string | null;
 };
 
 export type DnsDomainsCachePayload = {
@@ -46,7 +47,8 @@ function isCachedDnsZone(value: unknown): value is CachedDnsZone {
 		STATUS_SET.has(z.status) &&
 		typeof z.paused === "boolean" &&
 		(z.lastSyncedAt === null || typeof z.lastSyncedAt === "string") &&
-		(z.credentialId === null || typeof z.credentialId === "string")
+		(z.credentialId === null || typeof z.credentialId === "string") &&
+		(z.credentialLabel === null || typeof z.credentialLabel === "string")
 	);
 }
 
@@ -100,7 +102,7 @@ export function zonesFingerprint(zones: CachedDnsZone[]): string {
 	return zones
 		.map(
 			(z) =>
-				`${z.key}|${z.name}|${z.status}|${z.paused ? 1 : 0}|${z.lastSyncedAt ?? ""}|${z.credentialId ?? ""}`,
+				`${z.key}|${z.name}|${z.status}|${z.paused ? 1 : 0}|${z.lastSyncedAt ?? ""}|${z.credentialId ?? ""}|${z.credentialLabel ?? ""}`,
 		)
 		.join(";");
 }
@@ -125,6 +127,7 @@ export function serializeHubZones(
 		paused: boolean;
 		lastSyncedAt: Date | string | null;
 		credentialId: string | null;
+		credentialLabel: string | null;
 	}>,
 ): CachedDnsZone[] {
 	return zones.map((z) => ({
@@ -141,6 +144,7 @@ export function serializeHubZones(
 				: String(z.lastSyncedAt)
 			: null,
 		credentialId: z.credentialId,
+		credentialLabel: z.credentialLabel,
 	}));
 }
 

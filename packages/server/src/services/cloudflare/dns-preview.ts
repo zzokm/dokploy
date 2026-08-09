@@ -2,14 +2,13 @@ import { and, eq } from "drizzle-orm"
 import { db } from "@dokploy/server/db"
 import {
 	applications,
-	cloudflareSettings,
 	compose,
 	domains,
 	environments,
 	previewDeployments,
 	projects,
 } from "@dokploy/server/db/schema"
-import { unsealString } from "@dokploy/server/utils/crypto/seal"
+import { resolveDnsProviderSecret } from "@dokploy/server/services/dns/credentials"
 import { resolveDomainTargetById } from "../domain-target"
 import {
 	ensureCloudflareAppDnsForDomain,
@@ -220,20 +219,11 @@ const previewSingleDomain = async (input: {
 export const previewCloudflareAppDnsForOrg = async (
 	organizationId: string,
 ): Promise<CloudflareAppDnsPreviewItem[]> => {
-	const [settings] = await db
-		.select({ apiTokenEncrypted: cloudflareSettings.apiTokenEncrypted })
-		.from(cloudflareSettings)
-		.where(eq(cloudflareSettings.organizationId, organizationId))
-		.limit(1)
-
-	if (!settings) {
-		return []
-	}
-
-	let token = ""
-	try {
-		token = unsealString(settings.apiTokenEncrypted)
-	} catch {
+	const resolved = await resolveDnsProviderSecret({
+		organizationId,
+		provider: "cloudflare",
+	})
+	if (!resolved) {
 		return []
 	}
 
@@ -241,6 +231,29 @@ export const previewCloudflareAppDnsForOrg = async (
 	const out: CloudflareAppDnsPreviewItem[] = []
 
 	for (const domainId of domainIds) {
+		const [domain] = await db
+			.select({
+				dnsCredentialId: domains.dnsCredentialId,
+				host: domains.host,
+			})
+			.from(domains)
+			.where(eq(domains.domainId, domainId))
+			.limit(1)
+
+		let token = resolved.secret
+		const zone = domain
+			? await findBestZoneMatch(organizationId, domain.host)
+			: null
+		const credId = domain?.dnsCredentialId ?? zone?.credentialId
+		if (credId && credId !== resolved.credentialId) {
+			const specific = await resolveDnsProviderSecret({
+				organizationId,
+				credentialId: credId,
+				provider: "cloudflare",
+			})
+			if (specific) token = specific.secret
+		}
+
 		const item = await previewSingleDomain({
 			token,
 			organizationId,
@@ -256,25 +269,12 @@ export const previewCloudflareAppDnsForDomain = async (input: {
 	organizationId: string
 	domainId: string
 }): Promise<CloudflareAppDnsPreviewItem | null> => {
-	const [settings] = await db
-		.select({ apiTokenEncrypted: cloudflareSettings.apiTokenEncrypted })
-		.from(cloudflareSettings)
-		.where(eq(cloudflareSettings.organizationId, input.organizationId))
-		.limit(1)
-
-	if (!settings) {
-		return null
-	}
-
-	let token = ""
-	try {
-		token = unsealString(settings.apiTokenEncrypted)
-	} catch {
-		return null
-	}
-
 	const [row] = await db
-		.select({ dnsProvider: domains.dnsProvider })
+		.select({
+			dnsProvider: domains.dnsProvider,
+			dnsCredentialId: domains.dnsCredentialId,
+			host: domains.host,
+		})
 		.from(domains)
 		.where(eq(domains.domainId, input.domainId))
 		.limit(1)
@@ -283,8 +283,18 @@ export const previewCloudflareAppDnsForDomain = async (input: {
 		return null
 	}
 
+	const zone = await findBestZoneMatch(input.organizationId, row.host)
+	const resolved = await resolveDnsProviderSecret({
+		organizationId: input.organizationId,
+		credentialId: row.dnsCredentialId ?? zone?.credentialId ?? undefined,
+		provider: "cloudflare",
+	})
+	if (!resolved) {
+		return null
+	}
+
 	return await previewSingleDomain({
-		token,
+		token: resolved.secret,
 		organizationId: input.organizationId,
 		domainId: input.domainId,
 	})

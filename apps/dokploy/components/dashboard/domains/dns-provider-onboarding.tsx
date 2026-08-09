@@ -325,7 +325,7 @@ export const DnsProviderOnboarding = () => {
 				: "API token";
 
 	return (
-		<div className="flex w-full flex-col gap-6 py-2">
+		<div className="mx-auto flex w-full max-w-xl flex-col gap-6 py-2">
 			<div className="space-y-3">
 				<div className="flex items-center justify-between gap-3">
 					<p className="text-base font-medium text-foreground">
@@ -335,12 +335,19 @@ export const DnsProviderOnboarding = () => {
 						Step {stepIndex + 1} of {STEPS.length}
 					</span>
 				</div>
-				<ol className="flex items-center gap-2" aria-label="Onboarding steps">
+				<ol className="flex w-full items-center" aria-label="Onboarding steps">
 					{STEPS.map((s, index) => {
 						const active = index === stepIndex;
 						const done = index < stepIndex;
+						const isLast = index === STEPS.length - 1;
 						return (
-							<li key={s.id} className="flex flex-1 items-center gap-2">
+							<li
+								key={s.id}
+								className={cn(
+									"flex items-center",
+									!isLast && "min-w-0 flex-1",
+								)}
+							>
 								<span
 									className={cn(
 										"flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-medium transition-colors",
@@ -358,10 +365,10 @@ export const DnsProviderOnboarding = () => {
 										index + 1
 									)}
 								</span>
-								{index < STEPS.length - 1 ? (
+								{!isLast ? (
 									<span
 										className={cn(
-											"h-px w-full",
+											"mx-2 h-px min-w-0 flex-1",
 											done ? "bg-primary/40" : "bg-border",
 										)}
 										aria-hidden

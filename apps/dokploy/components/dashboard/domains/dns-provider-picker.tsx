@@ -6,7 +6,7 @@ import {
 	type DnsProviderOption,
 	DNS_PROVIDER_OPTIONS,
 } from "@/components/dashboard/domains/dns-connectable-providers";
-import { DnsProviderLogo } from "@/components/dashboard/domains/logos/dns-provider-logo";
+import { DnsProviderLogoChrome } from "@/components/dashboard/domains/logos/dns-provider-logo-chrome";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -62,11 +62,10 @@ export const DnsProviderPicker = ({
 						)}
 						style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}
 					>
-						<span className="mb-2 ml-2 mt-2 flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-background p-1">
-							<span className="flex size-full items-center justify-center overflow-hidden rounded-sm">
-								<DnsProviderLogo id={provider.id} className="size-full" />
-							</span>
-						</span>
+						<DnsProviderLogoChrome
+							id={provider.id}
+							className="mb-2 ml-2 mt-2"
+						/>
 						<span className="min-w-0 flex-1 space-y-0.5 self-center pl-2 pr-3">
 							<span className="block truncate text-sm font-medium leading-snug text-foreground">
 								{provider.name}

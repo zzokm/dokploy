@@ -306,7 +306,8 @@ export const DnsProvidersSection = () => {
 							Add DNS provider
 						</DialogTitle>
 						<DialogDescription>
-							Tokens are sealed at rest. Responses expose last4 only.
+							Credentials are sealed at rest. Only a short suffix is shown for
+							identification; the full secret is never returned.
 						</DialogDescription>
 					</DialogHeader>
 

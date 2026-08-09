@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Check, KeyRound, Link2 } from "lucide-react";
+import { ArrowLeft, Check, KeyRound } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -9,7 +9,7 @@ import {
 	DNS_PROVIDER_OPTIONS,
 } from "@/components/dashboard/domains/dns-connectable-providers";
 import { DnsProviderPicker } from "@/components/dashboard/domains/dns-provider-picker";
-import { DnsProviderLogo } from "@/components/dashboard/domains/logos/dns-provider-logo";
+import { DnsProviderLogoChrome } from "@/components/dashboard/domains/logos/dns-provider-logo-chrome";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,7 +46,7 @@ const CREDENTIAL_INSTRUCTIONS: Record<ConnectableProvider, InstructionBlock> = {
 			"Zone → DNS → Edit",
 			"Account → Account Settings → Read (needed to list zones in some accounts)",
 		],
-		note: "Managed Cloudflare DNS always uses CDN proxy and DNS-01 certificates. There is no proxy toggle.",
+		note: "Managed Cloudflare DNS always uses CDN proxy and DNS-01 certificates.",
 	},
 	digitalocean: {
 		title: "Create a DigitalOcean API token",
@@ -323,9 +323,7 @@ export const DnsProviderOnboarding = () => {
 			{step === "credentials" && selected && instructions ? (
 				<div className="animate-in fade-in-0 slide-in-from-bottom-2 space-y-5 duration-300">
 					<div className="flex items-center gap-3 rounded-lg border bg-sidebar/60 p-3">
-						<span className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
-							<DnsProviderLogo id={selected} />
-						</span>
+						<DnsProviderLogoChrome id={selected} />
 						<div className="min-w-0">
 							<p className="text-sm font-medium">{selectedMeta?.name}</p>
 							<p className="text-xs text-muted-foreground">
@@ -387,16 +385,14 @@ export const DnsProviderOnboarding = () => {
 			{step === "connect" && selected ? (
 				<div className="animate-in fade-in-0 slide-in-from-bottom-2 space-y-5 duration-300">
 					<div className="flex items-center gap-3 rounded-lg border bg-sidebar/60 p-3">
-						<span className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background">
-							<Link2 className="size-4 text-muted-foreground" aria-hidden />
-						</span>
+						<DnsProviderLogoChrome id={selected} />
 						<div className="min-w-0">
 							<p className="text-sm font-medium">
 								Connect {PROVIDER_LABELS[selected]}
 							</p>
 							<p className="text-xs text-muted-foreground">
-								We store credentials sealed at rest. Responses expose last4
-								only.
+								Credentials are sealed at rest. Only a short suffix is shown
+								for identification; the full secret is never returned.
 							</p>
 						</div>
 					</div>

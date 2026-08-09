@@ -301,12 +301,7 @@ export const DomainsHub = () => {
 							</CardDescription>
 						</CardHeader>
 						<CardContent className="space-y-8 border-t py-8 sm:py-10">
-							{inventoryPending ? (
-								<div className="flex min-h-[12vh] items-center justify-center gap-2 text-sm text-muted-foreground">
-									<Loader2 className="size-4 animate-spin" aria-hidden />
-									Loading…
-								</div>
-							) : hasInventory ? (
+							{hasInventory ? (
 								<section className="space-y-3">
 									<div className="space-y-1">
 										<h3 className="text-sm font-medium">All domains</h3>

@@ -325,10 +325,10 @@ export const DnsProviderOnboarding = () => {
 				: "API token";
 
 	return (
-		<div className="mx-auto flex w-full max-w-xl flex-col gap-6 py-2">
+		<div className="flex w-full flex-col gap-6 py-2">
 			<div className="space-y-3">
 				<div className="flex items-center justify-between gap-3">
-					<p className="text-sm font-medium text-foreground">
+					<p className="text-base font-medium text-foreground">
 						{STEPS[stepIndex]?.title}
 					</p>
 					<span className="text-xs text-muted-foreground">

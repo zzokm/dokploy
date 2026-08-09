@@ -17,6 +17,7 @@ import {
 	isPreviewableDnsRecordType,
 	isProxyableDnsRecordType,
 	latestSyncIso,
+	formatDnsTtl,
 	openProjectButtonLabel,
 	parseDnsTtl,
 	sanitizeDnsValidationError,
@@ -428,6 +429,26 @@ describe("parseDnsTtl", () => {
 		expect(parseDnsTtl("abc")).toBe(1);
 		expect(parseDnsTtl("30")).toBe(1);
 		expect(parseDnsTtl("-5")).toBe(1);
+	});
+});
+
+describe("formatDnsTtl", () => {
+	it("shows Auto for the Cloudflare sentinel", () => {
+		expect(formatDnsTtl(1)).toBe("Auto");
+	});
+
+	it("prefers whole minutes, hours, and days", () => {
+		expect(formatDnsTtl(60)).toBe("1 min");
+		expect(formatDnsTtl(300)).toBe("5 min");
+		expect(formatDnsTtl(3600)).toBe("1 hr");
+		expect(formatDnsTtl(7200)).toBe("2 hr");
+		expect(formatDnsTtl(86400)).toBe("1 day");
+		expect(formatDnsTtl(172800)).toBe("2 days");
+	});
+
+	it("falls back to seconds when not evenly divisible", () => {
+		expect(formatDnsTtl(90)).toBe("90s");
+		expect(formatDnsTtl(45)).toBe("45s");
 	});
 });
 

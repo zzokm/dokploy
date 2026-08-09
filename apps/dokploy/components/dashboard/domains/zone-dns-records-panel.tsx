@@ -9,6 +9,7 @@ import {
 	dnsProxyStateHint,
 	dnsProxyStateLabel,
 	dnsRecordManagedByLabel,
+	formatDnsTtl,
 	isProxyableDnsRecordType,
 	parseDnsTtl,
 } from "@/components/dashboard/domains/domain-inventory-utils";
@@ -384,10 +385,12 @@ export const ZoneDnsRecordsPanel = ({
 		}
 	};
 
-	const ttlHint = useMemo(
-		() => (form.ttl === "1" ? "Auto" : `${form.ttl}s`),
-		[form.ttl],
-	);
+	const ttlHint = useMemo(() => {
+		const n = Number(form.ttl);
+		if (form.ttl === "1" || n === 1) return "Auto";
+		if (Number.isFinite(n) && n > 0) return formatDnsTtl(n);
+		return form.ttl;
+	}, [form.ttl]);
 
 	return (
 		<TooltipProvider>
@@ -503,7 +506,7 @@ export const ZoneDnsRecordsPanel = ({
 												<ProxyStateCell record={record} />
 											</TableCell>
 											<TableCell className="hidden align-top text-center text-sm text-muted-foreground md:table-cell">
-												{record.ttl === 1 ? "Auto" : `${record.ttl}s`}
+												{formatDnsTtl(record.ttl)}
 											</TableCell>
 											<TableCell className="align-top text-right">
 												<div className="flex justify-end gap-1">

@@ -304,6 +304,29 @@ export const parseDnsTtl = (value: string): number => {
 	return 1;
 };
 
+/**
+ * Short human TTL for DNS tables / form hints.
+ * Prefer whole days → hours → minutes when the value divides evenly; else `Ns`.
+ * Cloudflare sentinel `1` is shown as Auto.
+ */
+export const formatDnsTtl = (ttl: number): string => {
+	if (ttl === 1) return "Auto";
+	if (!Number.isFinite(ttl) || ttl <= 0) return "Auto";
+
+	const seconds = Math.floor(ttl);
+	if (seconds % 86400 === 0) {
+		const days = seconds / 86400;
+		return days === 1 ? "1 day" : `${days} days`;
+	}
+	if (seconds % 3600 === 0) {
+		return `${seconds / 3600} hr`;
+	}
+	if (seconds % 60 === 0) {
+		return `${seconds / 60} min`;
+	}
+	return `${seconds}s`;
+};
+
 export type InventoryWarningKind =
 	| "redeploy_traefik"
 	| "host_publish_port"

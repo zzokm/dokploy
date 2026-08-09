@@ -105,12 +105,18 @@ export const operatorRouter = createTRPCRouter({
 	}),
 
 	listZoneDnsRecords: protectedProcedure
-		.input(z.object({ cfZoneId: z.string().min(1) }))
+		.input(
+			z.object({
+				cfZoneId: z.string().min(1),
+				credentialId: z.string().min(1).optional(),
+			}),
+		)
 		.query(async ({ ctx, input }) => {
 			try {
 				return await listZoneDnsRecordsService({
 					organizationId: ctx.session.activeOrganizationId,
 					cfZoneId: input.cfZoneId,
+					credentialId: input.credentialId,
 				})
 			} catch (e) {
 				throwOperator(e)

@@ -403,12 +403,18 @@ export const cloudflareSettingsRouter = createTRPCRouter({
 		}),
 
 	listZoneDnsRecords: protectedProcedure
-		.input(z.object({ cfZoneId: z.string().min(1) }))
+		.input(
+			z.object({
+				cfZoneId: z.string().min(1),
+				credentialId: z.string().min(1).optional(),
+			}),
+		)
 		.query(async ({ ctx, input }) => {
 			try {
 				return await listZoneDnsRecordsService({
 					organizationId: ctx.session.activeOrganizationId,
 					cfZoneId: input.cfZoneId,
+					credentialId: input.credentialId,
 				});
 			} catch (e) {
 				throw new TRPCError({
@@ -423,6 +429,7 @@ export const cloudflareSettingsRouter = createTRPCRouter({
 		.input(
 			z.object({
 				cfZoneId: z.string().min(1),
+				credentialId: z.string().min(1).optional(),
 				record: zoneDnsRecordInputSchema,
 			}),
 		)
@@ -431,6 +438,7 @@ export const cloudflareSettingsRouter = createTRPCRouter({
 				return await createZoneDnsRecordService({
 					organizationId: ctx.session.activeOrganizationId,
 					cfZoneId: input.cfZoneId,
+					credentialId: input.credentialId,
 					record: input.record,
 				});
 			} catch (e) {
@@ -447,6 +455,7 @@ export const cloudflareSettingsRouter = createTRPCRouter({
 			z.object({
 				cfZoneId: z.string().min(1),
 				cfRecordId: z.string().min(1),
+				credentialId: z.string().min(1).optional(),
 				record: zoneDnsRecordInputSchema,
 			}),
 		)
@@ -456,6 +465,7 @@ export const cloudflareSettingsRouter = createTRPCRouter({
 					organizationId: ctx.session.activeOrganizationId,
 					cfZoneId: input.cfZoneId,
 					cfRecordId: input.cfRecordId,
+					credentialId: input.credentialId,
 					record: input.record,
 				});
 			} catch (e) {
@@ -472,6 +482,7 @@ export const cloudflareSettingsRouter = createTRPCRouter({
 			z.object({
 				cfZoneId: z.string().min(1),
 				cfRecordId: z.string().min(1),
+				credentialId: z.string().min(1).optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -480,6 +491,7 @@ export const cloudflareSettingsRouter = createTRPCRouter({
 					organizationId: ctx.session.activeOrganizationId,
 					cfZoneId: input.cfZoneId,
 					cfRecordId: input.cfRecordId,
+					credentialId: input.credentialId,
 				});
 			} catch (e) {
 				throw new TRPCError({

@@ -154,8 +154,8 @@ export const ZoneDnsRecordsPanel = ({
 	const isCloudflare = provider === "cloudflare";
 
 	const cfQuery = api.cloudflareSettings.listZoneDnsRecords.useQuery(
-		{ cfZoneId },
-		{ enabled: isCloudflare },
+		{ cfZoneId, credentialId: credentialId ?? undefined },
+		{ enabled: isCloudflare, retry: false },
 	);
 	const genericQuery = api.dnsProviders.listZoneRecords.useQuery(
 		{
@@ -171,7 +171,7 @@ export const ZoneDnsRecordsPanel = ({
 			credentialId: credentialId ?? undefined,
 			live: true,
 		},
-		{ enabled: !isCloudflare },
+		{ enabled: !isCloudflare, retry: false },
 	);
 
 	const data = isCloudflare ? cfQuery.data : genericQuery.data;
@@ -188,7 +188,10 @@ export const ZoneDnsRecordsPanel = ({
 
 	const afterMutation = async () => {
 		if (isCloudflare) {
-			await utils.cloudflareSettings.listZoneDnsRecords.invalidate({ cfZoneId });
+			await utils.cloudflareSettings.listZoneDnsRecords.invalidate({
+				cfZoneId,
+				credentialId: credentialId ?? undefined,
+			});
 		} else {
 			await utils.dnsProviders.listZoneRecords.invalidate();
 		}
@@ -324,10 +327,15 @@ export const ZoneDnsRecordsPanel = ({
 			updateMutation.mutate({
 				cfZoneId,
 				cfRecordId: editing.cfRecordId,
+				credentialId: credentialId ?? undefined,
 				record: payload,
 			});
 		} else {
-			createMutation.mutate({ cfZoneId, record: payload });
+			createMutation.mutate({
+				cfZoneId,
+				credentialId: credentialId ?? undefined,
+				record: payload,
+			});
 		}
 	};
 
@@ -652,6 +660,7 @@ export const ZoneDnsRecordsPanel = ({
 								deleteMutation.mutate({
 									cfZoneId,
 									cfRecordId: deleteTarget.cfRecordId,
+									credentialId: credentialId ?? undefined,
 								});
 							}}
 						>

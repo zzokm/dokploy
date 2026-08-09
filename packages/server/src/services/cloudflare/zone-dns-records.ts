@@ -3,7 +3,9 @@ import { db } from "@dokploy/server/db"
 import {
 	cloudflareDnsRecord,
 	cloudflareZone,
+	dnsZone,
 } from "@dokploy/server/db/schema"
+import { resolveDnsProviderSecret } from "@dokploy/server/services/dns/credentials"
 import { cloudflareFetch } from "./client"
 import {
 	type CloudflareDnsRecord,
@@ -36,7 +38,12 @@ export type ZoneDnsRecordView = {
 	lastSyncedAt: string | null
 }
 
-import { resolveDnsProviderSecret } from "@dokploy/server/services/dns/credentials"
+type OwnedCloudflareZone = {
+	cfZoneId: string
+	name: string
+	status: "active" | "pending" | "disabled"
+	credentialId: string | null
+}
 
 const getOrgToken = async (
 	organizationId: string,
@@ -53,8 +60,40 @@ const getOrgToken = async (
 	return resolved.secret
 }
 
-const assertOrgOwnsZone = async (organizationId: string, cfZoneId: string) => {
-	const [zone] = await db
+/**
+ * Prefer generic dns_zone mirrors (multi-account / post-0189), fall back to
+ * legacy cloudflare_zone rows for orgs that have not synced yet.
+ */
+const assertOrgOwnsZone = async (
+	organizationId: string,
+	cfZoneId: string,
+	credentialId?: string | null,
+): Promise<OwnedCloudflareZone> => {
+	const [mirrored] = await db
+		.select({
+			cfZoneId: dnsZone.externalId,
+			name: dnsZone.name,
+			status: dnsZone.status,
+			credentialId: dnsZone.credentialId,
+		})
+		.from(dnsZone)
+		.where(
+			and(
+				eq(dnsZone.organizationId, organizationId),
+				eq(dnsZone.provider, "cloudflare"),
+				eq(dnsZone.externalId, cfZoneId),
+				credentialId
+					? eq(dnsZone.credentialId, credentialId)
+					: undefined,
+			),
+		)
+		.limit(1)
+
+	if (mirrored) {
+		return mirrored
+	}
+
+	const [legacy] = await db
 		.select({
 			cfZoneId: cloudflareZone.cfZoneId,
 			name: cloudflareZone.name,
@@ -69,10 +108,10 @@ const assertOrgOwnsZone = async (organizationId: string, cfZoneId: string) => {
 		)
 		.limit(1)
 
-	if (!zone) {
+	if (!legacy) {
 		throw new Error("Cloudflare domain not found for this organization")
 	}
-	return zone
+	return { ...legacy, credentialId: credentialId ?? null }
 }
 
 const resolveRecordName = (name: string, zoneName: string) => {
@@ -165,13 +204,18 @@ const deleteMirror = async (organizationId: string, cfRecordId: string) => {
 export const listZoneDnsRecords = async (input: {
 	organizationId: string
 	cfZoneId: string
+	credentialId?: string | null
 }): Promise<{
 	cfZoneId: string
 	zoneName: string
 	records: ZoneDnsRecordView[]
 }> => {
-	const zone = await assertOrgOwnsZone(input.organizationId, input.cfZoneId)
-	const token = await getOrgToken(input.organizationId)
+	const zone = await assertOrgOwnsZone(
+		input.organizationId,
+		input.cfZoneId,
+		input.credentialId,
+	)
+	const token = await getOrgToken(input.organizationId, zone.credentialId)
 	const remote = await listAllCloudflareDnsRecords(token, input.cfZoneId)
 
 	const mirrors = await db
@@ -235,9 +279,14 @@ export const createZoneDnsRecord = async (input: {
 	organizationId: string
 	cfZoneId: string
 	record: ZoneDnsRecordInput
+	credentialId?: string | null
 }) => {
-	const zone = await assertOrgOwnsZone(input.organizationId, input.cfZoneId)
-	const token = await getOrgToken(input.organizationId)
+	const zone = await assertOrgOwnsZone(
+		input.organizationId,
+		input.cfZoneId,
+		input.credentialId,
+	)
+	const token = await getOrgToken(input.organizationId, zone.credentialId)
 	const parsed = zoneDnsRecordInputSchema.parse(input.record)
 	const name = resolveRecordName(parsed.name, zone.name)
 	const proxied = isProxyableDnsRecordType(parsed.type)
@@ -270,9 +319,14 @@ export const updateZoneDnsRecord = async (input: {
 	cfZoneId: string
 	cfRecordId: string
 	record: ZoneDnsRecordInput
+	credentialId?: string | null
 }) => {
-	const zone = await assertOrgOwnsZone(input.organizationId, input.cfZoneId)
-	const token = await getOrgToken(input.organizationId)
+	const zone = await assertOrgOwnsZone(
+		input.organizationId,
+		input.cfZoneId,
+		input.credentialId,
+	)
+	const token = await getOrgToken(input.organizationId, zone.credentialId)
 	const parsed = zoneDnsRecordInputSchema.parse(input.record)
 	const name = resolveRecordName(parsed.name, zone.name)
 	const proxied = isProxyableDnsRecordType(parsed.type)
@@ -316,9 +370,14 @@ export const deleteZoneDnsRecord = async (input: {
 	organizationId: string
 	cfZoneId: string
 	cfRecordId: string
+	credentialId?: string | null
 }) => {
-	await assertOrgOwnsZone(input.organizationId, input.cfZoneId)
-	const token = await getOrgToken(input.organizationId)
+	const zone = await assertOrgOwnsZone(
+		input.organizationId,
+		input.cfZoneId,
+		input.credentialId,
+	)
+	const token = await getOrgToken(input.organizationId, zone.credentialId)
 
 	await deleteCloudflareDnsRecord({
 		token,

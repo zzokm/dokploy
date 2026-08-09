@@ -17,7 +17,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies (pnpm store persists across rebuilds via BuildKit cache mount)
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --config.ignore-scripts=false
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --config.ignore-scripts=false \
+	&& pnpm rebuild bcrypt argon2 ssh2 cpu-features node-pty
 
 # Heap / CPU via build-args so the Dockerfile stays stable across rebuilds (layer cache friendly)
 ARG BUILD_HEAP_MB=4096

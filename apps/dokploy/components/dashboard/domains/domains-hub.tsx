@@ -7,6 +7,7 @@ import {
 	Globe2,
 	ListTree,
 	Loader2,
+	Plus,
 	RefreshCw,
 	ShieldCheck,
 } from "lucide-react";
@@ -35,6 +36,30 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { api } from "@/utils/api";
+
+const DomainsPageLoader = () => (
+	<div className="flex w-full flex-col gap-4">
+		<Card className="mx-auto h-full w-full max-w-5xl rounded-xl bg-sidebar p-2.5">
+			<div className="rounded-xl bg-background shadow-md">
+				<CardHeader className="space-y-1">
+					<CardTitle className="flex flex-row gap-2 text-xl">
+						<Globe2 className="size-6 shrink-0 self-center text-muted-foreground" />
+						Domains
+					</CardTitle>
+					<CardDescription>
+						Loading DNS providers and domains…
+					</CardDescription>
+				</CardHeader>
+				<CardContent className="border-t py-8">
+					<div className="flex min-h-[25vh] flex-row items-center justify-center gap-2 text-sm text-muted-foreground">
+						<span>Loading...</span>
+						<Loader2 className="size-4 animate-spin" aria-hidden />
+					</div>
+				</CardContent>
+			</div>
+		</Card>
+	</div>
+);
 
 const statusVariant = (status: "active" | "pending" | "disabled") => {
 	if (status === "active") return "default";
@@ -66,12 +91,15 @@ const ConnectedNoAppDomainsEmpty = ({ zoneCount }: { zoneCount: number }) => (
 export const DomainsHub = () => {
 	const utils = api.useUtils();
 	const [expandedZoneIds, setExpandedZoneIds] = useState<string[]>([]);
+	const [showAddProvider, setShowAddProvider] = useState(false);
 	const [domainsCache, setDomainsCache] =
 		useState<DnsDomainsCachePayload | null>(null);
 	const { data: sessionData } = api.user.session.useQuery();
 	const orgId = sessionData?.session.activeOrganizationId ?? null;
-	const { data: settings } = api.cloudflareSettings.get.useQuery();
-	const { data: vaultCreds } = api.dnsProviders.list.useQuery();
+	const { data: settings, isPending: settingsPending } =
+		api.cloudflareSettings.get.useQuery();
+	const { data: vaultCreds, isPending: vaultCredsPending } =
+		api.dnsProviders.list.useQuery();
 	const { data: inventory, isPending: inventoryPending } =
 		api.domain.listInventory.useQuery();
 	const {
@@ -105,12 +133,27 @@ export const DomainsHub = () => {
 		setDomainsCache(readDnsDomainsCache(orgId));
 	}, [orgId]);
 
-	const providersResolved = settings !== undefined && vaultCreds !== undefined;
+	const providersPending = settingsPending || vaultCredsPending;
+	const providersResolved = !providersPending;
 	const liveHasProvider =
 		!!settings?.connected || (vaultCreds?.length ?? 0) > 0;
-	const hasAnyProvider = providersResolved
-		? liveHasProvider
-		: Boolean(domainsCache?.hasProvider);
+	const hasAnyProvider = liveHasProvider;
+	const cfZonesEnabled =
+		!!settings?.connected && (vaultCreds?.length ?? 0) === 0;
+	const mirroredZonesEnabled =
+		(vaultCreds?.length ?? 0) > 0 || !!settings?.connected;
+	const zonesPending =
+		(cfZonesEnabled && cfZonesPending) ||
+		(mirroredZonesEnabled && mirroredPending);
+	const hasZonesCache = Boolean(
+		(
+			domainsCache ?? (orgId ? readDnsDomainsCache(orgId) : null)
+		)?.hasProvider,
+	);
+	/** First visit / unknown: wait for providers (+ zones when connected) before choosing onboarding vs hub. */
+	const showInitialLoader =
+		providersPending ||
+		(providersResolved && liveHasProvider && zonesPending && !hasZonesCache);
 
 	const zones = useMemo(() => {
 		const byKey = new Map<
@@ -196,11 +239,8 @@ export const DomainsHub = () => {
 			return;
 		}
 
-		const cfEnabled = !!settings?.connected;
-		const mirroredEnabled =
-			(vaultCreds?.length ?? 0) > 0 || !!settings?.connected;
-		const cfReady = !cfEnabled || !cfZonesPending;
-		const mirroredReady = !mirroredEnabled || !mirroredPending;
+		const cfReady = !cfZonesEnabled || !cfZonesPending;
+		const mirroredReady = !mirroredZonesEnabled || !mirroredPending;
 		if (!cfReady || !mirroredReady) return;
 
 		const written = writeDnsDomainsCache(orgId, {
@@ -212,8 +252,8 @@ export const DomainsHub = () => {
 		orgId,
 		providersResolved,
 		liveHasProvider,
-		settings?.connected,
-		vaultCreds?.length,
+		cfZonesEnabled,
+		mirroredZonesEnabled,
 		cfZonesPending,
 		mirroredPending,
 		zones,
@@ -280,8 +320,6 @@ export const DomainsHub = () => {
 
 	const provisionedCount = inventory?.length ?? 0;
 	const hasInventory = provisionedCount > 0;
-	const zonesPending = cfZonesPending || mirroredPending;
-	const hasZonesCache = Boolean(domainsCache?.hasProvider);
 	const showZonesLoading = zonesPending && !hasZonesCache;
 	const displayZones: CachedDnsZone[] = !zonesPending
 		? serializeHubZones(zones)
@@ -311,6 +349,10 @@ export const DomainsHub = () => {
 	const lastSyncedLabel = lastSyncedAt
 		? `Last synced ${formatDistanceToNow(new Date(lastSyncedAt), { addSuffix: true })}`
 		: "Not synced yet";
+
+	if (showInitialLoader) {
+		return <DomainsPageLoader />;
+	}
 
 	if (!hasAnyProvider) {
 		return (
@@ -342,6 +384,32 @@ export const DomainsHub = () => {
 							) : null}
 
 							<DnsProviderOnboarding />
+						</CardContent>
+					</div>
+				</Card>
+			</div>
+		);
+	}
+
+	if (showAddProvider) {
+		return (
+			<div className="flex w-full flex-col gap-4">
+				<Card className="mx-auto h-full w-full max-w-5xl rounded-xl bg-sidebar p-2.5">
+					<div className="animate-in fade-in-0 slide-in-from-bottom-2 rounded-xl bg-background shadow-md duration-300">
+						<CardHeader className="space-y-3">
+							<CardTitle className="flex flex-row gap-2 text-xl">
+								<Globe2 className="size-6 shrink-0 self-center text-muted-foreground" />
+								Domains
+							</CardTitle>
+							<CardDescription>
+								Add another DNS provider account for managed DNS automation.
+							</CardDescription>
+						</CardHeader>
+						<CardContent className="space-y-8 border-t py-8 sm:py-10">
+							<DnsProviderOnboarding
+								onCancel={() => setShowAddProvider(false)}
+								onConnected={() => setShowAddProvider(false)}
+							/>
 						</CardContent>
 					</div>
 				</Card>
@@ -383,11 +451,10 @@ export const DomainsHub = () => {
 								type="button"
 								variant="secondary"
 								className="w-full sm:w-auto"
-								isLoading={syncZones.isPending}
-								onClick={() => syncZones.mutate()}
+								onClick={() => setShowAddProvider(true)}
 							>
-								<RefreshCw className="mr-2 size-4" aria-hidden />
-								Sync DNS domains
+								<Plus className="mr-2 size-4" aria-hidden />
+								Add provider
 							</Button>
 						</div>
 					</CardHeader>
@@ -412,11 +479,23 @@ export const DomainsHub = () => {
 						</section>
 
 						<section className="space-y-3 border-t pt-6">
-							<div className="space-y-1">
-								<h3 className="text-sm font-medium">DNS Domains</h3>
-								<p className="text-xs text-muted-foreground">
-									Imported DNS domains available for managed DNS automation.
-								</p>
+							<div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+								<div className="min-w-0 space-y-1">
+									<h3 className="text-sm font-medium">DNS Domains</h3>
+									<p className="text-xs text-muted-foreground">
+										Imported DNS domains available for managed DNS automation.
+									</p>
+								</div>
+								<Button
+									type="button"
+									variant="secondary"
+									className="w-full shrink-0 sm:w-auto"
+									isLoading={syncZones.isPending}
+									onClick={() => syncZones.mutate()}
+								>
+									<RefreshCw className="mr-2 size-4" aria-hidden />
+									Sync DNS domains
+								</Button>
 							</div>
 							{showZonesLoading ? (
 								<div className="flex min-h-[12vh] w-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground sm:flex-row">

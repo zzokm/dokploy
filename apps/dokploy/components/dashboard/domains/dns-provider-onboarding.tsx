@@ -100,7 +100,17 @@ const CREDENTIAL_INSTRUCTIONS: Record<ConnectableProvider, InstructionBlock> = {
 	},
 };
 
-export const DnsProviderOnboarding = () => {
+type DnsProviderOnboardingProps = {
+	/** When set (e.g. Add provider from hub), show Cancel on the first step. */
+	onCancel?: () => void;
+	/** Called after a successful connect + cache invalidation. */
+	onConnected?: () => void;
+};
+
+export const DnsProviderOnboarding = ({
+	onCancel,
+	onConnected,
+}: DnsProviderOnboardingProps) => {
 	const utils = api.useUtils();
 	const [step, setStep] = useState<StepId>("choose");
 	const [selected, setSelected] = useState<ConnectableProvider | null>(null);
@@ -125,6 +135,7 @@ export const DnsProviderOnboarding = () => {
 		onSuccess: async () => {
 			toast.success("DNS provider connected, syncing DNS domains…");
 			await invalidateAfterConnect();
+			onConnected?.();
 		},
 		onError: (e) => toast.error(e.message),
 	});
@@ -293,7 +304,22 @@ export const DnsProviderOnboarding = () => {
 						options={PROVIDERS}
 					/>
 
-					<div className="flex justify-end">
+					<div
+						className={cn(
+							"flex flex-col-reverse gap-2 sm:flex-row",
+							onCancel ? "sm:justify-between" : "sm:justify-end",
+						)}
+					>
+						{onCancel ? (
+							<Button
+								type="button"
+								variant="secondary"
+								onClick={onCancel}
+								className="w-full sm:w-auto"
+							>
+								Cancel
+							</Button>
+						) : null}
 						<Button
 							type="button"
 							disabled={!selected}

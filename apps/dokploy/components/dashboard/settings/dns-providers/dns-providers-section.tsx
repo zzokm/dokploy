@@ -1,14 +1,16 @@
 "use client";
 
 import { KeyRound, Network } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import {
 	type ConnectableDnsProviderId,
 	DNS_PROVIDER_LABELS,
 	dnsProviderScopeHint,
+	isConnectableDnsProvider,
 } from "@/components/dashboard/domains/dns-connectable-providers";
 import { DnsProviderPicker } from "@/components/dashboard/domains/dns-provider-picker";
+import { DnsProviderLogoChrome } from "@/components/dashboard/domains/logos/dns-provider-logo-chrome";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -170,16 +172,6 @@ export const DnsProvidersSection = () => {
 		});
 	};
 
-	const grouped = useMemo(() => {
-		const map = new Map<string, VaultCred[]>();
-		for (const cred of vaultCreds ?? []) {
-			const list = map.get(cred.provider) ?? [];
-			list.push(cred);
-			map.set(cred.provider, list);
-		}
-		return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-	}, [vaultCreds]);
-
 	const secretFieldLabel =
 		provider === "gcloud"
 			? "Service account JSON"
@@ -206,8 +198,8 @@ export const DnsProvidersSection = () => {
 								DNS providers
 							</CardTitle>
 							<CardDescription className="text-xs sm:text-sm">
-								Add multiple accounts per provider. Each account syncs its own
-								DNS domains.
+								Connect a provider for managed DNS: zones, records, and
+								hostnames. Multiple accounts per provider are supported.
 							</CardDescription>
 						</div>
 						<Button
@@ -224,78 +216,83 @@ export const DnsProvidersSection = () => {
 						</Button>
 					</CardHeader>
 
-					<div className="space-y-4 border-t px-6 py-4">
+					<div className="space-y-2 border-t px-6 py-4">
 						{(vaultCreds?.length ?? 0) === 0 ? (
 							<p className="text-sm text-muted-foreground">
 								No DNS provider accounts yet. Add a provider to enable managed
 								DNS.
 							</p>
 						) : (
-							grouped.map(([providerId, creds]) => (
-								<div key={providerId} className="space-y-2">
-									<p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-										{DNS_PROVIDER_LABELS[
-											providerId as ConnectableDnsProviderId
-										] ?? providerId}
-									</p>
-									{creds.map((cred) => (
-										<div
-											key={cred.id}
-											className="flex flex-col gap-2 rounded-lg border bg-sidebar/60 p-3 sm:flex-row sm:items-center sm:justify-between"
-										>
-											<div className="min-w-0">
-												<p className="text-sm font-medium">
+							(vaultCreds ?? []).map((cred, index) => {
+								const providerId = isConnectableDnsProvider(cred.provider)
+									? cred.provider
+									: null;
+								const providerName = providerId
+									? DNS_PROVIDER_LABELS[providerId]
+									: cred.provider;
+								return (
+									<div
+										key={cred.id}
+										className="flex animate-in fade-in-0 slide-in-from-bottom-1 flex-col gap-3 rounded-lg border bg-sidebar/60 p-3 fill-mode-both duration-200 sm:flex-row sm:items-center sm:justify-between"
+										style={{
+											animationDelay: `${Math.min(index, 8) * 35}ms`,
+										}}
+									>
+										<div className="flex min-w-0 items-center gap-3">
+											{providerId ? (
+												<DnsProviderLogoChrome id={providerId} />
+											) : null}
+											<div className="min-w-0 space-y-0.5">
+												<p className="truncate text-sm font-medium leading-snug text-foreground">
+													{providerName}
+												</p>
+												<p className="truncate text-xs text-muted-foreground">
 													{cred.label}
-													<span className="font-mono text-muted-foreground">
+													<span className="font-mono">
 														{" "}
 														· ****{cred.secretLast4}
 													</span>
-												</p>
-												<p className="text-xs text-muted-foreground">
-													{DNS_PROVIDER_LABELS[
-														cred.provider as ConnectableDnsProviderId
-													] ?? cred.provider}
 													{cred.legacyCloudflare ? " · legacy" : ""}
 												</p>
 											</div>
-											<div className="flex flex-wrap items-center gap-2">
-												<Badge variant="green">Connected</Badge>
-												{capabilities?.find((c) => c.id === cred.provider)
-													?.requiresDns01WhenManaged ? (
-													<Badge variant="outline">DNS-01</Badge>
-												) : (
-													<Badge variant="outline">HTTP-01</Badge>
-												)}
-												<Button
-													type="button"
-													variant="outline"
-													size="sm"
-													onClick={() => {
-														setLabel(cred.label);
-														setSecret("");
-														setAccessKeyId("");
-														setSecretAccessKey("");
-														setRotateCred(cred);
-													}}
-												>
-													Rotate
-												</Button>
-												<Button
-													type="button"
-													variant="outline"
-													size="sm"
-													isLoading={deleteVault.isPending}
-													onClick={() =>
-														deleteVault.mutate({ credentialId: cred.id })
-													}
-												>
-													Disconnect
-												</Button>
-											</div>
 										</div>
-									))}
-								</div>
-							))
+										<div className="flex flex-wrap items-center gap-2">
+											<Badge variant="green">Connected</Badge>
+											{capabilities?.find((c) => c.id === cred.provider)
+												?.requiresDns01WhenManaged ? (
+												<Badge variant="outline">DNS-01</Badge>
+											) : (
+												<Badge variant="outline">HTTP-01</Badge>
+											)}
+											<Button
+												type="button"
+												variant="outline"
+												size="sm"
+												onClick={() => {
+													setLabel(cred.label);
+													setSecret("");
+													setAccessKeyId("");
+													setSecretAccessKey("");
+													setRotateCred(cred);
+												}}
+											>
+												Rotate
+											</Button>
+											<Button
+												type="button"
+												variant="outline"
+												size="sm"
+												isLoading={deleteVault.isPending}
+												onClick={() =>
+													deleteVault.mutate({ credentialId: cred.id })
+												}
+											>
+												Disconnect
+											</Button>
+										</div>
+									</div>
+								);
+							})
 						)}
 					</div>
 				</div>

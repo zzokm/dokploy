@@ -119,8 +119,7 @@ export const CloudflareSettingsCard = () => {
 							Cloudflare
 						</DialogTitle>
 						<DialogDescription>
-							Manage DNS records and Let&apos;s Encrypt DNS-01 for proxied
-							domains (Traefik).
+							Manage DNS records and Let&apos;s Encrypt DNS-01 (Traefik).
 						</DialogDescription>
 					</DialogHeader>
 

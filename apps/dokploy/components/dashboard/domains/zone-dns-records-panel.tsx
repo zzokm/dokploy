@@ -586,15 +586,11 @@ export const ZoneDnsRecordsPanel = ({
 								}
 							/>
 						</div>
-						{canProxy ? (
-							<p className="text-xs text-muted-foreground">
-								Cloudflare records are always proxied (provider policy).
-							</p>
-						) : (
+						{!canProxy ? (
 							<p className="text-xs text-muted-foreground">
 								{dnsProxyStateHint("not_proxyable")}
 							</p>
-						)}
+						) : null}
 					</div>
 					<DialogFooter>
 						<Button

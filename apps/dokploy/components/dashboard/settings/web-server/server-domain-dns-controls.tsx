@@ -77,8 +77,7 @@ export const ServerDomainCloudflareControls = ({
 					<div className="min-w-0 space-y-1">
 						<p className="text-sm font-medium leading-none">Auto DNS</p>
 						<p className="text-xs leading-relaxed text-muted-foreground">
-							Sync the server hostname via managed DNS (always proxied + DNS-01
-							for Cloudflare).
+							Sync the server hostname via managed DNS.
 						</p>
 					</div>
 				</div>
@@ -103,8 +102,7 @@ export const ServerDomainCloudflareControls = ({
 					<DialogHeader>
 						<DialogTitle>Manage server domain DNS</DialogTitle>
 						<DialogDescription>
-							Review DNS status, then sync the saved host. Cloudflare records
-							are always proxied (provider policy).
+							Review DNS status, then sync the saved host.
 						</DialogDescription>
 					</DialogHeader>
 					<ServerDomainCloudflareManageContent
@@ -183,11 +181,6 @@ const ServerDomainCloudflareManageContent = ({
 				</div>
 			) : preview ? (
 				<div className="animate-in fade-in-0 slide-in-from-bottom-1 space-y-4 duration-300">
-					<p className="text-xs text-muted-foreground">
-						Cloudflare Auto DNS always uses CDN proxy and Traefik DNS-01 (
-						<span className="font-mono">letsencrypt-cloudflare</span>).
-					</p>
-
 					{preview.state === "ok" && preview.currentProxied !== false ? (
 						<p>
 							The A record for{" "}
@@ -213,7 +206,7 @@ const ServerDomainCloudflareManageContent = ({
 								<span className="font-mono text-foreground">
 									{preview.host}
 								</span>{" "}
-								so traffic reaches this node (proxied).
+								so traffic reaches this node.
 							</p>
 							<div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2.5 font-mono text-xs text-foreground">
 								<span>{current}</span>

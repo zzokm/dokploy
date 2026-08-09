@@ -534,9 +534,7 @@ export const DomainsHub = () => {
 																{z.credentialLabel
 																	? ` · ${z.credentialLabel}`
 																	: ""}
-																{z.provider === "cloudflare"
-																	? " · CDN proxy on (policy)"
-																	: " · managed DNS"}
+																{" · managed DNS"}
 															</span>
 														</div>
 														<div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">

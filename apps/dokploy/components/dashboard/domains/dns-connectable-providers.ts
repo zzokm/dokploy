@@ -58,7 +58,7 @@ export const dnsProviderScopeHint = (
 ): string => {
 	switch (provider) {
 		case "cloudflare":
-			return "Zone → Zone → Read and Zone → DNS → Edit. Always proxied + DNS-01.";
+			return "Zone → Zone → Read and Zone → DNS → Edit.";
 		case "digitalocean":
 			return "Personal access token with domain scope. HTTP-01 ACME by default.";
 		case "hetzner":

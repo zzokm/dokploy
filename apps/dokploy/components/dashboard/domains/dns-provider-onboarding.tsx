@@ -3,6 +3,12 @@
 import { ArrowLeft, Check, KeyRound, Link2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import {
+	type ConnectableDnsProviderId,
+	type DnsProviderOptionId,
+	DNS_PROVIDER_LABELS,
+	DNS_PROVIDER_OPTIONS,
+} from "@/components/dashboard/domains/dns-connectable-providers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,49 +17,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { api } from "@/utils/api";
 
-type ConnectableProvider =
-	| "cloudflare"
-	| "digitalocean"
-	| "hetzner"
-	| "route53"
-	| "gcloud";
+type ConnectableProvider = ConnectableDnsProviderId;
+type ProviderOptionId = DnsProviderOptionId;
 
-type ProviderOptionId = ConnectableProvider | "ns1" | "akamai";
-
-type ProviderOption = {
-	id: ProviderOptionId;
-	name: string;
-	ready: boolean;
-	comingSoonLabel?: string;
-};
-
-const PROVIDERS: ProviderOption[] = [
-	{ id: "cloudflare", name: "Cloudflare", ready: true },
-	{ id: "digitalocean", name: "DigitalOcean", ready: true },
-	{ id: "hetzner", name: "Hetzner DNS", ready: true },
-	{ id: "route53", name: "Amazon Route 53", ready: true },
-	{ id: "gcloud", name: "Google Cloud DNS", ready: true },
-	{
-		id: "ns1",
-		name: "NS1",
-		ready: false,
-		comingSoonLabel: "Coming soon",
-	},
-	{
-		id: "akamai",
-		name: "Akamai Edge DNS",
-		ready: false,
-		comingSoonLabel: "Coming soon",
-	},
-];
-
-const PROVIDER_LABELS: Record<ConnectableProvider, string> = {
-	cloudflare: "Cloudflare",
-	digitalocean: "DigitalOcean",
-	hetzner: "Hetzner DNS",
-	route53: "Amazon Route 53",
-	gcloud: "Google Cloud DNS",
-};
+const PROVIDERS = DNS_PROVIDER_OPTIONS;
+const PROVIDER_LABELS = DNS_PROVIDER_LABELS;
 
 const STEPS = [
 	{ id: "choose", title: "Choose provider" },

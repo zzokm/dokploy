@@ -20,6 +20,7 @@ export * from "./services/docker";
 export * from "./services/domain";
 export * from "./services/domain-connection";
 export * from "./services/domain-inventory";
+export * from "./services/domain-inventory-inclusion";
 export * from "./services/domain-target";
 export * from "./services/environment";
 export * from "./services/git-provider";

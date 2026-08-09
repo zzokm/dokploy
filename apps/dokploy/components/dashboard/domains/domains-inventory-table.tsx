@@ -86,6 +86,7 @@ const kindLabel = (kind: InventoryRow["kind"]) => {
 	if (kind === "web-server") return "Web server";
 	if (kind === "compose") return "Compose";
 	if (kind === "preview") return "Preview";
+	if (kind === "dns-hostname") return "DNS hostname";
 	return "Application";
 };
 
@@ -352,7 +353,11 @@ export const DomainsInventoryTable = ({
 					});
 					const label = openProjectButtonLabel(row.original.kind);
 					const Icon =
-						row.original.kind === "web-server" ? Settings2 : FolderOpen;
+						row.original.kind === "web-server"
+							? Settings2
+							: row.original.kind === "dns-hostname"
+								? Globe2
+								: FolderOpen;
 					return (
 						<Button
 							type="button"

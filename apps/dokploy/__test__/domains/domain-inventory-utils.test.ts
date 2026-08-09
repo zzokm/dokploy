@@ -247,6 +247,10 @@ describe("openProjectButtonLabel", () => {
 		expect(openProjectButtonLabel("web-server")).toBe("Open settings");
 		expect(openProjectButtonLabel("application")).toBe("Open project");
 	});
+
+	it("labels dns-hostname as Open Domains", () => {
+		expect(openProjectButtonLabel("dns-hostname")).toBe("Open Domains");
+	});
 });
 
 describe("dnsRecordManagedByLabel", () => {

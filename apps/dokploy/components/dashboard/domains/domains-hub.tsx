@@ -251,9 +251,8 @@ export const DomainsHub = () => {
 		);
 	};
 
-	const provisionedCount =
-		inventory?.filter((row) => row.kind !== "web-server").length ?? 0;
-	const hasInventory = (inventory?.length ?? 0) > 0;
+	const provisionedCount = inventory?.length ?? 0;
+	const hasInventory = provisionedCount > 0;
 	const zonesPending = cfZonesPending || mirroredPending;
 	const hasZonesCache = Boolean(domainsCache?.hasProvider);
 	const showZonesLoading = zonesPending && !hasZonesCache;
@@ -377,7 +376,9 @@ export const DomainsHub = () => {
 							<div className="space-y-1">
 								<h3 className="text-sm font-medium">All domains</h3>
 								<p className="text-xs text-muted-foreground">
-									Every hostname provisioned in this organization.
+									Every application, compose, preview, web-server, and DNS
+									hostname in this organization. Nothing is hidden as inner or
+									backend.
 								</p>
 							</div>
 							{showConnectedThinEmpty ? (

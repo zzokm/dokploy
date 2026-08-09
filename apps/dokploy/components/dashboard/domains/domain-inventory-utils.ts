@@ -120,14 +120,15 @@ export const latestSyncIso = (timestamps: Array<string | null | undefined>) => {
  * labels until redeploy). Application domains write Traefik file config on create.
  */
 export const deriveRoutedStatus = (input: {
-	kind: "application" | "compose" | "preview" | "web-server";
+	kind: "application" | "compose" | "preview" | "web-server" | "dns-hostname";
 	createdAt: string;
 	lastSuccessfulDeployAt: string | null;
 }): "routed" | "not_routed" | "pending" => {
 	if (
 		input.kind === "web-server" ||
 		input.kind === "application" ||
-		input.kind === "preview"
+		input.kind === "preview" ||
+		input.kind === "dns-hostname"
 	) {
 		return "routed";
 	}
@@ -143,7 +144,7 @@ export const deriveRoutedStatus = (input: {
 };
 
 export const buildDomainEditHref = (input: {
-	kind: "application" | "compose" | "preview" | "web-server";
+	kind: "application" | "compose" | "preview" | "web-server" | "dns-hostname";
 	projectId: string | null;
 	environmentId: string | null;
 	applicationId: string | null;
@@ -152,6 +153,9 @@ export const buildDomainEditHref = (input: {
 }): string | null => {
 	if (input.kind === "web-server") {
 		return "/dashboard/settings/server";
+	}
+	if (input.kind === "dns-hostname") {
+		return "/dashboard/domains";
 	}
 	if (!input.projectId || !input.environmentId) {
 		return null;
@@ -176,9 +180,10 @@ export const buildHostnameExternalUrl = (input: {
 };
 
 export const openProjectButtonLabel = (
-	kind: "application" | "compose" | "preview" | "web-server",
+	kind: "application" | "compose" | "preview" | "web-server" | "dns-hostname",
 ) => {
 	if (kind === "web-server") return "Open settings";
+	if (kind === "dns-hostname") return "Open Domains";
 	return "Open project";
 };
 
@@ -255,7 +260,7 @@ export type InventoryWarning = {
  * routed / SSL badge heuristics and host-publish port detection from inventory.
  */
 export const deriveInventoryWarnings = (input: {
-	kind: "application" | "compose" | "preview" | "web-server";
+	kind: "application" | "compose" | "preview" | "web-server" | "dns-hostname";
 	createdAt: string;
 	lastSuccessfulDeployAt: string | null;
 	certificateType: "none" | "letsencrypt" | "custom";

@@ -1,10 +1,12 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, or } from "drizzle-orm";
 import { db } from "@dokploy/server/db";
 import {
 	applications,
 	cloudflareDnsRecord,
+	cloudflareZone,
 	compose,
 	deployments,
+	dnsRecord,
 	domains,
 	environments,
 	ports,
@@ -12,6 +14,12 @@ import {
 	projects,
 	server,
 } from "@dokploy/server/db/schema";
+import { listZoneDnsRecords } from "./cloudflare/zone-dns-records";
+import {
+	normalizeInventoryHost,
+	shouldIncludeDnsHostnameInInventory,
+	shouldIncludeDomainBindingInInventory,
+} from "./domain-inventory-inclusion";
 import { checkHostTlsCertificate } from "./tls-check";
 import { getWebServerSettings } from "./web-server-settings";
 
@@ -19,7 +27,8 @@ export type DomainInventoryKind =
 	| "application"
 	| "compose"
 	| "preview"
-	| "web-server";
+	| "web-server"
+	| "dns-hostname";
 
 export type DomainInventoryItem = {
 	domainId: string;
@@ -338,6 +347,7 @@ export const listDomainsInventory = async (
 	const items: DomainInventoryItem[] = [];
 
 	for (const row of appRows) {
+		if (!shouldIncludeDomainBindingInInventory()) continue;
 		items.push({
 			domainId: row.domainId,
 			host: row.host,
@@ -376,6 +386,7 @@ export const listDomainsInventory = async (
 	}
 
 	for (const row of composeRows) {
+		if (!shouldIncludeDomainBindingInInventory()) continue;
 		items.push({
 			domainId: row.domainId,
 			host: row.host,
@@ -413,6 +424,7 @@ export const listDomainsInventory = async (
 	}
 
 	for (const row of previewRows) {
+		if (!shouldIncludeDomainBindingInInventory()) continue;
 		items.push({
 			domainId: row.domainId,
 			host: row.host,
@@ -514,6 +526,236 @@ export const listDomainsInventory = async (
 			lastSuccessfulDeployAt: null,
 			tlsReachable,
 		});
+	}
+
+	// Hostnames that exist only as DNS records (e.g. host-published Postgres
+	// at devdb.example.com) must still appear in All domains.
+	const existingHosts = new Set(
+		items.map((item) => normalizeInventoryHost(item.host)).filter(Boolean),
+	);
+
+	const [cfHostnameRows, mirroredHostnameRows] = await Promise.all([
+		db
+			.select({
+				cfRecordId: cloudflareDnsRecord.cfRecordId,
+				type: cloudflareDnsRecord.type,
+				name: cloudflareDnsRecord.name,
+				proxied: cloudflareDnsRecord.proxied,
+				managedBy: cloudflareDnsRecord.managedBy,
+				lastSyncedAt: cloudflareDnsRecord.lastSyncedAt,
+				createdAt: cloudflareDnsRecord.createdAt,
+			})
+			.from(cloudflareDnsRecord)
+			.where(
+				and(
+					eq(cloudflareDnsRecord.organizationId, organizationId),
+					ne(cloudflareDnsRecord.managedBy, "mail_stack"),
+					or(
+						eq(cloudflareDnsRecord.type, "A"),
+						eq(cloudflareDnsRecord.type, "AAAA"),
+						eq(cloudflareDnsRecord.type, "CNAME"),
+						eq(cloudflareDnsRecord.type, "a"),
+						eq(cloudflareDnsRecord.type, "aaaa"),
+						eq(cloudflareDnsRecord.type, "cname"),
+					),
+				),
+			),
+		db
+			.select({
+				externalId: dnsRecord.externalId,
+				provider: dnsRecord.provider,
+				type: dnsRecord.type,
+				name: dnsRecord.name,
+				options: dnsRecord.options,
+				managedBy: dnsRecord.managedBy,
+				lastSyncedAt: dnsRecord.lastSyncedAt,
+				createdAt: dnsRecord.createdAt,
+			})
+			.from(dnsRecord)
+			.where(
+				and(
+					eq(dnsRecord.organizationId, organizationId),
+					ne(dnsRecord.managedBy, "mail_stack"),
+					or(
+						eq(dnsRecord.type, "A"),
+						eq(dnsRecord.type, "AAAA"),
+						eq(dnsRecord.type, "CNAME"),
+						eq(dnsRecord.type, "a"),
+						eq(dnsRecord.type, "aaaa"),
+						eq(dnsRecord.type, "cname"),
+					),
+				),
+			),
+	]);
+
+	for (const row of cfHostnameRows) {
+		if (
+			!shouldIncludeDnsHostnameInInventory({
+				type: row.type,
+				managedBy: row.managedBy,
+				host: row.name,
+				existingHosts,
+			})
+		) {
+			continue;
+		}
+		const host = normalizeInventoryHost(row.name);
+		existingHosts.add(host);
+		items.push({
+			domainId: `dns:cloudflare:${row.cfRecordId}`,
+			host,
+			kind: "dns-hostname",
+			serviceName:
+				row.managedBy === "app_domain"
+					? "App DNS record"
+					: "DNS only (no Traefik binding)",
+			serviceId: null,
+			applicationId: null,
+			composeId: null,
+			previewDeploymentId: null,
+			projectId: null,
+			environmentId: null,
+			appName: null,
+			serverId: null,
+			uniqueConfigKey: null,
+			certificateType: "none",
+			https: false,
+			port: null,
+			portLooksLikeHostPublish: false,
+			dnsProvider: "cloudflare",
+			cfProxied: row.proxied,
+			cfStatus: "synced",
+			cfZoneName: null,
+			cfDnsRecordId: row.cfRecordId,
+			createdAt:
+				row.createdAt instanceof Date
+					? row.createdAt.toISOString()
+					: String(row.createdAt),
+			lastSyncedAt: mapSyncIso(row.lastSyncedAt),
+			expectedServerIp: fallbackIp,
+			lastSuccessfulDeployAt: null,
+			tlsReachable: null,
+		});
+	}
+
+	for (const row of mirroredHostnameRows) {
+		if (row.provider === "cloudflare") continue;
+		if (
+			!shouldIncludeDnsHostnameInInventory({
+				type: row.type,
+				managedBy: row.managedBy,
+				host: row.name,
+				existingHosts,
+			})
+		) {
+			continue;
+		}
+		const host = normalizeInventoryHost(row.name);
+		existingHosts.add(host);
+		const proxied =
+			typeof row.options?.proxied === "boolean" ? row.options.proxied : null;
+		items.push({
+			domainId: `dns:${row.provider}:${row.externalId}`,
+			host,
+			kind: "dns-hostname",
+			serviceName:
+				row.managedBy === "app_domain"
+					? "App DNS record"
+					: "DNS only (no Traefik binding)",
+			serviceId: null,
+			applicationId: null,
+			composeId: null,
+			previewDeploymentId: null,
+			projectId: null,
+			environmentId: null,
+			appName: null,
+			serverId: null,
+			uniqueConfigKey: null,
+			certificateType: "none",
+			https: false,
+			port: null,
+			portLooksLikeHostPublish: false,
+			dnsProvider: row.provider,
+			cfProxied: proxied,
+			cfStatus: "synced",
+			cfZoneName: null,
+			cfDnsRecordId: null,
+			createdAt:
+				row.createdAt instanceof Date
+					? row.createdAt.toISOString()
+					: String(row.createdAt),
+			lastSyncedAt: mapSyncIso(row.lastSyncedAt),
+			expectedServerIp: fallbackIp,
+			lastSuccessfulDeployAt: null,
+			tlsReachable: null,
+		});
+	}
+
+	// Live Cloudflare zone hosts cover records that exist at the provider but
+	// were never mirrored (common for host-published DB endpoints).
+	try {
+		const cfZones = await db
+			.select({
+				cfZoneId: cloudflareZone.cfZoneId,
+				name: cloudflareZone.name,
+			})
+			.from(cloudflareZone)
+			.where(eq(cloudflareZone.organizationId, organizationId));
+
+		for (const zone of cfZones) {
+			const live = await listZoneDnsRecords({
+				organizationId,
+				cfZoneId: zone.cfZoneId,
+			});
+			for (const record of live.records) {
+				if (
+					!shouldIncludeDnsHostnameInInventory({
+						type: record.type,
+						managedBy: record.managedBy,
+						host: record.name,
+						existingHosts,
+					})
+				) {
+					continue;
+				}
+				const host = normalizeInventoryHost(record.name);
+				existingHosts.add(host);
+				items.push({
+					domainId: `dns:cloudflare:${record.cfRecordId}`,
+					host,
+					kind: "dns-hostname",
+					serviceName:
+						record.managedBy === "app_domain"
+							? "App DNS record"
+							: "DNS only (no Traefik binding)",
+					serviceId: null,
+					applicationId: null,
+					composeId: null,
+					previewDeploymentId: null,
+					projectId: null,
+					environmentId: null,
+					appName: null,
+					serverId: null,
+					uniqueConfigKey: null,
+					certificateType: "none",
+					https: false,
+					port: null,
+					portLooksLikeHostPublish: false,
+					dnsProvider: "cloudflare",
+					cfProxied: record.proxied,
+					cfStatus: "synced",
+					cfZoneName: zone.name,
+					cfDnsRecordId: record.cfRecordId,
+					createdAt: new Date().toISOString(),
+					lastSyncedAt: record.lastSyncedAt,
+					expectedServerIp: fallbackIp,
+					lastSuccessfulDeployAt: null,
+					tlsReachable: null,
+				});
+			}
+		}
+	} catch {
+		// Token missing or provider error: mirrors above still apply.
 	}
 
 	items.sort((a, b) => a.host.localeCompare(b.host));

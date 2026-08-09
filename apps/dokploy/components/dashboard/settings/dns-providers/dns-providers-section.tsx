@@ -3,6 +3,13 @@
 import { Cloud, KeyRound, Network } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import {
+	type ConnectableDnsProviderId,
+	CONNECTABLE_DNS_PROVIDERS,
+	DNS_PROVIDER_LABELS,
+	dnsProviderScopeHint,
+	isConnectableDnsProvider,
+} from "@/components/dashboard/domains/dns-connectable-providers";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,24 +35,13 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/utils/api";
-
-const PROVIDER_LABELS: Record<string, string> = {
-	cloudflare: "Cloudflare",
-	digitalocean: "DigitalOcean",
-	hetzner: "Hetzner DNS",
-	route53: "Amazon Route 53",
-	gcloud: "Google Cloud DNS",
-};
-
-const CONNECTABLE = ["cloudflare", "digitalocean", "hetzner"] as const;
-
-type ConnectableProvider = (typeof CONNECTABLE)[number];
 
 /**
  * Provider-agnostic DNS providers settings section.
  * Cloudflare still uses the legacy cloudflareSettings connect path for zone sync;
- * DO/Hetzner write to the sealed vault.
+ * other providers write to the sealed vault.
  */
 export const DnsProvidersSection = () => {
 	const utils = api.useUtils();
@@ -54,19 +50,30 @@ export const DnsProvidersSection = () => {
 	const { data: cfSettings } = api.cloudflareSettings.get.useQuery();
 
 	const [open, setOpen] = useState(false);
-	const [provider, setProvider] = useState<ConnectableProvider>("cloudflare");
+	const [provider, setProvider] =
+		useState<ConnectableDnsProviderId>("cloudflare");
 	const [label, setLabel] = useState("Default");
 	const [secret, setSecret] = useState("");
+	const [accessKeyId, setAccessKeyId] = useState("");
+	const [secretAccessKey, setSecretAccessKey] = useState("");
+
+	const resetForm = () => {
+		setSecret("");
+		setAccessKeyId("");
+		setSecretAccessKey("");
+		setLabel("Default");
+	};
 
 	const setCfToken = api.cloudflareSettings.setToken.useMutation({
 		onSuccess: async (result) => {
 			toast.success("Cloudflare connected");
 			if (result.validation?.warning) toast.message(result.validation.warning);
-			setSecret("");
+			resetForm();
 			setOpen(false);
 			await utils.cloudflareSettings.get.invalidate();
 			await utils.cloudflareSettings.listZones.invalidate();
 			await utils.dnsProviders.list.invalidate();
+			await utils.dnsProviders.listZones.invalidate();
 		},
 		onError: (e) => toast.error(e.message),
 	});
@@ -74,9 +81,10 @@ export const DnsProvidersSection = () => {
 	const setVault = api.dnsProviders.setCredential.useMutation({
 		onSuccess: async () => {
 			toast.success("DNS provider connected");
-			setSecret("");
+			resetForm();
 			setOpen(false);
 			await utils.dnsProviders.list.invalidate();
+			await utils.dnsProviders.listZones.invalidate();
 		},
 		onError: (e) => toast.error(e.message),
 	});
@@ -99,18 +107,67 @@ export const DnsProvidersSection = () => {
 	});
 
 	const handleConnect = () => {
+		if (provider === "cloudflare") {
+			const next = secret.trim();
+			if (!next) {
+				toast.error("API token / secret is required");
+				return;
+			}
+			setCfToken.mutate({ apiToken: next });
+			return;
+		}
+
+		if (provider === "route53") {
+			const fromJson = secret.trim();
+			let payload = fromJson;
+			if (!payload.startsWith("{")) {
+				const keyId = accessKeyId.trim();
+				const keySecret = secretAccessKey.trim();
+				if (!keyId || !keySecret) {
+					toast.error("Access key id and secret access key are required");
+					return;
+				}
+				payload = JSON.stringify({
+					accessKeyId: keyId,
+					secretAccessKey: keySecret,
+				});
+			}
+			setVault.mutate({
+				provider: "route53",
+				label: label.trim() || DNS_PROVIDER_LABELS.route53,
+				secret: payload,
+			});
+			return;
+		}
+
+		if (provider === "gcloud") {
+			const json = secret.trim();
+			if (!json) {
+				toast.error("Service account JSON is required");
+				return;
+			}
+			try {
+				JSON.parse(json);
+			} catch {
+				toast.error("Service account must be valid JSON");
+				return;
+			}
+			setVault.mutate({
+				provider: "gcloud",
+				label: label.trim() || DNS_PROVIDER_LABELS.gcloud,
+				secret: json,
+			});
+			return;
+		}
+
 		const next = secret.trim();
 		if (!next) {
 			toast.error("API token / secret is required");
 			return;
 		}
-		if (provider === "cloudflare") {
-			setCfToken.mutate({ apiToken: next });
-			return;
-		}
 		setVault.mutate({
 			provider,
-			label: label.trim() || PROVIDER_LABELS[provider] || provider,
+			label: label.trim() || DNS_PROVIDER_LABELS[provider] || provider,
 			secret: next,
 		});
 	};
@@ -120,12 +177,12 @@ export const DnsProvidersSection = () => {
 	const otherCreds =
 		vaultCreds?.filter((c) => c.provider !== "cloudflare") ?? [];
 
-	const scopeHint =
-		provider === "cloudflare"
-			? "Zone → Zone → Read and Zone → DNS → Edit. Always proxied + DNS-01."
-			: provider === "digitalocean"
-				? "Personal access token with domain scope. HTTP-01 ACME by default."
-				: "Hetzner DNS Console token (dns.hetzner.com), not the Cloud token.";
+	const secretFieldLabel =
+		provider === "gcloud"
+			? "Service account JSON"
+			: provider === "route53"
+				? "Credentials JSON (optional if using fields below)"
+				: "API token / secret";
 
 	return (
 		<>
@@ -196,7 +253,9 @@ export const DnsProvidersSection = () => {
 							>
 								<div className="min-w-0">
 									<p className="text-sm font-medium">
-										{PROVIDER_LABELS[cred.provider] ?? cred.provider}
+										{DNS_PROVIDER_LABELS[
+											cred.provider as ConnectableDnsProviderId
+										] ?? cred.provider}
 										{cred.label ? (
 											<span className="text-muted-foreground">
 												{" "}
@@ -234,7 +293,13 @@ export const DnsProvidersSection = () => {
 				</div>
 			</Card>
 
-			<Dialog open={open} onOpenChange={setOpen}>
+			<Dialog
+				open={open}
+				onOpenChange={(next) => {
+					setOpen(next);
+					if (!next) resetForm();
+				}}
+			>
 				<DialogContent className="sm:max-w-lg">
 					<DialogHeader>
 						<DialogTitle className="flex items-center gap-2">
@@ -251,15 +316,17 @@ export const DnsProvidersSection = () => {
 							<Label>Provider</Label>
 							<Select
 								value={provider}
-								onValueChange={(v) => setProvider(v as ConnectableProvider)}
+								onValueChange={(v) => {
+									if (isConnectableDnsProvider(v)) setProvider(v);
+								}}
 							>
 								<SelectTrigger>
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									{CONNECTABLE.map((id) => (
+									{CONNECTABLE_DNS_PROVIDERS.map((id) => (
 										<SelectItem key={id} value={id}>
-											{PROVIDER_LABELS[id]}
+											{DNS_PROVIDER_LABELS[id]}
 										</SelectItem>
 									))}
 								</SelectContent>
@@ -278,22 +345,71 @@ export const DnsProvidersSection = () => {
 							</div>
 						) : null}
 
+						{provider === "route53" ? (
+							<>
+								<div className="space-y-2">
+									<Label htmlFor="dns-access-key-id">Access key id</Label>
+									<Input
+										id="dns-access-key-id"
+										value={accessKeyId}
+										onChange={(e) => setAccessKeyId(e.target.value)}
+										autoComplete="off"
+										className="font-mono text-sm"
+									/>
+								</div>
+								<div className="space-y-2">
+									<Label htmlFor="dns-secret-access-key">
+										Secret access key
+									</Label>
+									<Input
+										id="dns-secret-access-key"
+										type="password"
+										value={secretAccessKey}
+										onChange={(e) => setSecretAccessKey(e.target.value)}
+										autoComplete="off"
+										className="font-mono text-sm"
+									/>
+								</div>
+							</>
+						) : null}
+
 						<div className="space-y-2">
-							<Label htmlFor="dns-secret">API token / secret</Label>
-							<Input
-								id="dns-secret"
-								value={secret}
-								onChange={(e) => setSecret(e.target.value)}
-								placeholder="Paste secret"
-								autoComplete="off"
-								className="font-mono text-sm"
-							/>
-							<p className="text-xs text-muted-foreground">{scopeHint}</p>
+							<Label htmlFor="dns-secret">{secretFieldLabel}</Label>
+							{provider === "gcloud" || provider === "route53" ? (
+								<Textarea
+									id="dns-secret"
+									value={secret}
+									onChange={(e) => setSecret(e.target.value)}
+									placeholder={
+										provider === "gcloud"
+											? '{"type":"service_account",...}'
+											: '{"accessKeyId":"...","secretAccessKey":"..."}'
+									}
+									autoComplete="off"
+									className="min-h-28 font-mono text-sm"
+								/>
+							) : (
+								<Input
+									id="dns-secret"
+									value={secret}
+									onChange={(e) => setSecret(e.target.value)}
+									placeholder="Paste secret"
+									autoComplete="off"
+									className="font-mono text-sm"
+								/>
+							)}
+							<p className="text-xs text-muted-foreground">
+								{dnsProviderScopeHint(provider)}
+							</p>
 						</div>
 					</div>
 
 					<DialogFooter>
-						<Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+						<Button
+							type="button"
+							variant="secondary"
+							onClick={() => setOpen(false)}
+						>
 							Cancel
 						</Button>
 						<Button type="button" isLoading={isPending} onClick={handleConnect}>

@@ -1,6 +1,14 @@
 -- Multi-account DNS: zone/record uniqueness includes credential_id so the same
 -- provider external_id can exist under two accounts in one organization.
+-- Guarded for DBs where 0188 has not created dns_zone yet (drizzle only applies
+-- migrations with journal `when` greater than the latest applied created_at).
 
+DO $$ BEGIN
+	IF to_regclass('public.dns_zone') IS NULL THEN
+		RAISE EXCEPTION 'dns_zone missing: apply 0188_dns_provider_generalization before 0189';
+	END IF;
+END $$;
+--> statement-breakpoint
 -- Backfill null zone credential_id from deterministic vault CF id when present
 UPDATE "dns_zone" AS z
 SET "credential_id" = 'dns-cf-' || z."organization_id"

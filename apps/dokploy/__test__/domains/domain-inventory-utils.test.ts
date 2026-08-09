@@ -396,7 +396,7 @@ describe("dnsProxyStateLabel", () => {
 	it("differentiates not proxied from not proxyable", () => {
 		expect(dnsProxyStateLabel("proxied")).toBe("Proxied");
 		expect(dnsProxyStateLabel("dns_only")).toBe("DNS only");
-		expect(dnsProxyStateLabel("not_proxyable")).toBe("N/A");
+		expect(dnsProxyStateLabel("not_proxyable")).toBe("DNS only");
 	});
 });
 

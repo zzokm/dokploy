@@ -283,8 +283,7 @@ export const deriveDnsProxyState = (input: {
 
 export const dnsProxyStateLabel = (state: DnsProxyState) => {
 	if (state === "proxied") return "Proxied";
-	if (state === "dns_only") return "DNS only";
-	return "N/A";
+	return "DNS only";
 };
 
 export const dnsProxyStateHint = (state: DnsProxyState) => {

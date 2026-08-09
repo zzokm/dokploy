@@ -118,13 +118,17 @@ const splitDnsRecordDisplayName = (
 	const z = zoneLabel.toLowerCase();
 	const nLower = n.toLowerCase();
 
+	// Apex / @ / bare zone: show the zone FQDN only (never "@.zone").
 	if (!n || n === "@" || (z && nLower === z)) {
-		return { host: "@", suffix };
+		return { host: zoneLabel || "@", suffix: "" };
 	}
 
 	if (z && nLower.endsWith(`.${z}`)) {
 		const host = n.slice(0, n.length - (z.length + 1));
-		return { host: host || "@", suffix };
+		if (!host || host === "@") {
+			return { host: zoneLabel || "@", suffix: "" };
+		}
+		return { host, suffix };
 	}
 
 	return { host: n, suffix };
@@ -447,15 +451,15 @@ export const ZoneDnsRecordsPanel = ({
 							<Table>
 								<TableHeader>
 									<TableRow>
-										<TableHead className="w-[1%] whitespace-nowrap">
+										<TableHead className="w-[1%] whitespace-nowrap text-center">
 											Type
 										</TableHead>
 										<TableHead>Name</TableHead>
 										<TableHead>Content</TableHead>
-										<TableHead className="w-[1%] whitespace-nowrap">
+										<TableHead className="w-[1%] whitespace-nowrap text-center">
 											Proxy
 										</TableHead>
-										<TableHead className="hidden w-[1%] whitespace-nowrap md:table-cell">
+										<TableHead className="hidden w-[1%] whitespace-nowrap text-center md:table-cell">
 											TTL
 										</TableHead>
 										<TableHead className="w-[1%] text-right">Actions</TableHead>
@@ -464,8 +468,8 @@ export const ZoneDnsRecordsPanel = ({
 								<TableBody>
 									{records.map((record) => (
 										<TableRow key={record.cfRecordId}>
-											<TableCell className="align-top">
-												<div className="flex flex-col gap-1">
+											<TableCell className="align-top text-center">
+												<div className="flex flex-col items-center gap-1">
 													<Badge variant="outline">{record.type}</Badge>
 													{record.type === "MX" && record.priority != null ? (
 														<span className="text-[11px] text-muted-foreground">
@@ -495,10 +499,10 @@ export const ZoneDnsRecordsPanel = ({
 													{record.content}
 												</span>
 											</TableCell>
-											<TableCell className="align-top">
+											<TableCell className="align-top text-center">
 												<ProxyStateCell record={record} />
 											</TableCell>
-											<TableCell className="hidden align-top text-sm text-muted-foreground md:table-cell">
+											<TableCell className="hidden align-top text-center text-sm text-muted-foreground md:table-cell">
 												{record.ttl === 1 ? "Auto" : `${record.ttl}s`}
 											</TableCell>
 											<TableCell className="align-top text-right">

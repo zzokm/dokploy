@@ -170,11 +170,13 @@ export const DNS_PROVIDER_CAPABILITIES: Record<DnsProviderId, DnsCapability> = {
 	ns1: {
 		supportsProxy: false,
 		forcesProxy: false,
-		supportsDns01: false,
+		supportsDns01: true,
 		requiresDns01WhenManaged: false,
 		supportsAliasApex: false,
 		auth: "api_key",
 		recordTypes: [...STANDARD_RECORDS],
+		legoProvider: "ns1",
+		traefikResolverName: "letsencrypt-ns1",
 	},
 	akamai: {
 		supportsProxy: false,

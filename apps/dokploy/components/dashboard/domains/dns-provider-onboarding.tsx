@@ -88,6 +88,16 @@ const CREDENTIAL_INSTRUCTIONS: Record<ConnectableProvider, InstructionBlock> = {
 		],
 		note: "Paste the full service account JSON. Do not commit this file to git.",
 	},
+	ns1: {
+		title: "Create an NS1 API key",
+		body: "Open the NS1 portal, then Account settings → API keys → Create key.",
+		bullets: [
+			"Grant zone view and manage permissions",
+			"Grant record create, update, and delete permissions",
+			"Copy the key once. NS1 only shows it at creation time.",
+		],
+		note: "Managed NS1 domains use HTTP-01 certificates by default. NS1 has no CDN proxy.",
+	},
 };
 
 export const DnsProviderOnboarding = () => {
@@ -202,7 +212,9 @@ export const DnsProviderOnboarding = () => {
 
 		const token = secret.trim();
 		if (!token) {
-			toast.error("API token is required");
+			toast.error(
+				selected === "ns1" ? "API key is required" : "API token is required",
+			);
 			return;
 		}
 		setVault.mutate({
@@ -217,7 +229,9 @@ export const DnsProviderOnboarding = () => {
 			? "Service account JSON"
 			: selected === "route53"
 				? "Credentials JSON (optional if using fields below)"
-				: "API token";
+				: selected === "ns1"
+					? "API key"
+					: "API token";
 
 	return (
 		<div className="mx-auto flex w-full max-w-xl flex-col gap-6 py-2">

@@ -9,6 +9,7 @@ import {
 	hetznerDnsAdapter,
 	route53DnsAdapter,
 	gcloudDnsAdapter,
+	ns1DnsAdapter,
 } from "./index";
 import { DNS_PROVIDER_CAPABILITIES } from "../types";
 import { mergeDnsProviderEnv } from "../traefik-dns-env";
@@ -20,6 +21,7 @@ describe("adapter contracts", () => {
 		hetznerDnsAdapter,
 		route53DnsAdapter,
 		gcloudDnsAdapter,
+		ns1DnsAdapter,
 	];
 
 	it("each adapter id matches capabilities map", () => {

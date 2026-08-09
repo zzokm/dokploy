@@ -1,6 +1,5 @@
 /**
  * Shared connectable DNS providers for Domains onboarding and Web Server settings.
- * Keep NS1 listed as coming soon until an adapter exists.
  */
 
 export type ConnectableDnsProviderId =
@@ -8,9 +7,10 @@ export type ConnectableDnsProviderId =
 	| "digitalocean"
 	| "hetzner"
 	| "route53"
-	| "gcloud";
+	| "gcloud"
+	| "ns1";
 
-export type DnsProviderOptionId = ConnectableDnsProviderId | "ns1";
+export type DnsProviderOptionId = ConnectableDnsProviderId;
 
 export type DnsProviderOption = {
 	id: DnsProviderOptionId;
@@ -25,6 +25,7 @@ export const DNS_PROVIDER_LABELS: Record<ConnectableDnsProviderId, string> = {
 	hetzner: "Hetzner DNS",
 	route53: "Amazon Route 53",
 	gcloud: "Google Cloud DNS",
+	ns1: "NS1",
 };
 
 /** Every provider with a real adapter (connectable). */
@@ -34,21 +35,17 @@ export const CONNECTABLE_DNS_PROVIDERS: ConnectableDnsProviderId[] = [
 	"hetzner",
 	"route53",
 	"gcloud",
+	"ns1",
 ];
 
-/** Picker list including coming-soon stubs (NS1 only). */
+/** Picker list for onboarding and settings. */
 export const DNS_PROVIDER_OPTIONS: DnsProviderOption[] = [
 	{ id: "cloudflare", name: "Cloudflare", ready: true },
 	{ id: "digitalocean", name: "DigitalOcean", ready: true },
 	{ id: "hetzner", name: "Hetzner DNS", ready: true },
 	{ id: "route53", name: "Amazon Route 53", ready: true },
 	{ id: "gcloud", name: "Google Cloud DNS", ready: true },
-	{
-		id: "ns1",
-		name: "NS1",
-		ready: false,
-		comingSoonLabel: "Coming soon",
-	},
+	{ id: "ns1", name: "NS1", ready: true },
 ];
 
 export const isConnectableDnsProvider = (
@@ -70,6 +67,8 @@ export const dnsProviderScopeHint = (
 			return "IAM access key JSON with Route 53 hosted zone read/write, or use the fields below.";
 		case "gcloud":
 			return "Paste a Google Cloud service account JSON key with Cloud DNS access.";
+		case "ns1":
+			return "NS1 API key with zones and records read/write. HTTP-01 ACME by default.";
 		default:
 			return "Paste the provider API secret. Tokens are sealed at rest.";
 	}

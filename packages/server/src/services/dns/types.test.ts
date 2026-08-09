@@ -16,7 +16,13 @@ describe("DNS_PROVIDER_CAPABILITIES", () => {
 	});
 
 	it("non-proxy providers do not force proxy", () => {
-		for (const id of ["digitalocean", "hetzner", "route53", "gcloud"] as const) {
+		for (const id of [
+			"digitalocean",
+			"hetzner",
+			"route53",
+			"gcloud",
+			"ns1",
+		] as const) {
 			expect(DNS_PROVIDER_CAPABILITIES[id].forcesProxy).toBe(false);
 			expect(DNS_PROVIDER_CAPABILITIES[id].requiresDns01WhenManaged).toBe(
 				false,

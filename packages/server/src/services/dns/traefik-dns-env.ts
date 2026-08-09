@@ -8,6 +8,7 @@ export const DNS_PROVIDER_TRAEFIK_ENV: Partial<
 	digitalocean: { envKey: "DO_AUTH_TOKEN", valueFrom: "secret" },
 	hetzner: { envKey: "HETZNER_API_KEY", valueFrom: "secret" },
 	route53: { envKey: "AWS_SECRET_ACCESS_KEY", valueFrom: "secret" },
+	ns1: { envKey: "NS1_API_KEY", valueFrom: "secret" },
 	// GCloud typically needs a mounted SA file — env-only path is incomplete.
 };
 

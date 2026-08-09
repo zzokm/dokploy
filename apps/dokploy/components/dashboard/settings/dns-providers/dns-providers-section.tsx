@@ -155,7 +155,11 @@ export const DnsProvidersSection = () => {
 
 		const next = secret.trim();
 		if (!next) {
-			toast.error("API token / secret is required");
+			toast.error(
+				provider === "ns1"
+					? "API key is required"
+					: "API token / secret is required",
+			);
 			return;
 		}
 		setVault.mutate({
@@ -175,7 +179,9 @@ export const DnsProvidersSection = () => {
 			? "Service account JSON"
 			: provider === "route53"
 				? "Credentials JSON (optional if using fields below)"
-				: "API token / secret";
+				: provider === "ns1"
+					? "API key"
+					: "API token / secret";
 
 	return (
 		<>

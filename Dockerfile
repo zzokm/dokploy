@@ -16,9 +16,12 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && apt-get update && apt-get install -y python3 make g++ git python3-pip pkg-config libsecret-1-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies (pnpm store persists across rebuilds via BuildKit cache mount)
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --config.ignore-scripts=false \
-	&& pnpm rebuild bcrypt argon2 ssh2 cpu-features node-pty
+# Install deps. Prefer --ignore-scripts=false over --config.ignore-scripts=false (pnpm 10).
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+	pnpm install --frozen-lockfile --ignore-scripts=false \
+	&& pnpm rebuild bcrypt argon2 ssh2 cpu-features node-pty \
+	&& test -n "$(find node_modules -name bcrypt_lib.node | head -n 1)" \
+	&& pnpm --filter=dokploy exec node -e "require('bcrypt')"
 
 # Heap / CPU via build-args so the Dockerfile stays stable across rebuilds (layer cache friendly)
 ARG BUILD_HEAP_MB=4096

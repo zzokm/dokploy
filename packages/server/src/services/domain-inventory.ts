@@ -20,8 +20,37 @@ import {
 	shouldIncludeDnsHostnameInInventory,
 	shouldIncludeDomainBindingInInventory,
 } from "./domain-inventory-inclusion";
+import {
+	extractComposeMatchHints,
+	type InventoryServiceCandidate,
+	matchDnsHostnameToService,
+} from "./domain-inventory-link";
 import { checkHostTlsCertificate } from "./tls-check";
 import { getWebServerSettings } from "./web-server-settings";
+
+const LIVE_CF_ZONE_TIMEOUT_MS = 6_000;
+const LIVE_CF_TOTAL_TIMEOUT_MS = 12_000;
+
+const withTimeout = async <T>(
+	promise: Promise<T>,
+	ms: number,
+	label: string,
+): Promise<T> => {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	try {
+		return await Promise.race([
+			promise,
+			new Promise<T>((_, reject) => {
+				timer = setTimeout(
+					() => reject(new Error(`${label} timed out after ${ms}ms`)),
+					ms,
+				);
+			}),
+		]);
+	} finally {
+		if (timer) clearTimeout(timer);
+	}
+};
 
 export type DomainInventoryKind =
 	| "application"
@@ -76,6 +105,23 @@ export type DomainInventoryItem = {
 	 * null = not probed; true/false = handshake presented a certificate.
 	 */
 	tlsReachable: boolean | null;
+	/**
+	 * For dns-hostname rows: best-effort compose service key to prefill when
+	 * attaching a Traefik domain. Null when unmatched or application target.
+	 */
+	suggestedServiceName: string | null;
+};
+
+export type ListDomainsInventoryOptions = {
+	/**
+	 * When true, also scan live Cloudflare zones for unmirrored hostnames.
+	 * Default false — mirrors only so first paint is not blocked on CF API.
+	 */
+	includeLive?: boolean;
+	/** Per-zone live fetch timeout (ms). */
+	liveZoneTimeoutMs?: number;
+	/** Cap for the whole live scan (ms). */
+	liveTotalTimeoutMs?: number;
 };
 
 const mapSyncIso = (value: Date | string | null | undefined) => {
@@ -196,10 +242,19 @@ const loadHostPublishedPortsMap = async (applicationIds: string[]) => {
  * Org-scoped inventory of every provisioned hostname (apps, compose, previews)
  * plus the Dokploy web-server domain when configured. Uses column-selected joins
  * only — avoids relational `with: true` / Postgres 100-arg limits.
+ *
+ * Default path reads DNS mirrors only. Pass `{ includeLive: true }` for an
+ * optional background refresh that scans live Cloudflare zones with timeouts.
  */
 export const listDomainsInventory = async (
 	organizationId: string,
+	options: ListDomainsInventoryOptions = {},
 ): Promise<DomainInventoryItem[]> => {
+	const includeLive = options.includeLive === true;
+	const liveZoneTimeoutMs =
+		options.liveZoneTimeoutMs ?? LIVE_CF_ZONE_TIMEOUT_MS;
+	const liveTotalTimeoutMs =
+		options.liveTotalTimeoutMs ?? LIVE_CF_TOTAL_TIMEOUT_MS;
 	const appRows = await db
 		.select({
 			domainId: domains.domainId,
@@ -382,6 +437,7 @@ export const listDomainsInventory = async (
 			lastSuccessfulDeployAt:
 				deployMap.get(`app:${row.applicationId}`) ?? null,
 			tlsReachable: null,
+			suggestedServiceName: null,
 		});
 	}
 
@@ -420,6 +476,7 @@ export const listDomainsInventory = async (
 			lastSuccessfulDeployAt:
 				deployMap.get(`compose:${row.composeId}`) ?? null,
 			tlsReachable: null,
+			suggestedServiceName: row.serviceNameLabel ?? null,
 		});
 	}
 
@@ -459,6 +516,7 @@ export const listDomainsInventory = async (
 			lastSuccessfulDeployAt:
 				deployMap.get(`app:${row.applicationId}`) ?? null,
 			tlsReachable: null,
+			suggestedServiceName: null,
 		});
 	}
 
@@ -525,6 +583,7 @@ export const listDomainsInventory = async (
 			expectedServerIp: fallbackIp,
 			lastSuccessfulDeployAt: null,
 			tlsReachable,
+			suggestedServiceName: null,
 		});
 	}
 
@@ -533,6 +592,49 @@ export const listDomainsInventory = async (
 	const existingHosts = new Set(
 		items.map((item) => normalizeInventoryHost(item.host)).filter(Boolean),
 	);
+
+	const pushDnsHostnameItem = (input: {
+		domainId: string;
+		host: string;
+		serviceName: string;
+		dnsProvider: DomainInventoryItem["dnsProvider"];
+		cfProxied: boolean | null;
+		cfZoneName: string | null;
+		cfDnsRecordId: string | null;
+		createdAt: string;
+		lastSyncedAt: string | null;
+	}) => {
+		items.push({
+			domainId: input.domainId,
+			host: input.host,
+			kind: "dns-hostname",
+			serviceName: input.serviceName,
+			serviceId: null,
+			applicationId: null,
+			composeId: null,
+			previewDeploymentId: null,
+			projectId: null,
+			environmentId: null,
+			appName: null,
+			serverId: null,
+			uniqueConfigKey: null,
+			certificateType: "none",
+			https: false,
+			port: null,
+			portLooksLikeHostPublish: false,
+			dnsProvider: input.dnsProvider,
+			cfProxied: input.cfProxied,
+			cfStatus: "synced",
+			cfZoneName: input.cfZoneName,
+			cfDnsRecordId: input.cfDnsRecordId,
+			createdAt: input.createdAt,
+			lastSyncedAt: input.lastSyncedAt,
+			expectedServerIp: fallbackIp,
+			lastSuccessfulDeployAt: null,
+			tlsReachable: null,
+			suggestedServiceName: null,
+		});
+	};
 
 	const [cfHostnameRows, mirroredHostnameRows] = await Promise.all([
 		db
@@ -601,30 +703,15 @@ export const listDomainsInventory = async (
 		}
 		const host = normalizeInventoryHost(row.name);
 		existingHosts.add(host);
-		items.push({
+		pushDnsHostnameItem({
 			domainId: `dns:cloudflare:${row.cfRecordId}`,
 			host,
-			kind: "dns-hostname",
 			serviceName:
 				row.managedBy === "app_domain"
 					? "App DNS record"
 					: "DNS only (no Traefik binding)",
-			serviceId: null,
-			applicationId: null,
-			composeId: null,
-			previewDeploymentId: null,
-			projectId: null,
-			environmentId: null,
-			appName: null,
-			serverId: null,
-			uniqueConfigKey: null,
-			certificateType: "none",
-			https: false,
-			port: null,
-			portLooksLikeHostPublish: false,
 			dnsProvider: "cloudflare",
 			cfProxied: row.proxied,
-			cfStatus: "synced",
 			cfZoneName: null,
 			cfDnsRecordId: row.cfRecordId,
 			createdAt:
@@ -632,9 +719,6 @@ export const listDomainsInventory = async (
 					? row.createdAt.toISOString()
 					: String(row.createdAt),
 			lastSyncedAt: mapSyncIso(row.lastSyncedAt),
-			expectedServerIp: fallbackIp,
-			lastSuccessfulDeployAt: null,
-			tlsReachable: null,
 		});
 	}
 
@@ -654,30 +738,15 @@ export const listDomainsInventory = async (
 		existingHosts.add(host);
 		const proxied =
 			typeof row.options?.proxied === "boolean" ? row.options.proxied : null;
-		items.push({
+		pushDnsHostnameItem({
 			domainId: `dns:${row.provider}:${row.externalId}`,
 			host,
-			kind: "dns-hostname",
 			serviceName:
 				row.managedBy === "app_domain"
 					? "App DNS record"
 					: "DNS only (no Traefik binding)",
-			serviceId: null,
-			applicationId: null,
-			composeId: null,
-			previewDeploymentId: null,
-			projectId: null,
-			environmentId: null,
-			appName: null,
-			serverId: null,
-			uniqueConfigKey: null,
-			certificateType: "none",
-			https: false,
-			port: null,
-			portLooksLikeHostPublish: false,
 			dnsProvider: row.provider,
 			cfProxied: proxied,
-			cfStatus: "synced",
 			cfZoneName: null,
 			cfDnsRecordId: null,
 			createdAt:
@@ -685,82 +754,192 @@ export const listDomainsInventory = async (
 					? row.createdAt.toISOString()
 					: String(row.createdAt),
 			lastSyncedAt: mapSyncIso(row.lastSyncedAt),
-			expectedServerIp: fallbackIp,
-			lastSuccessfulDeployAt: null,
-			tlsReachable: null,
 		});
 	}
 
-	// Live Cloudflare zone hosts cover records that exist at the provider but
-	// were never mirrored (common for host-published DB endpoints).
-	try {
-		const cfZones = await db
-			.select({
-				cfZoneId: cloudflareZone.cfZoneId,
-				name: cloudflareZone.name,
-			})
-			.from(cloudflareZone)
-			.where(eq(cloudflareZone.organizationId, organizationId));
+	// Optional live Cloudflare scan — never on the default first-paint path.
+	// Zones are fetched in parallel with per-zone + total timeouts; failures
+	// fall back to mirrors already loaded above (no token/secret leakage).
+	if (includeLive) {
+		try {
+			const cfZones = await db
+				.select({
+					cfZoneId: cloudflareZone.cfZoneId,
+					name: cloudflareZone.name,
+				})
+				.from(cloudflareZone)
+				.where(eq(cloudflareZone.organizationId, organizationId));
 
-		for (const zone of cfZones) {
-			const live = await listZoneDnsRecords({
-				organizationId,
-				cfZoneId: zone.cfZoneId,
-			});
-			for (const record of live.records) {
-				if (
-					!shouldIncludeDnsHostnameInInventory({
-						type: record.type,
-						managedBy: record.managedBy,
-						host: record.name,
-						existingHosts,
-					})
-				) {
-					continue;
+			const liveScan = Promise.allSettled(
+				cfZones.map(async (zone) => {
+					const live = await withTimeout(
+						listZoneDnsRecords({
+							organizationId,
+							cfZoneId: zone.cfZoneId,
+						}),
+						liveZoneTimeoutMs,
+						`cloudflare zone ${zone.name}`,
+					);
+					return { zone, records: live.records };
+				}),
+			);
+
+			const settled = await withTimeout(
+				liveScan,
+				liveTotalTimeoutMs,
+				"cloudflare live inventory scan",
+			);
+
+			for (const result of settled) {
+				if (result.status !== "fulfilled") continue;
+				const { zone, records } = result.value;
+				for (const record of records) {
+					if (
+						!shouldIncludeDnsHostnameInInventory({
+							type: record.type,
+							managedBy: record.managedBy,
+							host: record.name,
+							existingHosts,
+						})
+					) {
+						continue;
+					}
+					const host = normalizeInventoryHost(record.name);
+					existingHosts.add(host);
+					pushDnsHostnameItem({
+						domainId: `dns:cloudflare:${record.cfRecordId}`,
+						host,
+						serviceName:
+							record.managedBy === "app_domain"
+								? "App DNS record"
+								: "DNS only (no Traefik binding)",
+						dnsProvider: "cloudflare",
+						cfProxied: record.proxied,
+						cfZoneName: zone.name,
+						cfDnsRecordId: record.cfRecordId,
+						createdAt: new Date().toISOString(),
+						lastSyncedAt: record.lastSyncedAt,
+					});
 				}
-				const host = normalizeInventoryHost(record.name);
-				existingHosts.add(host);
-				items.push({
-					domainId: `dns:cloudflare:${record.cfRecordId}`,
-					host,
-					kind: "dns-hostname",
-					serviceName:
-						record.managedBy === "app_domain"
-							? "App DNS record"
-							: "DNS only (no Traefik binding)",
-					serviceId: null,
-					applicationId: null,
-					composeId: null,
-					previewDeploymentId: null,
-					projectId: null,
-					environmentId: null,
-					appName: null,
-					serverId: null,
-					uniqueConfigKey: null,
-					certificateType: "none",
-					https: false,
-					port: null,
-					portLooksLikeHostPublish: false,
-					dnsProvider: "cloudflare",
-					cfProxied: record.proxied,
-					cfStatus: "synced",
-					cfZoneName: zone.name,
-					cfDnsRecordId: record.cfRecordId,
-					createdAt: new Date().toISOString(),
-					lastSyncedAt: record.lastSyncedAt,
-					expectedServerIp: fallbackIp,
-					lastSuccessfulDeployAt: null,
-					tlsReachable: null,
-				});
 			}
+		} catch {
+			// Token missing, timeout, or provider error: mirrors above still apply.
 		}
-	} catch {
-		// Token missing or provider error: mirrors above still apply.
+	}
+
+	// Best-effort deep-link: match unbound DNS hostnames to apps/compose.
+	const linkCandidates = await loadInventoryServiceCandidates(organizationId);
+	if (linkCandidates.length) {
+		for (const item of items) {
+			if (item.kind !== "dns-hostname") continue;
+			if (item.projectId || item.applicationId || item.composeId) continue;
+			const match = matchDnsHostnameToService(item.host, linkCandidates);
+			if (!match) continue;
+			item.projectId = match.projectId;
+			item.environmentId = match.environmentId;
+			item.applicationId = match.applicationId;
+			item.composeId = match.composeId;
+			item.serviceId = match.composeId ?? match.applicationId;
+			item.appName =
+				linkCandidates.find(
+					(c) =>
+						(c.composeId && c.composeId === match.composeId) ||
+						(c.applicationId && c.applicationId === match.applicationId),
+				)?.appName ?? item.appName;
+			item.serviceName = `${match.serviceName} (DNS only)`;
+			item.suggestedServiceName = match.matchedComposeService;
+		}
 	}
 
 	items.sort((a, b) => a.host.localeCompare(b.host));
 	return items;
 };
+
+const loadInventoryServiceCandidates = async (
+	organizationId: string,
+): Promise<InventoryServiceCandidate[]> => {
+	const [appCandidates, composeCandidates] = await Promise.all([
+		db
+			.select({
+				applicationId: applications.applicationId,
+				projectId: projects.projectId,
+				environmentId: environments.environmentId,
+				displayName: applications.name,
+				appName: applications.appName,
+			})
+			.from(applications)
+			.innerJoin(
+				environments,
+				eq(applications.environmentId, environments.environmentId),
+			)
+			.innerJoin(projects, eq(environments.projectId, projects.projectId))
+			.where(eq(projects.organizationId, organizationId)),
+		db
+			.select({
+				composeId: compose.composeId,
+				projectId: projects.projectId,
+				environmentId: environments.environmentId,
+				displayName: compose.name,
+				appName: compose.appName,
+				composeFile: compose.composeFile,
+				serviceNetworks: compose.serviceNetworks,
+			})
+			.from(compose)
+			.innerJoin(
+				environments,
+				eq(compose.environmentId, environments.environmentId),
+			)
+			.innerJoin(projects, eq(environments.projectId, projects.projectId))
+			.where(eq(projects.organizationId, organizationId)),
+	]);
+
+	const candidates: InventoryServiceCandidate[] = [];
+
+	for (const row of appCandidates) {
+		candidates.push({
+			kind: "application",
+			applicationId: row.applicationId,
+			composeId: null,
+			projectId: row.projectId,
+			environmentId: row.environmentId,
+			displayName: row.displayName,
+			appName: row.appName,
+			composeServiceNames: [],
+			hostnameHints: [],
+			hostPublishingServices: [],
+		});
+	}
+
+	for (const row of composeCandidates) {
+		const hints = extractComposeMatchHints(row.composeFile ?? "");
+		const networkNames = (row.serviceNetworks ?? [])
+			.map((entry) => entry.serviceName)
+			.filter(Boolean);
+		const composeServiceNames = [
+			...new Set([...hints.serviceNames, ...networkNames]),
+		];
+		candidates.push({
+			kind: "compose",
+			applicationId: null,
+			composeId: row.composeId,
+			projectId: row.projectId,
+			environmentId: row.environmentId,
+			displayName: row.displayName,
+			appName: row.appName,
+			composeServiceNames,
+			hostnameHints: hints.hostnameHints,
+			hostPublishingServices: hints.hostPublishingServices,
+		});
+	}
+
+	return candidates;
+};
+
+/** @deprecated Use listDomainsInventory — kept name for call-site clarity. */
+export const listDomainsInventoryLive = (
+	organizationId: string,
+): Promise<DomainInventoryItem[]> =>
+	listDomainsInventory(organizationId, { includeLive: true });
 
 export type DomainDnsRecordPreview = {
 	cfRecordId: string;

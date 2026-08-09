@@ -12,6 +12,7 @@ import {
 	getWebServerSettings,
 	listDomainDnsRecords,
 	listDomainsInventory,
+	listDomainsInventoryLive,
 	manageDomain,
 	removeDomain,
 	removeDomainById,
@@ -163,7 +164,15 @@ export const domainRouter = createTRPCRouter({
 			return await findDomainsByComposeId(input.composeId);
 		}),
 	listInventory: withPermission("domain", "read").query(async ({ ctx }) => {
+		// Mirrors-first: never block first paint on live Cloudflare zone fetches.
 		return await listDomainsInventory(ctx.session.activeOrganizationId);
+	}),
+	/**
+	 * Background refresh that includes live Cloudflare zone scans (timeouts +
+	 * mirror fallback). Prefer listInventory for first paint.
+	 */
+	listInventoryLive: withPermission("domain", "read").query(async ({ ctx }) => {
+		return await listDomainsInventoryLive(ctx.session.activeOrganizationId);
 	}),
 	listDnsRecords: withPermission("domain", "read")
 		.input(z.object({ domainId: z.string().min(1) }))

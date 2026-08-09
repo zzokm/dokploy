@@ -107,6 +107,47 @@ const formFromRecord = (record: ZoneRecord): FormState => ({
 const proxyBadgeVariant = (state: DnsProxyState) =>
 	state === "proxied" ? "default" : "outline";
 
+/** Split a DNS record name into host + greyed `.zone` suffix for list display. */
+const splitDnsRecordDisplayName = (
+	name: string,
+	zone: string,
+): { host: string; suffix: string } => {
+	const zoneLabel = zone.trim().replace(/\.$/, "");
+	const suffix = zoneLabel ? `.${zoneLabel}` : "";
+	const n = name.trim().replace(/\.$/, "");
+	const z = zoneLabel.toLowerCase();
+	const nLower = n.toLowerCase();
+
+	if (!n || n === "@" || (z && nLower === z)) {
+		return { host: "@", suffix };
+	}
+
+	if (z && nLower.endsWith(`.${z}`)) {
+		const host = n.slice(0, n.length - (z.length + 1));
+		return { host: host || "@", suffix };
+	}
+
+	return { host: n, suffix };
+};
+
+const DnsRecordNameCell = ({
+	name,
+	zone,
+}: {
+	name: string;
+	zone: string;
+}) => {
+	const { host, suffix } = splitDnsRecordDisplayName(name, zone);
+	return (
+		<span className="truncate text-sm" title={name}>
+			<span>{host}</span>
+			{suffix ? (
+				<span className="text-muted-foreground">{suffix}</span>
+			) : null}
+		</span>
+	);
+};
+
 const ProxyStateCell = ({ record }: { record: ZoneRecord }) => {
 	const state = deriveDnsProxyState({
 		type: record.type,
@@ -435,12 +476,10 @@ export const ZoneDnsRecordsPanel = ({
 											</TableCell>
 											<TableCell className="max-w-[12rem] align-top">
 												<div className="flex min-w-0 flex-col gap-1">
-													<span
-														className="truncate text-sm"
-														title={record.name}
-													>
-														{record.name}
-													</span>
+													<DnsRecordNameCell
+														name={record.name}
+														zone={titleZone}
+													/>
 													{record.managedBy === "app_domain" ? (
 														<span className="text-[11px] text-muted-foreground">
 															{dnsRecordManagedByLabel(record.managedBy)}

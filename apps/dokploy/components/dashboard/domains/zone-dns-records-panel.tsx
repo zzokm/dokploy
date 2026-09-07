@@ -199,6 +199,8 @@ export const ZoneDnsRecordsPanel = ({
 	const utils = api.useUtils();
 	const isCloudflare = provider === "cloudflare";
 
+	const { data: serverIp } = api.settings.getIp.useQuery();
+
 	const cfQuery = api.cloudflareSettings.listZoneDnsRecords.useQuery(
 		{ cfZoneId, credentialId: credentialId ?? undefined },
 		{ enabled: isCloudflare, retry: false },
@@ -594,7 +596,22 @@ export const ZoneDnsRecordsPanel = ({
 							/>
 						</div>
 						<div className="grid gap-2">
-							<Label htmlFor="zone-dns-content">Content</Label>
+							<div className="flex items-center justify-between">
+								<Label htmlFor="zone-dns-content">Content</Label>
+								{serverIp && form.type === "A" ? (
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										className="h-auto px-1.5 py-0 text-xs text-muted-foreground hover:text-primary"
+										onClick={() =>
+											setForm((prev) => ({ ...prev, content: serverIp }))
+										}
+									>
+										Use Server IP ({serverIp})
+									</Button>
+								) : null}
+							</div>
 							<Input
 								id="zone-dns-content"
 								className="font-mono text-sm"

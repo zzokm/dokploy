@@ -832,6 +832,21 @@ export const ShowDomains = ({ id, type }: Props) => {
 														</TooltipProvider>
 													)}
 
+													{item.dnsProvider && item.dnsProvider !== "none" && (
+														<TooltipProvider>
+															<Tooltip>
+																<TooltipTrigger asChild>
+																	<Badge variant="outline" className="capitalize">
+																		DNS: {item.dnsProvider}
+																	</Badge>
+																</TooltipTrigger>
+																<TooltipContent>
+																	<p>Managed DNS Provider</p>
+																</TooltipContent>
+															</Tooltip>
+														</TooltipProvider>
+													)}
+
 													{item.middlewares?.map((middleware, index) => (
 														<TooltipProvider key={`${middleware}-${index}`}>
 															<Tooltip>

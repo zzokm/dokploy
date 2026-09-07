@@ -194,6 +194,13 @@ export const AddDomain = ({
 	const [hostInputMode, setHostInputMode] = useState<HostInputMode>("manual");
 	const [selectedCfZoneId, setSelectedCfZoneId] = useState("");
 	const [subdomainLabel, setSubdomainLabel] = useState("");
+	const [prefillProcessed, setPrefillProcessed] = useState(false);
+
+	useEffect(() => {
+		if (!isOpen) {
+			setPrefillProcessed(false);
+		}
+	}, [isOpen]);
 
 	const utils = api.useUtils();
 	const { data: cfSettings } = api.cloudflareSettings.get.useQuery(undefined, {
@@ -203,7 +210,7 @@ export const AddDomain = ({
 		undefined,
 		{
 			enabled:
-				isOpen && !!cfSettings?.connected && hostInputMode === "cloudflare",
+				isOpen && !!cfSettings?.connected && (hostInputMode === "cloudflare" || (!domainId && !!initialHost.trim() && !prefillProcessed)),
 		},
 	);
 	const { data, refetch } = api.domain.one.useQuery(
@@ -355,10 +362,23 @@ export const AddDomain = ({
 	}, [isOpen, domainId, hostInputMode, selectedZone, subdomainLabel, form]);
 
 	useEffect(() => {
-		if (!isOpen || domainId) {
+		if (!isOpen || domainId || prefillProcessed) {
 			return;
 		}
 		const prefill = initialHost.trim().toLowerCase().replace(/\.$/, "");
+		if (!prefill) {
+			if (initialServiceName.trim()) {
+				form.setValue("serviceName", initialServiceName.trim());
+			}
+			setPrefillProcessed(true);
+			return;
+		}
+
+		if (cfSettings?.connected && cfZones === undefined) {
+			// Wait for zones to load before deciding
+			return;
+		}
+
 		const zones =
 			cfZones?.filter((z) => z.status !== "disabled" && !z.paused) ?? [];
 		if (prefill && cfSettings?.connected && zones.length) {
@@ -385,9 +405,11 @@ export const AddDomain = ({
 				if (initialServiceName.trim()) {
 					form.setValue("serviceName", initialServiceName.trim());
 				}
+				setPrefillProcessed(true);
 				return;
 			}
 		}
+		
 		setHostInputMode("manual");
 		setSelectedCfZoneId("");
 		setSubdomainLabel("");
@@ -397,6 +419,7 @@ export const AddDomain = ({
 		if (initialServiceName.trim()) {
 			form.setValue("serviceName", initialServiceName.trim());
 		}
+		setPrefillProcessed(true);
 	}, [
 		isOpen,
 		domainId,
@@ -405,6 +428,7 @@ export const AddDomain = ({
 		cfSettings?.connected,
 		cfZones,
 		form,
+		prefillProcessed,
 	]);
 
 	useEffect(() => {

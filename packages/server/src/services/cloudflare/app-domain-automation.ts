@@ -137,12 +137,12 @@ export const ensureCloudflareAppDnsForDomain = async (input: {
 			recordType: "A",
 			recordId: domain.cfDnsRecordId ?? domain.dnsRecordId,
 		})
-	} catch {
+	} catch (e) {
 		await db
 			.update(domains)
 			.set({ cfStatus: "error", dnsStatus: "error" })
 			.where(eq(domains.domainId, input.domainId))
-		return { skipped: true as const, reason: "token_unseal_failed" as const }
+		throw e
 	}
 
 	const now = new Date()

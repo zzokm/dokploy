@@ -12,7 +12,7 @@ import {
 import { nanoid } from "nanoid";
 import { organization } from "./account";
 import {
-	dnsProvider,
+	autoDnsProviderEnum,
 	dnsProviderCredential,
 } from "./dns-provider-credential";
 
@@ -48,7 +48,7 @@ export const dnsRecord = pgTable(
 			() => dnsProviderCredential.id,
 			{ onDelete: "set null" },
 		),
-		provider: dnsProvider("provider").notNull(),
+		provider: autoDnsProviderEnum("provider").notNull(),
 		zoneExternalId: text("zone_external_id").notNull(),
 		externalId: text("external_id").notNull(),
 		type: text("type").notNull(),

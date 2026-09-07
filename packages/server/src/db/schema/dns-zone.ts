@@ -12,7 +12,7 @@ import {
 import { nanoid } from "nanoid";
 import { organization } from "./account";
 import {
-	dnsProvider,
+	autoDnsProviderEnum,
 	dnsProviderCredential,
 	type DnsProviderMeta,
 } from "./dns-provider-credential";
@@ -42,7 +42,7 @@ export const dnsZone = pgTable(
 			() => dnsProviderCredential.id,
 			{ onDelete: "set null" },
 		),
-		provider: dnsProvider("provider").notNull(),
+		provider: autoDnsProviderEnum("provider").notNull(),
 		externalId: text("external_id").notNull(),
 		name: text("name").notNull(),
 		status: dnsZoneStatus("status").notNull().default("pending"),

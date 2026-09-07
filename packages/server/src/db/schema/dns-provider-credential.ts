@@ -11,7 +11,7 @@ import {
 import { nanoid } from "nanoid";
 import { organization } from "./account";
 
-export const dnsProvider = pgEnum("dnsProvider", [
+export const autoDnsProviderEnum = pgEnum("dnsProvider", [
 	"cloudflare",
 	"digitalocean",
 	"hetzner",
@@ -37,7 +37,7 @@ export const dnsProviderCredential = pgTable(
 		organizationId: text("organization_id")
 			.notNull()
 			.references(() => organization.id, { onDelete: "cascade" }),
-		provider: dnsProvider("provider").notNull(),
+		provider: autoDnsProviderEnum("provider").notNull(),
 		label: text("label").notNull(),
 		secretEncrypted: text("secret_encrypted").notNull(),
 		secretLast4: text("secret_last4").notNull(),

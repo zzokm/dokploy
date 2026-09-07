@@ -46,6 +46,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
 	Table,
 	TableBody,
@@ -60,6 +61,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import { api } from "@/utils/api";
 import { createColumns } from "./columns";
 import { DnsHelperModal } from "./dns-helper-modal";
@@ -69,6 +71,7 @@ import {
 } from "./domain-port-guidance";
 import { AddDomain } from "./handle-domain";
 import { HandleForwardAuth } from "./handle-forward-auth";
+import { COMPOSE_REDEPLOY_TOAST, ComposeRedeployAlert } from "./redeploy-hint";
 
 export type ValidationState = {
 	isLoading: boolean;
@@ -223,11 +226,34 @@ export const ShowDomains = ({ id, type }: Props) => {
 		}
 	};
 
+	const { mutateAsync: toggleEnable, isPending: isToggling } =
+		api.domain.toggleEnable.useMutation();
+
+	const handleToggleEnable = async (domainId: string) => {
+		try {
+			const result = await toggleEnable({ domainId });
+			refetch();
+			toast.success(
+				result.enabled ? "Domain enabled" : "Domain disabled",
+				result.requiresRedeploy
+					? { description: COMPOSE_REDEPLOY_TOAST }
+					: undefined,
+			);
+		} catch {
+			toast.error("Error updating the domain");
+		}
+	};
+
 	const handleDeleteDomain = async (domainId: string) => {
 		try {
 			await deleteDomain({ domainId });
 			refetch();
-			toast.success("Domain deleted successfully");
+			toast.success(
+				"Domain deleted successfully",
+				type === "compose"
+					? { description: COMPOSE_REDEPLOY_TOAST }
+					: undefined,
+			);
 		} catch {
 			toast.error("Error deleting domain");
 		}
@@ -256,7 +282,7 @@ export const ShowDomains = ({ id, type }: Props) => {
 				try {
 					const result = await validateDomain({
 						domain: host,
-						serverIp,
+						serverId: application?.serverId ?? undefined,
 					});
 
 					if (result.isValid) {
@@ -328,7 +354,9 @@ export const ShowDomains = ({ id, type }: Props) => {
 		validationStates,
 		handleValidateDomain,
 		handleDeleteDomain,
+		handleToggleEnable,
 		isDeleting: isRemoving,
+		isToggling,
 		serverIp: application?.server?.ipAddress?.toString() || ip?.toString(),
 		canCreateDomain,
 		canDeleteDomain,
@@ -467,6 +495,11 @@ export const ShowDomains = ({ id, type }: Props) => {
 						)}
 					</div>
 				</CardHeader>
+				{type === "compose" && data && data.length > 0 && (
+					<div className="px-6 pb-4">
+						<ComposeRedeployAlert />
+					</div>
+				)}
 				<CardContent className="flex w-full flex-col gap-4">
 					{isLoadingDomains ? (
 						<div className="flex min-h-[40vh] w-full flex-row items-center justify-center gap-3">
@@ -623,7 +656,10 @@ export const ShowDomains = ({ id, type }: Props) => {
 								return (
 									<Card
 										key={item.domainId}
-										className="relative h-fit w-full animate-in fade-in-0 slide-in-from-bottom-2 overflow-hidden border bg-transparent transition-all duration-300 fill-mode-both hover:shadow-md"
+										className={cn(
+											"relative h-fit w-full animate-in fade-in-0 slide-in-from-bottom-2 overflow-hidden border bg-transparent transition-all duration-300 fill-mode-both hover:shadow-md",
+											!item.enabled && "opacity-60",
+										)}
 										style={{
 											animationDelay: `${Math.min(index, 8) * 40}ms`,
 										}}
@@ -680,18 +716,7 @@ export const ShowDomains = ({ id, type }: Props) => {
 																description="Are you sure you want to delete this domain?"
 																type="destructive"
 																onClick={async () => {
-																	await deleteDomain({
-																		domainId: item.domainId,
-																	})
-																		.then((_data) => {
-																			refetch();
-																			toast.success(
-																				"Domain deleted successfully",
-																			);
-																		})
-																		.catch(() => {
-																			toast.error("Error deleting domain");
-																		});
+																	await handleDeleteDomain(item.domainId);
 																}}
 															>
 																<Button
@@ -706,15 +731,41 @@ export const ShowDomains = ({ id, type }: Props) => {
 														)}
 													</div>
 												</div>
-												<div className="w-full break-all">
-													<Link
-														className="flex items-center gap-2 text-base font-medium hover:underline"
-														target="_blank"
-														href={`${item.https ? "https" : "http"}://${item.host}${item.path}`}
-													>
-														{item.host}
-														<ExternalLink className="size-4 min-w-4" />
-													</Link>
+												<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+													<div className="w-full break-all">
+														<Link
+															className="flex items-center gap-2 text-base font-medium hover:underline"
+															target="_blank"
+															href={`${item.https ? "https" : "http"}://${item.host}${item.path}`}
+														>
+															{item.host}
+															<ExternalLink className="size-4 min-w-4" />
+														</Link>
+													</div>
+													{canCreateDomain && (
+														<TooltipProvider>
+															<Tooltip>
+																<TooltipTrigger asChild>
+																	<div className="flex items-center shrink-0">
+																		<Switch
+																			checked={item.enabled}
+																			onCheckedChange={() =>
+																				handleToggleEnable(item.domainId)
+																			}
+																			disabled={isToggling}
+																		/>
+																	</div>
+																</TooltipTrigger>
+																<TooltipContent>
+																	<p>
+																		{item.enabled
+																			? "Domain is active. Toggle to disable routing without deleting it."
+																			: "Domain is disabled and not routed. Toggle to enable it again."}
+																	</p>
+																</TooltipContent>
+															</Tooltip>
+														</TooltipProvider>
+													)}
 												</div>
 
 												{/* Domain Details */}

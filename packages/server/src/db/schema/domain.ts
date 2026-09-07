@@ -88,6 +88,7 @@ export const domains = pgTable("domain", {
 	stripPath: boolean("stripPath").notNull().default(false),
 	middlewares: text("middlewares").array().default(sql`ARRAY[]::text[]`),
 	forwardAuthEnabled: boolean("forwardAuthEnabled").notNull().default(false),
+	enabled: boolean("enabled").notNull().default(true),
 
 	dnsProvider: domainDnsProvider("dnsProvider").notNull().default("none"),
 
@@ -216,6 +217,7 @@ export const apiUpdateDomain = createSchema
 		stripPath: true,
 		middlewares: true,
 		forwardAuthEnabled: true,
+		enabled: true,
 		dnsProvider: true,
 		dnsCredentialId: true,
 		dnsZoneId: true,

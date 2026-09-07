@@ -47,6 +47,7 @@ const baseDomain: Domain = {
 	stripPath: false,
 	middlewares: null,
 	forwardAuthEnabled: false,
+	enabled: true,
 };
 
 describe("forwardAuthMiddlewareName", () => {

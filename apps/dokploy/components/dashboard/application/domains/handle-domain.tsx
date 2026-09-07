@@ -1,4 +1,4 @@
-﻿import {
+import {
 	INVALID_HOSTNAME_MESSAGE,
 	VALID_HOSTNAME_REGEX,
 } from "@dokploy/server/utils/hostname-validation";
@@ -53,6 +53,7 @@ import {
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { api } from "@/utils/api";
+import { COMPOSE_REDEPLOY_TOAST, ComposeRedeployAlert } from "./redeploy-hint";
 
 export type CacheType = "fetch" | "cache";
 
@@ -542,7 +543,12 @@ export const AddDomain = ({
 					: {}),
 		})
 			.then(async () => {
-				toast.success(dictionary.success);
+				toast.success(
+					dictionary.success,
+					data.domainType === "compose"
+						? { description: COMPOSE_REDEPLOY_TOAST }
+						: undefined,
+				);
 
 				if (data.domainType === "application") {
 					await utils.domain.byApplicationId.invalidate({
@@ -595,14 +601,7 @@ export const AddDomain = ({
 				</DialogHeader>
 				{isError && <AlertBlock type="error">{error?.message}</AlertBlock>}
 
-				{type === "compose" && (
-					<AlertBlock type="warning" className="mb-4">
-						Compose routing lives in the compose file's Traefik labels, so this
-						domain only starts working after a deploy. Saving here writes DNS
-						and the domain record; Traefik answers <strong>404</strong> until
-						you deploy.
-					</AlertBlock>
-				)}
+				{type === "compose" && <ComposeRedeployAlert className="mb-4" />}
 
 				{!domainId && cfSettings?.connected ? (
 					<div className="mb-2 flex flex-row items-center justify-between gap-4 rounded-lg border p-3 shadow-xs">

@@ -30,7 +30,7 @@ describe("createEnvFileCommand", () => {
 			.map(([key, value]) => `${key}=${value}`)
 			.join("\n");
 
-		const command = createEnvFileCommand(dockerFilePath, serviceEnv, "", "");
+		const command = createEnvFileCommand(dockerFilePath.replace(/\\/g, "/"), serviceEnv, "", "");
 		execFileSync("bash", ["-c", command]);
 
 		const written = readFileSync(join(codePath, ".env"), "utf8");

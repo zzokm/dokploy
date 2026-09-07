@@ -42,7 +42,9 @@ const runReport = (sandboxPath: string) => {
 		.pop();
 };
 
-describe("reportDockerVersion", () => {
+const describeLinuxOnly = process.platform === "win32" ? describe.skip : describe;
+
+describeLinuxOnly("reportDockerVersion", () => {
 	it("reports the engine version when docker and its daemon are available", () => {
 		const sandbox = makeSandbox(
 			[
@@ -81,7 +83,7 @@ describe("reportDockerVersion", () => {
 	});
 });
 
-describe("defaultCommand", () => {
+describeLinuxOnly("defaultCommand", () => {
 	it.each([false, true])(
 		"prints the detected Docker version in the setup banner (isBuildServer=%s)",
 		(isBuildServer) => {

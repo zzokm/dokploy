@@ -1,4 +1,4 @@
-import { dirname, join } from "node:path";
+import { posix } from "node:path";
 import { paths } from "@dokploy/server/constants";
 import type { InferResultType } from "@dokploy/server/types/with";
 import boxen from "boxen";
@@ -21,7 +21,7 @@ export const getBuildComposeCommand = async (rawCompose: ComposeNested) => {
 	const compose = await withResolvedVaultRefs(rawCompose);
 	const { COMPOSE_PATH } = paths(!!compose.serverId);
 	const { sourceType, appName, mounts, composeType, domains } = compose;
-	const projectPath = join(COMPOSE_PATH, compose.appName, "code");
+	const projectPath = posix.join(COMPOSE_PATH, compose.appName, "code");
 	const command = createCommand(
 		compose,
 		mounts.length > 0 ? projectPath : undefined,
@@ -137,7 +137,7 @@ export const createCommand = (compose: ComposeNested, projectPath?: string) => {
 			? `--project-directory ${quote([projectPath])} `
 			: "";
 		const envFileFlag = compose.createEnvFile
-			? `--env-file ${quote([join(dirname(compose.composePath || "docker-compose.yml"), ".env")])} `
+			? `--env-file ${quote([posix.join(posix.dirname(compose.composePath || "docker-compose.yml"), ".env")])} `
 			: "";
 		command = `compose -p ${quote([appName])} ${projectDirectoryFlag}${envFileFlag}-f ${quote([path])} up -d --build --remove-orphans`;
 	} else if (composeType === "stack") {
@@ -151,10 +151,10 @@ export const getCreateEnvFileCommand = (compose: ComposeNested) => {
 	const { COMPOSE_PATH } = paths(!!compose.serverId);
 	const { env, composePath, appName } = compose;
 	const composeFilePath =
-		join(COMPOSE_PATH, appName, "code", composePath) ||
-		join(COMPOSE_PATH, appName, "code", "docker-compose.yml");
+		posix.join(COMPOSE_PATH, appName, "code", composePath) ||
+		posix.join(COMPOSE_PATH, appName, "code", "docker-compose.yml");
 
-	const envFilePath = join(dirname(composeFilePath), ".env");
+	const envFilePath = posix.join(posix.dirname(composeFilePath), ".env");
 
 	let envContent = `APP_NAME=${appName}\n`;
 	envContent += `COMPOSE_PROJECT_NAME=${appName}\n`;

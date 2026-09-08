@@ -29,6 +29,7 @@ import {
 	Network,
 	type LucideIcon,
 	Package,
+	PieChart,
 	Palette,
 	Server,
 	ShieldCheck,

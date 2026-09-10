@@ -1422,6 +1422,13 @@
       "when": 1788600069265,
       "tag": "0202_dns_multi_credential_zones",
       "breakpoints": true
+    },
+    {
+      "idx": 203,
+      "version": "7",
+      "when": 1788937143274,
+      "tag": "0203_outgoing_joystick",
+      "breakpoints": true
     }
   ]
 }

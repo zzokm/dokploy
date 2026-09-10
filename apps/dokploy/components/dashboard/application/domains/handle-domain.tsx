@@ -218,7 +218,7 @@ export const AddDomain = ({
 			domainId,
 		},
 		{
-			enabled: !!domainId,
+			enabled: isOpen && !!domainId,
 		},
 	);
 
@@ -229,7 +229,7 @@ export const AddDomain = ({
 						applicationId: id,
 					},
 					{
-						enabled: !!id,
+						enabled: isOpen && !!id,
 					},
 				)
 			: api.compose.one.useQuery(
@@ -237,7 +237,7 @@ export const AddDomain = ({
 						composeId: id,
 					},
 					{
-						enabled: !!id,
+						enabled: isOpen && !!id,
 					},
 				);
 
@@ -249,9 +249,14 @@ export const AddDomain = ({
 		api.domain.generateDomain.useMutation();
 
 	const { data: canGenerateTraefikMeDomains } =
-		api.domain.canGenerateTraefikMeDomains.useQuery({
-			serverId: application?.serverId || "",
-		});
+		api.domain.canGenerateTraefikMeDomains.useQuery(
+			{
+				serverId: application?.serverId || "",
+			},
+			{
+				enabled: isOpen,
+			},
+		);
 
 	const {
 		data: services,
@@ -266,7 +271,7 @@ export const AddDomain = ({
 		{
 			retry: false,
 			refetchOnWindowFocus: false,
-			enabled: type === "compose" && !!id,
+			enabled: isOpen && type === "compose" && !!id,
 		},
 	);
 

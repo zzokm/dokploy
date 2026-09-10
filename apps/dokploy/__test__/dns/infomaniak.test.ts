@@ -203,11 +203,11 @@ describe("infomaniakClient.upsertRecord", () => {
 		});
 	});
 
-	it("updates the existing record instead of creating a duplicate", async () => {
+	it("updates the existing record when content matches", async () => {
 		mockFetch
 			.mockResolvedValueOnce(
 				ikSuccess([
-					{ id: 7, type: "A", source: "app", target: "1.1.1.1", ttl: 300 },
+					{ id: 7, type: "A", source: "app", target: "1.2.3.4", ttl: 300 },
 				]),
 			)
 			.mockResolvedValueOnce(ikSuccess({ id: 7 }));
@@ -226,6 +226,28 @@ describe("infomaniakClient.upsertRecord", () => {
 		);
 		expect(init.method).toBe("PUT");
 		expect(lastBody().ttl).toBe(300);
+	});
+
+	it("creates a new record when content differs from existing", async () => {
+		mockFetch
+			.mockResolvedValueOnce(
+				ikSuccess([
+					{ id: 7, type: "A", source: "app", target: "1.1.1.1", ttl: 300 },
+				]),
+			)
+			.mockResolvedValueOnce(ikSuccess({ id: 50 }));
+
+		const result = await infomaniakClient.upsertRecord(config, {
+			zoneId: "example.com",
+			type: "A",
+			name: "app.example.com",
+			content: "1.2.3.4",
+		});
+
+		expect(result).toEqual({ id: "50" });
+		const [url, init] = lastCall();
+		expect(url).toBe("https://api.infomaniak.com/2/zones/example.com/records");
+		expect(init.method).toBe("POST");
 	});
 
 	it("writes a root dot as the source for an apex record and strips the trailing dot", async () => {
@@ -249,7 +271,7 @@ describe("infomaniakClient.upsertRecord", () => {
 			mockFetch
 				.mockResolvedValueOnce(
 					ikSuccess([
-						{ id: 8, type: "A", source, target: "1.1.1.1", ttl: 3600 },
+						{ id: 8, type: "A", source, target: "1.2.3.4", ttl: 3600 },
 					]),
 				)
 				.mockResolvedValueOnce(ikSuccess({ id: 8 }));
@@ -325,6 +347,58 @@ describe("infomaniakClient.upsertRecord", () => {
 		});
 
 		expect(lastBody().target).toBe('"token-value"');
+	});
+
+	it("queries the API with a source and type filter instead of the whole zone", async () => {
+		mockFetch
+			.mockResolvedValueOnce(ikSuccess([]))
+			.mockResolvedValueOnce(ikSuccess({ id: 50 }));
+
+		await infomaniakClient.upsertRecord(config, {
+			zoneId: "example.com",
+			type: "A",
+			name: "app.example.com",
+			content: "1.2.3.4",
+		});
+
+		const [url] = mockFetch.mock.calls[0] as [string];
+		expect(url).toContain("filter%5Bsource%5D=app");
+		expect(url).toContain("filter%5Btypes%5D%5B%5D=A");
+	});
+
+	it("ignores a partial filter hit rather than overwriting a different record", async () => {
+		// filter[source] matches substrings: asking for "auto" also returns
+		// "autoconfig" and "autodiscover". Trusting it would overwrite one of them.
+		mockFetch
+			.mockResolvedValueOnce(
+				ikSuccess([
+					{
+						id: 61,
+						type: "CNAME",
+						source: "autoconfig",
+						target: "a.example.net",
+						ttl: 300,
+					},
+					{
+						id: 62,
+						type: "CNAME",
+						source: "autodiscover",
+						target: "b.example.net",
+						ttl: 300,
+					},
+				]),
+			)
+			.mockResolvedValueOnce(ikSuccess({ id: 63 }));
+
+		const result = await infomaniakClient.upsertRecord(config, {
+			zoneId: "example.com",
+			type: "CNAME",
+			name: "auto.example.com",
+			content: "c.example.net",
+		});
+
+		expect(result).toEqual({ id: "63" });
+		expect(lastCall()[1].method).toBe("POST");
 	});
 });
 

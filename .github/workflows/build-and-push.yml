@@ -1,0 +1,44 @@
+name: Auto Build and Push
+
+on:
+  push:
+    branches:
+      - feat/infrastructure-panel # Automatically triggers when you push code to this branch
+  workflow_dispatch: # Also keeps the manual button just in case you ever need it
+
+env:
+  IMAGE_NAME: ghcr.io/zzokm/dokploy-custom
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest # Standard free-tier Linux runner (2 Cores, 7GB RAM, 14GB SSD space)
+    permissions:
+      contents: read
+      packages: write # Needed to securely push to GHCR using the built-in token
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create empty .env.production
+        run: touch .env.production
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:latest
+          # Use GitHub Actions cache to make subsequent builds blazing fast
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

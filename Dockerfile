@@ -24,8 +24,8 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 	&& pnpm --filter=dokploy exec node -e "require('bcrypt')"
 
 # Heap / CPU via build-args so the Dockerfile stays stable across rebuilds (layer cache friendly)
-ARG BUILD_HEAP_MB=4096
-ARG NEXT_CPU_COUNT=4
+ARG BUILD_HEAP_MB=16384
+ARG NEXT_CPU_COUNT=6
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_OPTIONS=--max-old-space-size=${BUILD_HEAP_MB}
@@ -97,3 +97,4 @@ ENTRYPOINT ["/usr/bin/tini", "--"]
 
 # Ejecutar node directamente: pnpm como wrapper queda residente (~100MB RSS)
   CMD ["sh", "-c", "node -r dotenv/config dist/wait-for-postgres.mjs && node -r dotenv/config dist/migration.mjs && exec node -r dotenv/config dist/server.mjs"]
+

@@ -97,17 +97,28 @@ export const DomainsHub = () => {
 	const { data: sessionData } = api.user.session.useQuery();
 	const orgId = sessionData?.session.activeOrganizationId ?? null;
 	const { data: settings, isPending: settingsPending } =
-		api.cloudflareSettings.get.useQuery();
+		api.cloudflareSettings.get.useQuery(undefined, {
+			refetchOnWindowFocus: false,
+			staleTime: 5 * 60 * 1000,
+		});
 	const { data: vaultCreds, isPending: vaultCredsPending } =
-		api.dnsProviders.list.useQuery();
+		api.dnsProviders.list.useQuery(undefined, {
+			refetchOnWindowFocus: false,
+			staleTime: 5 * 60 * 1000,
+		});
 	const { data: inventory, isPending: inventoryPending } =
-		api.domain.listInventory.useQuery();
+		api.domain.listInventory.useQuery(undefined, {
+			refetchOnWindowFocus: false,
+			staleTime: 5 * 60 * 1000,
+		});
 	const {
 		data: cfZones,
 		refetch: refetchCfZones,
 		isPending: cfZonesPending,
 	} = api.cloudflareSettings.listZones.useQuery(undefined, {
 		enabled: !!settings?.connected && (vaultCreds?.length ?? 0) === 0,
+		refetchOnWindowFocus: false,
+		staleTime: 5 * 60 * 1000,
 	});
 	const {
 		data: mirroredZones,
@@ -115,6 +126,8 @@ export const DomainsHub = () => {
 		isPending: mirroredPending,
 	} = api.dnsProviders.listZones.useQuery(undefined, {
 		enabled: (vaultCreds?.length ?? 0) > 0 || !!settings?.connected,
+		refetchOnWindowFocus: false,
+		staleTime: 5 * 60 * 1000,
 	});
 
 	const credentialLabelById = useMemo(() => {

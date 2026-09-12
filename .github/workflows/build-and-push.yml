@@ -44,9 +44,4 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Trigger Deployment on Yehia (Secondary VPS)
-        run: |
-          curl -s -X POST "http://${{ secrets.IP1 }}:9000/hooks/deploy-dokploy" -H "X-Webhook-Token: ${{ secrets.WEBHOOK_SECRET }}"
-
-      - name: Trigger Deployment on Youssef (Primary VPS)
-        run: |
-          curl -s -X POST "http://${{ secrets.IP2 }}:9000/hooks/deploy-dokploy" -H "X-Webhook-Token: ${{ secrets.WEBHOOK_SECRET }}"
+        run: curl -s -X POST "http://${{ secrets.IP1 }}:9001/hooks/deploy-dokploy" -H "X-Webhook-Token: ${{ secrets.WEBHOOK_SECRET }}"

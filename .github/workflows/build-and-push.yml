@@ -10,6 +10,10 @@ on:
       - '.gitignore'
   workflow_dispatch: # Also keeps the manual button just in case you ever need it
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   IMAGE_NAME: ghcr.io/zzokm/dokploy-custom
 

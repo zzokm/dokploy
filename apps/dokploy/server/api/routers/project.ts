@@ -39,6 +39,7 @@ import {
 	checkProjectAccess,
 	findMemberByUserId,
 } from "@dokploy/server/services/permission";
+import { deleteCloudflareAppDnsForDomain } from "@dokploy/server/services/cloudflare/app-domain-automation";
 import { serviceColumns } from "@dokploy/server/services/project";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
@@ -815,6 +816,42 @@ export const projectRouter = createTRPCRouter({
 					});
 				}
 				await checkProjectAccess(ctx, "delete", input.projectId);
+
+				const envs = await db.query.environments.findMany({
+					where: eq(environments.projectId, input.projectId),
+					with: {
+						applications: {
+							with: { domains: true },
+						},
+						compose: {
+							with: { domains: true },
+						},
+					},
+				});
+
+				for (const env of envs) {
+					for (const app of env.applications) {
+						for (const d of app.domains) {
+							if (d.dnsProvider === "cloudflare") {
+								await deleteCloudflareAppDnsForDomain({
+									organizationId: ctx.session.activeOrganizationId,
+									domainId: d.domainId,
+								}).catch(() => {});
+							}
+						}
+					}
+					for (const comp of env.compose) {
+						for (const d of comp.domains) {
+							if (d.dnsProvider === "cloudflare") {
+								await deleteCloudflareAppDnsForDomain({
+									organizationId: ctx.session.activeOrganizationId,
+									domainId: d.domainId,
+								}).catch(() => {});
+							}
+						}
+					}
+				}
+
 				const deletedProject = await deleteProject(input.projectId);
 
 				await audit(ctx, {

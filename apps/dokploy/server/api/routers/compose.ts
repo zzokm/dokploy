@@ -43,6 +43,7 @@ import {
 	checkServicePermissionAndAccess,
 	findMemberByUserId,
 } from "@dokploy/server/services/permission";
+import { deleteCloudflareAppDnsForDomain } from "@dokploy/server/services/cloudflare/app-domain-automation";
 import {
 	type CompleteTemplate,
 	fetchTemplateFiles,
@@ -247,6 +248,16 @@ export const composeRouter = createTRPCRouter({
 					code: "UNAUTHORIZED",
 					message: "You are not authorized to delete this compose",
 				});
+			}
+
+			const domainsList = await findDomainsByComposeId(input.composeId);
+			for (const d of domainsList) {
+				if (d.dnsProvider === "cloudflare") {
+					await deleteCloudflareAppDnsForDomain({
+						organizationId: ctx.session.activeOrganizationId,
+						domainId: d.domainId,
+					}).catch(() => {});
+				}
 			}
 
 			const result = await db

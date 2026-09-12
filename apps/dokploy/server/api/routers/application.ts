@@ -4,6 +4,7 @@ import {
 	createDomain,
 	deleteAllMiddlewares,
 	findApplicationById,
+	findDomainsByApplicationId,
 	findEnvironmentById,
 	findPreviewDeploymentsByApplicationId,
 	findProjectById,
@@ -41,6 +42,7 @@ import {
 	checkServicePermissionAndAccess,
 	findMemberByUserId,
 } from "@dokploy/server/services/permission";
+import { deleteCloudflareAppDnsForDomain } from "@dokploy/server/services/cloudflare/app-domain-automation";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
@@ -357,6 +359,16 @@ export const applicationRouter = createTRPCRouter({
 				try {
 					await removePreviewDeployment(previewDeployment.previewDeploymentId);
 				} catch (_) {}
+			}
+
+			const domainsList = await findDomainsByApplicationId(input.applicationId);
+			for (const d of domainsList) {
+				if (d.dnsProvider === "cloudflare") {
+					await deleteCloudflareAppDnsForDomain({
+						organizationId: ctx.session.activeOrganizationId,
+						domainId: d.domainId,
+					}).catch(() => {});
+				}
 			}
 
 			const result = await db

@@ -437,10 +437,10 @@ export const createDomainLabels = (
 	const labels = [
 		`traefik.http.routers.${routerName}.rule=Host(\`${host}\`)${path && path !== "/" ? ` && PathPrefix(\`${path}\`)` : ""}`,
 		`traefik.http.routers.${routerName}.entrypoints=${entrypoint}`,
-		`traefik.http.routers.${routerName}.service=${routerName}`,
 	];
 
 	if (!autoPort) {
+		labels.push(`traefik.http.routers.${routerName}.service=${routerName}`);
 		labels.push(`traefik.http.services.${routerName}.loadbalancer.server.port=${port}`);
 	}
 

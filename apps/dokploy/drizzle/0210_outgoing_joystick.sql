@@ -1,12 +1,57 @@
-CREATE TYPE "public"."cloudflareDnsRecordManagedBy" AS ENUM('app_domain', 'mail_stack', 'manual');--> statement-breakpoint
-CREATE TYPE "public"."cloudflareZoneStatus" AS ENUM('active', 'pending', 'disabled');--> statement-breakpoint
-CREATE TYPE "public"."dnsProvider" AS ENUM('cloudflare', 'digitalocean', 'hetzner', 'route53', 'gcloud', 'ns1', 'akamai');--> statement-breakpoint
-CREATE TYPE "public"."dnsRecordManagedBy" AS ENUM('app_domain', 'mail_stack', 'manual');--> statement-breakpoint
-CREATE TYPE "public"."dnsZoneStatus" AS ENUM('active', 'pending', 'disabled');--> statement-breakpoint
-CREATE TYPE "public"."domainConnectionCheckStatus" AS ENUM('pending', 'checking', 'active', 'dns_mismatch', 'dns_no_answer', 'server_unreachable', 'error');--> statement-breakpoint
-CREATE TYPE "public"."cloudflareDomainStatus" AS ENUM('synced', 'pending', 'error');--> statement-breakpoint
-CREATE TYPE "public"."dnsDomainStatus" AS ENUM('synced', 'pending', 'error');--> statement-breakpoint
-CREATE TYPE "public"."domainDnsProvider" AS ENUM('none', 'cloudflare', 'digitalocean', 'hetzner', 'route53', 'gcloud', 'ns1', 'akamai');--> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "public"."cloudflareDnsRecordManagedBy" AS ENUM('app_domain', 'mail_stack', 'manual');
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "public"."cloudflareZoneStatus" AS ENUM('active', 'pending', 'disabled');
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "public"."dnsProvider" AS ENUM('cloudflare', 'digitalocean', 'hetzner', 'route53', 'gcloud', 'ns1', 'akamai');
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "public"."dnsRecordManagedBy" AS ENUM('app_domain', 'mail_stack', 'manual');
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "public"."dnsZoneStatus" AS ENUM('active', 'pending', 'disabled');
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "public"."domainConnectionCheckStatus" AS ENUM('pending', 'checking', 'active', 'dns_mismatch', 'dns_no_answer', 'server_unreachable', 'error');
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "public"."cloudflareDomainStatus" AS ENUM('synced', 'pending', 'error');
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "public"."dnsDomainStatus" AS ENUM('synced', 'pending', 'error');
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "public"."domainDnsProvider" AS ENUM('none', 'cloudflare', 'digitalocean', 'hetzner', 'route53', 'gcloud', 'ns1', 'akamai');
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
 CREATE TABLE "cloudflare_dns_record" (
 	"id" text PRIMARY KEY NOT NULL,
 	"organization_id" text NOT NULL,

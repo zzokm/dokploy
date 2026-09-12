@@ -440,6 +440,30 @@ export const AddDomain = ({
 	]);
 
 	useEffect(() => {
+		if (!domainId || !data || data.dnsProvider === "none" || !cfZones) return;
+		
+		const zones = cfZones.filter((z) => z.status !== "disabled" && !z.paused);
+		const zone = zones
+			.slice()
+			.sort((a, b) => b.name.length - a.name.length)
+			.find(
+				(z) =>
+					data.host === z.name.toLowerCase() ||
+					data.host.endsWith(`.${z.name.toLowerCase()}`),
+			);
+			
+		if (zone && !selectedCfZoneId) {
+			const zoneName = zone.name.toLowerCase();
+			const label =
+				data.host === zoneName
+					? "@"
+					: data.host.slice(0, -(zoneName.length + 1));
+			setSelectedCfZoneId(zone.cfZoneId);
+			setSubdomainLabel(label);
+		}
+	}, [domainId, data, cfZones, selectedCfZoneId]);
+
+	useEffect(() => {
 		if (!domainId && hostInputMode === "cloudflare") {
 			form.setValue("https", true);
 			form.setValue("certificateType", "letsencrypt");
@@ -549,7 +573,7 @@ export const AddDomain = ({
 		const traefikMeHost = finalHost.includes("traefik.me");
 		// Managed DNS is opt-in via the toggle (hostInputMode), not merely CF connected.
 		const wantsManagedDns =
-			!domainId && !traefikMeHost && hostInputMode === "cloudflare";
+			!traefikMeHost && hostInputMode === "cloudflare";
 
 		await mutateAsync({
 			domainId,
@@ -840,8 +864,7 @@ export const AddDomain = ({
 										</div>
 									)}
 								</div>
-								{!domainId &&
-								hostInputMode === "cloudflare" &&
+								{hostInputMode === "cloudflare" &&
 								cfSettings?.connected ? (
 									<div className="animate-in fade-in-0 slide-in-from-bottom-1 space-y-4 duration-300">
 										<div className="space-y-2">

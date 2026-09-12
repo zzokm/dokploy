@@ -94,6 +94,7 @@ export const domain = z
 			.min(1, { message: "Port must be at least 1" })
 			.max(65535, { message: "Port must be 65535 or below" })
 			.optional(),
+		autoPort: z.boolean().default(true),
 		useCustomEntrypoint: z.boolean(),
 		customEntrypoint: z.string().optional(),
 		https: z.boolean().optional(),
@@ -288,6 +289,7 @@ export const AddDomain = ({
 			internalPath: undefined,
 			stripPath: false,
 			port: undefined,
+			autoPort: true,
 			useCustomEntrypoint: false,
 			customEntrypoint: undefined,
 			https: false,
@@ -307,6 +309,7 @@ export const AddDomain = ({
 	const host = form.watch("host");
 	const serviceName = form.watch("serviceName");
 	const portValue = form.watch("port");
+	const autoPort = form.watch("autoPort");
 	const isTraefikMeDomain = host?.includes("sslip.io") || false;
 
 	const { data: composePortHints } = api.compose.loadServicePorts.useQuery(
@@ -461,6 +464,7 @@ export const AddDomain = ({
 				internalPath: data?.internalPath || undefined,
 				stripPath: data?.stripPath || false,
 				port: data?.port || undefined,
+				autoPort: data?.autoPort ?? true,
 				useCustomEntrypoint: !!data.customEntrypoint,
 				customEntrypoint: data.customEntrypoint || undefined,
 				certificateType: data?.certificateType || undefined,
@@ -484,6 +488,7 @@ export const AddDomain = ({
 				internalPath: undefined,
 				stripPath: false,
 				port: undefined,
+				autoPort: true,
 				useCustomEntrypoint: false,
 				customEntrypoint: undefined,
 				https: false,
@@ -1030,35 +1035,64 @@ export const AddDomain = ({
 
 								<FormField
 									control={form.control}
-									name="port"
-									render={({ field }) => {
-										return (
-											<FormItem>
-												<FormLabel>Container Port</FormLabel>
+									name="autoPort"
+									render={({ field }) => (
+										<FormItem className="flex flex-row items-center justify-between p-3 border rounded-lg shadow-xs">
+											<div className="space-y-0.5">
+												<FormLabel>Automatic Port</FormLabel>
 												<FormDescription>
-													The port your app listens on <em>inside</em> the
-													container â€” not a host publish port. Traefik reaches
-													the container over <code>dokploy-network</code>.
+													Allow Traefik to automatically detect the port your application listens on.
 												</FormDescription>
-												<FormControl>
-													<NumberInput placeholder={"3000"} {...field} />
-												</FormControl>
-												{portGuidance ? (
-													<AlertBlock
-														type={
-															portGuidance.kind === "host_publish"
-																? "warning"
-																: "info"
-														}
-													>
-														{portGuidance.message}
-													</AlertBlock>
-												) : null}
 												<FormMessage />
-											</FormItem>
-										);
-									}}
+											</div>
+											<FormControl>
+												<Switch
+													checked={field.value}
+													onCheckedChange={(checked) => {
+														field.onChange(checked);
+														if (checked) {
+															form.setValue("port", undefined);
+														}
+													}}
+												/>
+											</FormControl>
+										</FormItem>
+									)}
 								/>
+
+								{!autoPort && (
+									<FormField
+										control={form.control}
+										name="port"
+										render={({ field }) => {
+											return (
+												<FormItem>
+													<FormLabel>Container Port</FormLabel>
+													<FormDescription>
+														The port your app listens on <em>inside</em> the
+														container â€” not a host publish port. Traefik reaches
+														the container over <code>dokploy-network</code>.
+													</FormDescription>
+													<FormControl>
+														<NumberInput placeholder={"3000"} {...field} />
+													</FormControl>
+													{portGuidance ? (
+														<AlertBlock
+															type={
+																portGuidance.kind === "host_publish"
+																	? "warning"
+																	: "info"
+															}
+														>
+															{portGuidance.message}
+														</AlertBlock>
+													) : null}
+													<FormMessage />
+												</FormItem>
+											);
+										}}
+									/>
+								)}
 
 								{!hideHttpsForCloudflareAutomation ? (
 									<>

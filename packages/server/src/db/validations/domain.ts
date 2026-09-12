@@ -24,6 +24,7 @@ export const domain = z
 			.min(1, { message: "Port must be at least 1" })
 			.max(65535, { message: "Port must be 65535 or below" })
 			.optional(),
+		autoPort: z.boolean().default(true),
 		https: z.boolean().optional(),
 		certificateType: z.enum(["letsencrypt", "none", "custom"]).optional(),
 		customCertResolver: z.string(),
@@ -90,6 +91,7 @@ export const domainCompose = z
 			.min(1, { message: "Port must be at least 1" })
 			.max(65535, { message: "Port must be 65535 or below" })
 			.optional(),
+		autoPort: z.boolean().default(true),
 		https: z.boolean().optional(),
 		certificateType: z.enum(["letsencrypt", "none", "custom"]).optional(),
 		customCertResolver: z.string(),

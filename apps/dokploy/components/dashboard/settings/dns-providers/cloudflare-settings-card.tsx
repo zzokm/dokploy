@@ -126,10 +126,7 @@ export const CloudflareSettingsCard = () => {
 					<div className="animate-in fade-in-0 slide-in-from-bottom-1 space-y-6 duration-300">
 						<div className="space-y-2 text-sm text-muted-foreground">
 							<p className="font-medium text-foreground">
-								Create a Cloudflare API token
-							</p>
-							<p className="leading-relaxed">
-								Open Cloudflare → My Profile → API Tokens → Create Token. Prefer a custom token with least privilege.
+								Required API token permissions
 							</p>
 							<ul className="list-disc space-y-1 pl-5">
 								<li>
@@ -139,17 +136,13 @@ export const CloudflareSettingsCard = () => {
 								</li>
 								<li>
 									<span className="font-medium text-foreground">
-										Zone → DNS → Edit
-									</span>
-								</li>
-								<li>
-									<span className="font-medium text-foreground">
-										Account → Account Settings → Read (needed to list zones in some accounts)
+										Zone → DNS → Edit (includes read/write)
 									</span>
 								</li>
 							</ul>
-							<p className="leading-relaxed text-xs pt-1">
-								Managed Cloudflare DNS always uses CDN proxy and DNS-01 certificates.
+							<p className="leading-relaxed">
+								Use a scoped API token (not the global API key). The token is
+								stored encrypted and is not shown again after saving.
 							</p>
 						</div>
 

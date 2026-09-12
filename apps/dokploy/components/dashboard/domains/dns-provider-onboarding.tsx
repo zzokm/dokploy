@@ -39,14 +39,13 @@ type InstructionBlock = {
 
 const CREDENTIAL_INSTRUCTIONS: Record<ConnectableProvider, InstructionBlock> = {
 	cloudflare: {
-		title: "Create a Cloudflare API token",
-		body: "Open Cloudflare → My Profile → API Tokens → Create Token. Prefer a custom token with least privilege.",
+		title: "Required API token permissions",
+		body: "",
 		bullets: [
 			"Zone → Zone → Read",
-			"Zone → DNS → Edit",
-			"Account → Account Settings → Read (needed to list zones in some accounts)",
+			"Zone → DNS → Edit (includes read/write)",
 		],
-		note: "Managed Cloudflare DNS always uses CDN proxy and DNS-01 certificates.",
+		note: "Use a scoped API token (not the global API key). The token is stored encrypted and is not shown again after saving.",
 	},
 	digitalocean: {
 		title: "Create a DigitalOcean API token",

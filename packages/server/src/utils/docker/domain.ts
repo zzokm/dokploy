@@ -423,6 +423,7 @@ export const createDomainLabels = (
 	const {
 		host,
 		port,
+		autoPort,
 		customEntrypoint,
 		https,
 		uniqueConfigKey,
@@ -436,9 +437,12 @@ export const createDomainLabels = (
 	const labels = [
 		`traefik.http.routers.${routerName}.rule=Host(\`${host}\`)${path && path !== "/" ? ` && PathPrefix(\`${path}\`)` : ""}`,
 		`traefik.http.routers.${routerName}.entrypoints=${entrypoint}`,
-		`traefik.http.services.${routerName}.loadbalancer.server.port=${port}`,
 		`traefik.http.routers.${routerName}.service=${routerName}`,
 	];
+
+	if (!autoPort) {
+		labels.push(`traefik.http.services.${routerName}.loadbalancer.server.port=${port}`);
+	}
 
 	// Collect middlewares for this router
 	const middlewares: string[] = [];

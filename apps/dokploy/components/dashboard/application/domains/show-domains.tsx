@@ -180,6 +180,8 @@ export const ShowDomains = ({ id, type }: Props) => {
 				},
 				{
 					enabled: !!id,
+					refetchOnWindowFocus: false,
+					staleTime: 5 * 60 * 1000,
 				},
 			)
 		: api.domain.byComposeId.useQuery(
@@ -188,6 +190,8 @@ export const ShowDomains = ({ id, type }: Props) => {
 				},
 				{
 					enabled: !!id,
+					refetchOnWindowFocus: false,
+					staleTime: 5 * 60 * 1000,
 				},
 			);
 

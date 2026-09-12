@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - feat/infrastructure-panel # Automatically triggers when you push code to this branch
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
   workflow_dispatch: # Also keeps the manual button just in case you ever need it
 
 env:
@@ -39,9 +43,9 @@ jobs:
           context: .
           push: true
           tags: ${{ env.IMAGE_NAME }}:latest
-          # Use GitHub Actions cache to make subsequent builds blazing fast
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Use GHCR registry caching for maximum efficiency across runs
+          cache-from: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache,mode=max
 
       - name: Trigger Deployment on Yehia (Secondary VPS)
         run: curl -s -X POST "http://${{ secrets.IP1 }}:9001/hooks/deploy-dokploy" -H "X-Webhook-Token: ${{ secrets.WEBHOOK_SECRET }}"

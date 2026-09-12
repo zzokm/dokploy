@@ -353,8 +353,16 @@ export const HandleDnsProvider = ({ dnsProviderId }: Props) => {
 											<Input type="password" {...field} />
 										</FormControl>
 										<FormDescription>
-											Create a token scoped to Zone → DNS → Edit for the zones
-											you want Dokploy to manage. Avoid the Global API Key.
+											<div className="flex flex-col gap-1 mt-2 text-xs">
+												<span className="font-semibold text-foreground">Create a Cloudflare API token</span>
+												<span>Open Cloudflare → My Profile → API Tokens → Create Token. Prefer a custom token with least privilege.</span>
+												<ul className="list-disc list-inside ml-2">
+													<li>Zone → Zone → Read</li>
+													<li>Zone → DNS → Edit</li>
+													<li>Account → Account Settings → Read (needed to list zones in some accounts)</li>
+												</ul>
+												<span className="mt-1">Managed Cloudflare DNS always uses CDN proxy and DNS-01 certificates.</span>
+											</div>
 										</FormDescription>
 										<FormMessage />
 									</FormItem>

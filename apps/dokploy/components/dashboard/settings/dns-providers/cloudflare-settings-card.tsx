@@ -228,6 +228,16 @@ export const CloudflareSettingsCard = () => {
 										autoComplete="off"
 										className="font-mono text-sm"
 									/>
+									<div className="flex flex-col gap-1 mt-2 text-xs text-muted-foreground">
+										<span className="font-semibold text-foreground">Create a Cloudflare API token</span>
+										<span>Open Cloudflare → My Profile → API Tokens → Create Token. Prefer a custom token with least privilege.</span>
+										<ul className="list-disc list-inside ml-2">
+											<li>Zone → Zone → Read</li>
+											<li>Zone → DNS → Edit</li>
+											<li>Account → Account Settings → Read (needed to list zones in some accounts)</li>
+										</ul>
+										<span className="mt-1">Managed Cloudflare DNS always uses CDN proxy and DNS-01 certificates.</span>
+									</div>
 								</div>
 								<Button
 									type="button"

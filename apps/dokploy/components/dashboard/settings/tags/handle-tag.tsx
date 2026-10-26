@@ -83,7 +83,7 @@ export const HandleTag = ({ tagId, onCreated }: HandleTagProps) => {
 			name: "",
 			color: "#3b82f6",
 		},
-		resolver: zodResolver(TagSchema),
+		resolver: zodResolver(TagSchema as any) as any,
 	});
 
 	useEffect(() => {

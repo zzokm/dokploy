@@ -106,7 +106,7 @@ export const domainRouter = createTRPCRouter({
 								? "No Cloudflare domain matches this hostname. Sync domains on Domains or choose a domain when adding the domain."
 								: cfResult.reason === "no_cloudflare_settings"
 									? "Connect Cloudflare under Domains first."
-									: cfResult.reason === "token_unseal_failed"
+									: (cfResult.reason as string) === "token_unseal_failed"
 										? "Cloudflare token could not be decrypted. Check DOKPLOY_ENCRYPTION_KEY."
 										: "Could not configure Cloudflare DNS for this domain.";
 						throw new TRPCError({
@@ -378,6 +378,7 @@ export const domainRouter = createTRPCRouter({
 			z.object({
 				domain: z.string(),
 				serverId: z.string().optional(),
+				serverIp: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ input, ctx }) => {
@@ -391,7 +392,9 @@ export const domainRouter = createTRPCRouter({
 				}
 			}
 
-			const expectedIps = await getServerIpCandidates(input.serverId);
+			const expectedIps = input.serverIp
+				? [input.serverIp]
+				: await getServerIpCandidates(input.serverId);
 			return validateDomain(input.domain, expectedIps);
 		}),
 

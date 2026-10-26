@@ -282,7 +282,7 @@ export const AddDomain = ({
 			: [];
 
 	const form = useForm<Domain>({
-		resolver: zodResolver(domain),
+		resolver: zodResolver(domain) as any,
 		defaultValues: {
 			host: initialHost.trim(),
 			path: undefined,

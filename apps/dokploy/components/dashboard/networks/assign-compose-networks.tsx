@@ -76,7 +76,7 @@ export const AssignComposeNetworks = ({ composeId }: Props) => {
 	const utils = api.useUtils();
 
 	const form = useForm<FormValues>({
-		resolver: zodResolver(formSchema),
+		resolver: zodResolver(formSchema as any) as any,
 		defaultValues: { services: [] },
 	});
 	const { fields } = useFieldArray({

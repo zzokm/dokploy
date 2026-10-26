@@ -30,6 +30,21 @@ import {
 	updateDomainById,
 	findApplicationById,
 } from "@dokploy/server"
+import {
+	getWebServerSettings,
+	updateWebServerSettings,
+} from "@dokploy/server/services/web-server-settings"
+import {
+	updateServerTraefik,
+	updateLetsEncryptEmail,
+} from "@dokploy/server/utils/traefik/web-server"
+import {
+	previewServerDomainDns,
+	applyServerDomainDns,
+	resolveServerDomainCertResolver,
+} from "@dokploy/server/services/cloudflare/server-domain-dns"
+import { ensureCloudflareAppDnsForDomain } from "@dokploy/server/services/cloudflare/app-domain-automation"
+import { ensureTraefikCloudflareDnsToken } from "@dokploy/server/services/cloudflare/traefik-dns-token"
 import { manageDomain } from "@dokploy/server/utils/traefik/domain"
 import { checkServicePermissionAndAccess } from "@dokploy/server/services/permission"
 import { listZoneDnsRecords as listZoneDnsRecordsService } from "@dokploy/server/services/cloudflare/zone-dns-records"
@@ -201,28 +216,106 @@ export const operatorRouter = createTRPCRouter({
 			z.object({
 				applicationId: z.string().optional(),
 				composeId: z.string().optional(),
+				includeServerDomain: z.boolean().optional(),
 			}),
 		)
 		.query(async ({ ctx, input }) => {
+			const list: Array<Record<string, unknown>> = []
 			if (input.applicationId) {
 				await checkServicePermissionAndAccess(ctx, input.applicationId, {
 					domain: ["read"],
 				})
-				return await findDomainsByApplicationId(input.applicationId)
-			}
-			if (input.composeId) {
+				const appDomains = await findDomainsByApplicationId(input.applicationId)
+				list.push(...appDomains)
+			} else if (input.composeId) {
 				await checkServicePermissionAndAccess(ctx, input.composeId, {
 					domain: ["read"],
 				})
-				return await findDomainsByComposeId(input.composeId)
+				const composeDomains = await findDomainsByComposeId(input.composeId)
+				list.push(...composeDomains)
+			}
+			if (input.includeServerDomain) {
+				const settings = await getWebServerSettings()
+				if (settings?.host) {
+					list.unshift({
+						domainId: "server",
+						domainType: "server",
+						host: settings.host,
+						https: settings.https,
+						port: 3000,
+						path: "/",
+						certificateType: settings.certificateType,
+						serverIp: settings.serverIp,
+					})
+				}
+			}
+			if (!input.applicationId && !input.composeId && !input.includeServerDomain) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: JSON.stringify({
+						ok: false,
+						code: OperatorErrorCode.validation_error,
+						message: "applicationId, composeId, or includeServerDomain is required",
+					}),
+				})
+			}
+			return list
+		}),
+
+	getDomain: protectedProcedure
+		.input(
+			z.object({
+				domainId: z.string().optional(),
+				host: z.string().optional(),
+			}),
+		)
+		.query(async ({ input }) => {
+			if (input.domainId === "server") {
+				const settings = await getWebServerSettings()
+				return {
+					domainId: "server",
+					domainType: "server" as const,
+					host: settings?.host ?? null,
+					serverIp: settings?.serverIp ?? null,
+					https: settings?.https ?? false,
+					certificateType: settings?.certificateType ?? "none",
+					letsEncryptEmail: settings?.letsEncryptEmail ?? null,
+				}
+			}
+			if (input.domainId) {
+				return await findDomainById(input.domainId)
+			}
+			if (input.host) {
+				const norm = input.host.trim().toLowerCase()
+				const settings = await getWebServerSettings()
+				if (settings?.host?.trim().toLowerCase() === norm) {
+					return {
+						domainId: "server",
+						domainType: "server" as const,
+						host: settings.host,
+						serverIp: settings.serverIp ?? null,
+						https: settings.https,
+						certificateType: settings.certificateType,
+						letsEncryptEmail: settings.letsEncryptEmail ?? null,
+					}
+				}
+				const { db } = await import("@dokploy/server/db")
+				const { domains } = await import("@dokploy/server/db/schema")
+				const { eq } = await import("drizzle-orm")
+				const [row] = await db
+					.select()
+					.from(domains)
+					.where(eq(domains.host, norm))
+					.limit(1)
+				if (row) return row
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: `Domain with host ${input.host} not found`,
+				})
 			}
 			throw new TRPCError({
 				code: "BAD_REQUEST",
-				message: JSON.stringify({
-					ok: false,
-					code: OperatorErrorCode.validation_error,
-					message: "applicationId or composeId is required",
-				}),
+				message: "domainId or host is required",
 			})
 		}),
 
@@ -230,22 +323,82 @@ export const operatorRouter = createTRPCRouter({
 		.input(
 			z.object({
 				host: z.string().min(1),
-				domainType: z.enum(["application", "compose"]),
+				domainType: z.enum(["application", "compose", "server"]),
 				applicationId: z.string().optional(),
 				composeId: z.string().optional(),
 				serviceName: z.string().optional(),
 				port: z.number().int().optional(),
+				autoPort: z.boolean().optional(),
 				path: z.string().optional(),
+				internalPath: z.string().optional(),
+				stripPath: z.boolean().optional(),
 				https: z.boolean().optional(),
 				certificateType: z.enum(["letsencrypt", "none", "custom"]).optional(),
-				/**
-				 * Prefer operator.domainProvision — this primitive does NOT wait for DNS.
-				 */
-				dnsProvider: z.enum(["none", "cloudflare"]).optional(),
+				customCertResolver: z.string().optional().nullable(),
+				useCustomEntrypoint: z.boolean().optional(),
+				customEntrypoint: z.string().optional().nullable(),
+				middlewares: z.array(z.string()).optional(),
+				dnsProvider: z
+					.enum([
+						"none",
+						"cloudflare",
+						"digitalocean",
+						"hetzner",
+						"route53",
+						"gcloud",
+					])
+					.optional(),
 				cfProxied: z.boolean().optional(),
+				letsEncryptEmail: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
+			if (input.domainType === "server") {
+				const settings = await updateWebServerSettings({
+					host: input.host.trim().toLowerCase(),
+					letsEncryptEmail: input.letsEncryptEmail,
+					certificateType:
+						input.certificateType ?? (input.https ? "letsencrypt" : "none"),
+					https: input.https ?? true,
+				})
+
+				if (!settings) {
+					throw new TRPCError({
+						code: "NOT_FOUND",
+						message: "Web server settings not found",
+					})
+				}
+
+				const certResolver = await resolveServerDomainCertResolver(
+					ctx.session.activeOrganizationId,
+					input.host,
+				)
+
+				updateServerTraefik(
+					settings,
+					input.host,
+					certResolver ? { certResolver } : undefined,
+				)
+				if (input.letsEncryptEmail) {
+					updateLetsEncryptEmail(input.letsEncryptEmail)
+				}
+
+				await audit(ctx, {
+					action: "update",
+					resourceType: "settings",
+					resourceName: "assign-domain-server",
+				})
+
+				return {
+					domainId: "server",
+					host: input.host,
+					domainType: "server",
+					https: settings.https,
+					certificateType: settings.certificateType,
+					serverIp: settings.serverIp,
+				}
+			}
+
 			const serviceId = input.applicationId || input.composeId
 			if (serviceId) {
 				await checkServicePermissionAndAccess(ctx, serviceId, {
@@ -259,9 +412,15 @@ export const operatorRouter = createTRPCRouter({
 				composeId: input.composeId,
 				serviceName: input.serviceName,
 				port: input.port ?? 3000,
+				autoPort: input.autoPort ?? false,
 				path: input.path ?? "/",
+				internalPath: input.internalPath ?? "/",
+				stripPath: input.stripPath ?? false,
 				https: input.https ?? true,
 				certificateType: input.certificateType ?? "letsencrypt",
+				customCertResolver: input.customCertResolver ?? null,
+				customEntrypoint: input.customEntrypoint ?? null,
+				middlewares: input.middlewares ?? [],
 				dnsProvider: input.dnsProvider ?? "none",
 				cfProxied: input.cfProxied ?? false,
 			})
@@ -271,6 +430,22 @@ export const operatorRouter = createTRPCRouter({
 				resourceId: domain.domainId,
 				resourceName: domain.host,
 			})
+
+			if (input.dnsProvider === "cloudflare") {
+				try {
+					await ensureCloudflareAppDnsForDomain({
+						organizationId: ctx.session.activeOrganizationId,
+						domainId: domain.domainId,
+						proxiedDefault: input.cfProxied ?? true,
+					})
+					void ensureTraefikCloudflareDnsToken({
+						organizationId: ctx.session.activeOrganizationId,
+					}).catch(() => {})
+				} catch (err) {
+					console.error("Cloudflare domain auto DNS error:", err)
+				}
+			}
+
 			return domain
 		}),
 
@@ -280,14 +455,39 @@ export const operatorRouter = createTRPCRouter({
 				domainId: z.string().min(1),
 				host: z.string().optional(),
 				port: z.number().int().optional(),
+				autoPort: z.boolean().optional(),
 				path: z.string().optional(),
+				internalPath: z.string().optional(),
+				stripPath: z.boolean().optional(),
 				https: z.boolean().optional(),
 				certificateType: z.enum(["letsencrypt", "none", "custom"]).optional(),
+				customCertResolver: z.string().optional().nullable(),
+				useCustomEntrypoint: z.boolean().optional(),
+				customEntrypoint: z.string().optional().nullable(),
+				middlewares: z.array(z.string()).optional(),
 				serviceName: z.string().optional(),
 				cfProxied: z.boolean().optional(),
+				enabled: z.boolean().optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
+			if (input.domainId === "server") {
+				const settings = await updateWebServerSettings({
+					host: input.host?.trim().toLowerCase(),
+					https: input.https,
+					certificateType: input.certificateType,
+				})
+				const certResolver = await resolveServerDomainCertResolver(
+					ctx.session.activeOrganizationId,
+					settings?.host,
+				)
+				updateServerTraefik(
+					settings ?? null,
+					settings?.host ?? null,
+					certResolver ? { certResolver } : undefined,
+				)
+				return { domainId: "server", ...settings }
+			}
 			const current = await findDomainById(input.domainId)
 			const serviceId = current.applicationId || current.composeId
 			if (serviceId) {
@@ -295,7 +495,7 @@ export const operatorRouter = createTRPCRouter({
 					domain: ["create"],
 				})
 			}
-			const { domainId, ...patch } = input
+			const { domainId, useCustomEntrypoint: _unused, ...patch } = input
 			await updateDomainById(domainId, patch)
 			const domain = await findDomainById(domainId)
 			if (domain.applicationId) {
@@ -308,6 +508,20 @@ export const operatorRouter = createTRPCRouter({
 	deleteDomain: protectedProcedure
 		.input(z.object({ domainId: z.string().min(1) }))
 		.mutation(async ({ ctx, input }) => {
+			if (input.domainId === "server") {
+				const settings = await updateWebServerSettings({
+					host: null,
+					https: false,
+					certificateType: "none",
+				})
+				updateServerTraefik(settings ?? null, null)
+				await audit(ctx, {
+					action: "delete",
+					resourceType: "settings",
+					resourceName: "server-domain",
+				})
+				return { domainId: "server", deleted: true }
+			}
 			const domain = await findDomainById(input.domainId)
 			const serviceId = domain.applicationId || domain.composeId
 			if (serviceId) {
@@ -332,6 +546,7 @@ export const operatorRouter = createTRPCRouter({
 	/**
 	 * Safe high-level workflow: DNS upsert → wait resolve → attach domain →
 	 * observe cert → HTTPS health. Prevents NXDOMAIN / ENOTFOUND ACME races.
+	 * Supports application, compose, and server (main dokploy instance).
 	 */
 	domainProvision: protectedProcedure
 		.input(
@@ -340,7 +555,7 @@ export const operatorRouter = createTRPCRouter({
 					.string()
 					.min(1)
 					.describe("FQDN to provision, e.g. hydro.example.com"),
-				domainType: z.enum(["application", "compose"]),
+				domainType: z.enum(["application", "compose", "server"]),
 				applicationId: z.string().optional(),
 				composeId: z.string().optional(),
 				serviceName: z
@@ -348,8 +563,17 @@ export const operatorRouter = createTRPCRouter({
 					.optional()
 					.describe("Required for compose — Traefik service name"),
 				port: z.number().int().optional(),
+				autoPort: z.boolean().optional(),
 				path: z.string().optional(),
+				internalPath: z.string().optional(),
+				stripPath: z.boolean().optional(),
 				https: z.boolean().optional().default(true),
+				certificateType: z.enum(["letsencrypt", "none", "custom"]).optional(),
+				customCertResolver: z.string().optional().nullable(),
+				useCustomEntrypoint: z.boolean().optional(),
+				customEntrypoint: z.string().optional().nullable(),
+				middlewares: z.array(z.string()).optional(),
+				letsEncryptEmail: z.string().optional(),
 				proxied: z
 					.boolean()
 					.optional()
@@ -363,11 +587,13 @@ export const operatorRouter = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
-			const serviceId = input.applicationId || input.composeId
-			if (serviceId) {
-				await checkServicePermissionAndAccess(ctx, serviceId, {
-					domain: ["create"],
-				})
+			if (input.domainType !== "server") {
+				const serviceId = input.applicationId || input.composeId
+				if (serviceId) {
+					await checkServicePermissionAndAccess(ctx, serviceId, {
+						domain: ["create"],
+					})
+				}
 			}
 			try {
 				const result = await provisionDomain({
@@ -383,6 +609,205 @@ export const operatorRouter = createTRPCRouter({
 					})
 				}
 				return result
+			} catch (e) {
+				throwOperator(e)
+			}
+		}),
+
+	serverDomainStatus: protectedProcedure.query(async ({ ctx }) => {
+		try {
+			const settings = await getWebServerSettings()
+			const dnsPreview = await previewServerDomainDns(
+				ctx.session.activeOrganizationId,
+			)
+			return {
+				ok: true as const,
+				host: settings?.host ?? null,
+				serverIp: settings?.serverIp ?? null,
+				https: settings?.https ?? false,
+				certificateType: settings?.certificateType ?? "none",
+				letsEncryptEmail: settings?.letsEncryptEmail ?? null,
+				dns: dnsPreview,
+			}
+		} catch (e) {
+			throwOperator(e)
+		}
+	}),
+
+	assignServerDomain: protectedProcedure
+		.input(
+			z.object({
+				host: z.string().min(1),
+				https: z.boolean().optional().default(true),
+				certificateType: z
+					.enum(["letsencrypt", "none", "custom"])
+					.optional()
+					.default("letsencrypt"),
+				letsEncryptEmail: z.string().optional(),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			try {
+				const settings = await updateWebServerSettings({
+					host: input.host.trim().toLowerCase(),
+					letsEncryptEmail: input.letsEncryptEmail,
+					certificateType: input.certificateType,
+					https: input.https,
+				})
+
+				if (!settings) {
+					throw new TRPCError({
+						code: "NOT_FOUND",
+						message: "Web server settings not found",
+					})
+				}
+
+				const certResolver = await resolveServerDomainCertResolver(
+					ctx.session.activeOrganizationId,
+					input.host,
+				)
+
+				updateServerTraefik(
+					settings,
+					input.host,
+					certResolver ? { certResolver } : undefined,
+				)
+				if (input.letsEncryptEmail) {
+					updateLetsEncryptEmail(input.letsEncryptEmail)
+				}
+
+				await audit(ctx, {
+					action: "update",
+					resourceType: "settings",
+					resourceName: "assign-domain-server",
+				})
+
+				return settings
+			} catch (e) {
+				throwOperator(e)
+			}
+		}),
+
+	previewServerDomainDns: protectedProcedure
+		.input(
+			z.object({ proxied: z.boolean().optional().default(true) }).optional(),
+		)
+		.query(async ({ ctx, input }) => {
+			try {
+				return await previewServerDomainDns(
+					ctx.session.activeOrganizationId,
+					input?.proxied ?? true,
+				)
+			} catch (e) {
+				throwOperator(e)
+			}
+		}),
+
+	applyServerDomainDns: protectedProcedure
+		.input(
+			z.object({ proxied: z.boolean().optional().default(true) }).optional(),
+		)
+		.mutation(async ({ ctx, input }) => {
+			try {
+				const result = await applyServerDomainDns({
+					organizationId: ctx.session.activeOrganizationId,
+					proxied: input?.proxied ?? true,
+				})
+				await audit(ctx, {
+					action: "update",
+					resourceType: "settings",
+					resourceName: "apply-server-domain-dns",
+				})
+				return result
+			} catch (e) {
+				throwOperator(e)
+			}
+		}),
+
+	provisionServerDomain: protectedProcedure
+		.input(
+			z.object({
+				host: z.string().min(1),
+				https: z.boolean().optional().default(true),
+				certificateType: z
+					.enum(["letsencrypt", "none", "custom"])
+					.optional()
+					.default("letsencrypt"),
+				letsEncryptEmail: z.string().optional(),
+				targetIp: z.string().optional(),
+				proxied: z.boolean().optional(),
+				waitDnsTimeoutMs: z.number().int().optional(),
+				skipHealthCheck: z.boolean().optional(),
+				dryRun: z.boolean().optional(),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			try {
+				const result = await provisionDomain({
+					organizationId: ctx.session.activeOrganizationId,
+					...input,
+					domainType: "server",
+				})
+				await audit(ctx, {
+					action: "update",
+					resourceType: "settings",
+					resourceName: "provision-server-domain",
+				})
+				return result
+			} catch (e) {
+				throwOperator(e)
+			}
+		}),
+
+	provisionDns: protectedProcedure
+		.input(
+			z.object({
+				name: z.string().min(1).describe("FQDN e.g. api.example.com"),
+				type: zoneDnsRecordTypeSchema.default("A"),
+				content: z.string().min(1).describe("Target IP or CNAME target"),
+				proxied: z.boolean().optional().default(true),
+				ttl: z
+					.union([z.literal(1), z.number().int().min(60).max(86400)])
+					.optional()
+					.default(1),
+				priority: z.number().int().min(0).max(65535).optional(),
+				waitForResolution: z.boolean().optional().default(true),
+				waitDnsTimeoutMs: z.number().int().optional(),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			try {
+				const dnsRaw = await upsertDnsRecordByName({
+					organizationId: ctx.session.activeOrganizationId,
+					name: input.name,
+					type: input.type,
+					content: input.content,
+					proxied: input.proxied,
+					ttl: input.ttl,
+					priority: input.priority,
+				})
+				await audit(ctx, {
+					action: "update",
+					resourceType: "domain",
+					resourceId: dnsRaw.cfRecordId,
+					resourceName: dnsRaw.name,
+				})
+
+				let resolution = null
+				if (input.waitForResolution) {
+					resolution = await waitForHostnameResolution({
+						host: input.name,
+						expectedIp: input.proxied ? null : input.content,
+						timeoutMs: input.waitDnsTimeoutMs ?? 180_000,
+						intervalMs: 4_000,
+					})
+				}
+
+				return {
+					ok: true as const,
+					record: dnsRaw,
+					resolution,
+				}
 			} catch (e) {
 				throwOperator(e)
 			}

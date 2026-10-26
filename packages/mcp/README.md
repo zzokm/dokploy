@@ -33,7 +33,7 @@ Env:
 - `DOKPLOY_API_KEY` — Settings → Profile → API Keys (`x-api-key`)
 - `DOKPLOY_TIMEOUT` — optional ms (default 120000 for DNS waits)
 
-Never put Cloudflare tokens in MCP env — Dokploy stores them sealed server-side.
+Never put DNS provider credentials in MCP env — Dokploy stores them sealed server-side.
 
 ## Build
 

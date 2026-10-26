@@ -2,7 +2,7 @@
 	"name": "@dokploy/operator-mcp",
 	"version": "1.0.0",
 	"private": true,
-	"description": "Operator-grade Dokploy MCP: Cloudflare DNS, domainProvision (DNS→cert→health), Traefik/ACME, services",
+	"description": "Operator-grade Dokploy MCP: Multi-provider DNS, domainProvision (DNS→cert→health), Traefik/ACME, services",
 	"type": "module",
 	"bin": {
 		"dokploy-operator-mcp": "./dist/index.js"

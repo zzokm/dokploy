@@ -149,5 +149,5 @@ When you need granular control without auto-provisioning:
 | `middlewares` | `string[]` | Array of Traefik middleware names |
 | `certificateType` | `"none" \| "letsencrypt" \| "letsencrypt-cloudflare"` | Certificate strategy |
 | `https` | `boolean` | Enable HTTPS / redirect HTTP |
-| `syncDns` | `boolean` | Synchronize Cloudflare DNS A-record automatically |
+| `syncDns` | `boolean` | Synchronize DNS A-record automatically |
 

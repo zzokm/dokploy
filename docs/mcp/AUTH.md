@@ -46,7 +46,7 @@ If you keep the legacy `dokploy-mcp` / `user-dokploy-mcp` entry that runs `npx @
 1. `dokploy.ping` → `{ ok: true }`
 2. `dokploy.whoami` → user email + org id (no secrets)
 3. Wrong/missing API key → `{ ok: false, code: "unauthorized" }`
-4. `cloudflare.status` → `{ configured, healthy, apiTokenLast4 }` (never full token)
+4. `dns.status` → `{ configured, healthy, apiTokenLast4 }` (never full token)
 
 ## Server must be rebuilt
 

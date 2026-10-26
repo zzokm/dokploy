@@ -13,15 +13,15 @@ Stable error codes: `unauthorized`, `dns_missing`, `dns_mismatch`, `cert_failed`
 
 Dokploy supports generalized DNS provider automation across all supported upstream providers: **Cloudflare**, **AWS Route53**, **Porkbun**, **Infomaniak**, and **OVH**. The unified management interface is located at `/dashboard/settings/dns` (with tabbed access to DNS Providers and All Domains).
 
-| Preferred Tool | Alias (Deprecated) | Purpose |
-|----------------|--------------------|---------|
-| `dns.status` | `cloudflare.status` | Safe credential and connectivity status for configured DNS providers (last 4 characters only). |
-| `dns.listZones` | `cloudflare.listZones` | List all DNS zones across configured DNS providers (`dnsProvider` table and mirrored zones). |
-| `dns.listRecords` | `cloudflare.listDnsRecords` | List DNS records within a zone across configured providers (`dnsZoneId` or `cfZoneId`). |
-| `dns.upsertRecord` | `cloudflare.upsertDnsRecord` | Idempotent create/update of DNS records (A/AAAA/CNAME/TXT/MX). Cloudflare policy enables proxying when Cloudflare is used. |
-| `dns.deleteRecord` | `cloudflare.deleteDnsRecord` | Delete a DNS record by zone and record ID across any supported provider. |
-| `dns.waitForResolution` | — | Poll public DNS until hostname resolves to expected IP or anycast address. |
-| `dns.provision` | — | Auto-match zone from FQDN or explicit provider/zone, upsert A/CNAME record, and verify DNS propagation in one call. |
+| Tool | Purpose |
+|------|---------|
+| `dns.status` | Safe credential and connectivity status for configured DNS providers (last 4 characters only). |
+| `dns.listZones` | List all DNS zones across configured DNS providers (`dnsProvider` table and mirrored zones). |
+| `dns.listRecords` | List DNS records within a zone across configured providers (`dnsZoneId`). |
+| `dns.upsertRecord` | Idempotent create/update of DNS records (A/AAAA/CNAME/TXT/MX). Proxying supported when Cloudflare provider is used. |
+| `dns.deleteRecord` | Delete a DNS record by zone and record ID across any supported provider. |
+| `dns.waitForResolution` | Poll public DNS until hostname resolves to expected IP or anycast address. |
+| `dns.provision` | Auto-match zone from FQDN or explicit provider/zone, upsert A/CNAME record, and verify DNS propagation in one call. |
 
 ## Domains (Application & Compose)
 

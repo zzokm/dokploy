@@ -2,6 +2,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@dokploy/server/db";
 import {
 	cloudflareSettings,
+	dnsProvider,
 	dnsProviderCredential,
 	type DnsProviderMeta,
 } from "@dokploy/server/db/schema";
@@ -194,6 +195,33 @@ export const listDnsProviderCredentials = async (
 		const legacy = await findLegacyCloudflareSettings(organizationId);
 		if (legacy) {
 			publicRows.push(legacyCloudflarePublic(organizationId, legacy));
+		}
+	}
+
+	const upstreamProviders = await db
+		.select()
+		.from(dnsProvider)
+		.where(eq(dnsProvider.organizationId, organizationId));
+
+	for (const u of upstreamProviders) {
+		if (!publicRows.some((r) => r.id === u.dnsProviderId)) {
+			const config = u.config as Record<string, unknown>;
+			const secret =
+				(config.apiToken as string) ||
+				(config.secretAccessKey as string) ||
+				(config.secretApiKey as string) ||
+				(config.applicationSecret as string) ||
+				"";
+			publicRows.push({
+				id: u.dnsProviderId,
+				organizationId: u.organizationId,
+				provider: u.providerType as DnsProviderId,
+				label: u.name,
+				secretLast4: secret ? secret.slice(-4) : "****",
+				meta: {},
+				createdAt: u.createdAt ? new Date(u.createdAt) : new Date(),
+				updatedAt: u.createdAt ? new Date(u.createdAt) : new Date(),
+			});
 		}
 	}
 
@@ -521,6 +549,30 @@ export const resolveDnsProviderSecret = async (input: {
 			.limit(1);
 
 		if (!row) {
+			const [upstreamRow] = await db
+				.select()
+				.from(dnsProvider)
+				.where(
+					and(
+						eq(dnsProvider.dnsProviderId, credentialId),
+						eq(dnsProvider.organizationId, organizationId),
+					),
+				)
+				.limit(1);
+
+			if (upstreamRow) {
+				const config = upstreamRow.config as Record<string, unknown>;
+				const secret =
+					(config.apiToken as string) ||
+					(config.secretAccessKey ? JSON.stringify(config) : (config.secretApiKey as string) || JSON.stringify(config));
+				return {
+					credentialId: upstreamRow.dnsProviderId,
+					provider: upstreamRow.providerType as DnsProviderId,
+					secret,
+					legacyCloudflare: false,
+				};
+			}
+
 			return null;
 		}
 
@@ -575,6 +627,36 @@ export const resolveDnsProviderSecret = async (input: {
 				legacyCloudflare: true,
 			};
 		}
+	}
+
+	const isSupportedProviderType = (p?: string): p is "cloudflare" | "infomaniak" | "ovh" | "porkbun" | "route53" =>
+		!!p && ["cloudflare", "infomaniak", "ovh", "porkbun", "route53"].includes(p);
+
+	const upstreamRows = await db
+		.select()
+		.from(dnsProvider)
+		.where(
+			and(
+				eq(dnsProvider.organizationId, organizationId),
+				isSupportedProviderType(targetProvider)
+					? eq(dnsProvider.providerType, targetProvider)
+					: undefined,
+			),
+		)
+		.limit(1);
+
+	if (upstreamRows[0]) {
+		const u = upstreamRows[0];
+		const config = u.config as Record<string, unknown>;
+		const secret =
+			(config.apiToken as string) ||
+			(config.secretAccessKey ? JSON.stringify(config) : (config.secretApiKey as string) || JSON.stringify(config));
+		return {
+			credentialId: u.dnsProviderId,
+			provider: u.providerType as DnsProviderId,
+			secret,
+			legacyCloudflare: false,
+		};
 	}
 
 	return null;

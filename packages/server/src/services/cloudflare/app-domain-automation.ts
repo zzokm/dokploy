@@ -38,12 +38,7 @@ export const findBestZoneMatch = async (
 			credentialId: dnsZone.credentialId,
 		})
 		.from(dnsZone)
-		.where(
-			and(
-				eq(dnsZone.organizationId, organizationId),
-				eq(dnsZone.provider, "cloudflare"),
-			),
-		)
+		.where(eq(dnsZone.organizationId, organizationId))
 		.orderBy(desc(sql`length(${dnsZone.name})`))
 
 	for (const z of mirrored) {
@@ -70,6 +65,40 @@ export const findBestZoneMatch = async (
 		if (normalizedHost === zoneName || normalizedHost.endsWith(`.${zoneName}`)) {
 			return { ...z, credentialId: null }
 		}
+	}
+
+	// Also check active providers in the upstream dnsProvider table
+	try {
+		const { findDnsProvidersByOrganizationId, listDnsProviderZones } = await import("../dns-provider");
+		const upstreamProviders = await findDnsProvidersByOrganizationId(organizationId);
+		let bestUpstreamMatch: MatchedDnsZone | null = null;
+		for (const p of upstreamProviders) {
+			try {
+				const zones = await listDnsProviderZones(p.config);
+				for (const z of zones) {
+					const zoneName = z.name.toLowerCase();
+					if (normalizedHost === zoneName || normalizedHost.endsWith(`.${zoneName}`)) {
+						if (!bestUpstreamMatch || zoneName.length > bestUpstreamMatch.name.length) {
+							bestUpstreamMatch = {
+								id: z.id,
+								cfZoneId: z.id,
+								name: z.name,
+								status: "active",
+								paused: false,
+								credentialId: p.dnsProviderId,
+							};
+						}
+					}
+				}
+			} catch {
+				// Continue to next provider if zone listing encounters an error
+			}
+		}
+		if (bestUpstreamMatch) {
+			return bestUpstreamMatch;
+		}
+	} catch {
+		// Ignore import or query errors
 	}
 
 	return null

@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm"
 import { db } from "@dokploy/server/db"
-import { cloudflareDnsRecord } from "@dokploy/server/db/schema"
+import { cloudflareDnsRecord, dnsProvider } from "@dokploy/server/db/schema"
 import { resolveDnsProviderSecret } from "@dokploy/server/services/dns/credentials"
 import { updateServerTraefik } from "@dokploy/server/utils/traefik/web-server"
 import { getWebServerSettings } from "../web-server-settings"
@@ -98,11 +98,6 @@ export const previewServerDomainDns = async (
 		}
 	}
 
-	const token = await getOrgToken(organizationId, zone.credentialId)
-	if (!token) {
-		return null
-	}
-
 	if (!desiredIp) {
 		return {
 			host,
@@ -117,30 +112,78 @@ export const previewServerDomainDns = async (
 		}
 	}
 
-	let existing: Awaited<ReturnType<typeof listCloudflareDnsRecordsByName>> = []
-	try {
-		existing = await listCloudflareDnsRecordsByName({
-			token,
-			zoneId: zone.cfZoneId,
-			name: host,
-			type: "A",
-		})
-	} catch (e) {
-		return {
-			host,
-			zoneName: zone.name,
-			desiredIp,
-			desiredProxied,
-			currentRecordId: null,
-			currentIp: null,
-			currentProxied: null,
-			state: "error",
-			wouldChange: false,
-			errorMessage: e instanceof Error ? e.message : "Failed to list DNS records",
+	let pick: { id: string; content: string; proxied?: boolean } | null = null
+
+	if (zone.credentialId) {
+		const [upstream] = await db
+			.select()
+			.from(dnsProvider)
+			.where(
+				and(
+					eq(dnsProvider.dnsProviderId, zone.credentialId),
+					eq(dnsProvider.organizationId, organizationId),
+				),
+			)
+			.limit(1)
+
+		if (upstream) {
+			const { listDnsProviderRecords } = await import("../dns-provider")
+			try {
+				const records = await listDnsProviderRecords(upstream.config, zone.cfZoneId)
+				const found = records.find(
+					(r) => r.name.toLowerCase() === host && r.type === "A",
+				)
+				if (found) {
+					pick = { id: found.id, content: found.content, proxied: (found as any).proxied }
+				}
+			} catch (e) {
+				return {
+					host,
+					zoneName: zone.name,
+					desiredIp,
+					desiredProxied,
+					currentRecordId: null,
+					currentIp: null,
+					currentProxied: null,
+					state: "error",
+					wouldChange: false,
+					errorMessage: e instanceof Error ? e.message : "Failed to list DNS records",
+				}
+			}
 		}
 	}
 
-	const pick = existing[0] ?? null
+	if (!pick) {
+		const token = await getOrgToken(organizationId, zone.credentialId)
+		if (token) {
+			try {
+				const existing = await listCloudflareDnsRecordsByName({
+					token,
+					zoneId: zone.cfZoneId,
+					name: host,
+					type: "A",
+				})
+				const first = existing[0] ?? null
+				if (first) {
+					pick = { id: first.id, content: first.content, proxied: first.proxied }
+				}
+			} catch (e) {
+				return {
+					host,
+					zoneName: zone.name,
+					desiredIp,
+					desiredProxied,
+					currentRecordId: null,
+					currentIp: null,
+					currentProxied: null,
+					state: "error",
+					wouldChange: false,
+					errorMessage: e instanceof Error ? e.message : "Failed to list DNS records",
+				}
+			}
+		}
+	}
+
 	const currentIp = pick?.content?.trim() ?? null
 	const currentProxied = pick?.proxied ?? null
 	const currentRecordId = pick?.id ?? null
@@ -211,13 +254,8 @@ export const applyServerDomainDns = async (input: {
 	const zone = await findBestZoneMatch(input.organizationId, host)
 	if (!zone) {
 		throw new Error(
-			`No synced Cloudflare zone matches ${host}. Sync zones on the Domains page first.`,
+			`No synced DNS zone matches ${host}. Add a DNS provider under Settings → DNS Providers first.`,
 		)
-	}
-
-	const token = await getOrgToken(input.organizationId, zone.credentialId)
-	if (!token) {
-		throw new Error("Connect Cloudflare first")
 	}
 
 	const storedProxied = await getStoredServerDomainProxied(
@@ -226,60 +264,112 @@ export const applyServerDomainDns = async (input: {
 	)
 	const proxied = input.proxied ?? storedProxied ?? true
 
-	const record = await upsertCloudflareDnsRecord({
-		token,
-		zoneId: zone.cfZoneId,
-		type: "A",
-		name: host,
-		content: desiredIp,
-		ttl: 1,
-		proxied,
-	})
+	let recordId: string
+	let isCf = true
 
-	const now = new Date()
-	await db
-		.insert(cloudflareDnsRecord)
-		.values({
-			organizationId: input.organizationId,
-			cfZoneId: zone.cfZoneId,
-			cfRecordId: record.id,
-			type: record.type,
-			name: normalizeHost(record.name),
-			content: record.content,
-			ttl: 1,
-			proxied,
-			managedBy: "manual",
-			lastSyncedAt: now,
-			updatedAt: now,
-		})
-		.onConflictDoUpdate({
-			target: [cloudflareDnsRecord.organizationId, cloudflareDnsRecord.cfRecordId],
-			set: {
-				cfZoneId: zone.cfZoneId,
-				type: record.type,
-				name: normalizeHost(record.name),
-				content: record.content,
+	if (zone.credentialId) {
+		const [upstream] = await db
+			.select()
+			.from(dnsProvider)
+			.where(
+				and(
+					eq(dnsProvider.dnsProviderId, zone.credentialId),
+					eq(dnsProvider.organizationId, input.organizationId),
+				),
+			)
+			.limit(1)
+
+		if (upstream) {
+			const { createDnsProviderRecord } = await import("../dns-provider")
+			isCf = upstream.providerType === "cloudflare"
+			const record = await createDnsProviderRecord(upstream.config, {
+				zoneId: zone.cfZoneId,
+				type: "A",
+				name: host,
+				content: desiredIp,
+				ttl: 1,
+				proxied: isCf ? proxied : false,
+			})
+			recordId = record.id
+		} else {
+			const token = await getOrgToken(input.organizationId, zone.credentialId)
+			if (!token) {
+				throw new Error("Connect a DNS provider first under Settings → DNS Providers")
+			}
+			const record = await upsertCloudflareDnsRecord({
+				token,
+				zoneId: zone.cfZoneId,
+				type: "A",
+				name: host,
+				content: desiredIp,
 				ttl: 1,
 				proxied,
+			})
+			recordId = record.id
+		}
+	} else {
+		const token = await getOrgToken(input.organizationId, zone.credentialId)
+		if (!token) {
+			throw new Error("Connect a DNS provider first under Settings → DNS Providers")
+		}
+		const record = await upsertCloudflareDnsRecord({
+			token,
+			zoneId: zone.cfZoneId,
+			type: "A",
+			name: host,
+			content: desiredIp,
+			ttl: 1,
+			proxied,
+		})
+		recordId = record.id
+	}
+
+	const now = new Date()
+	try {
+		await db
+			.insert(cloudflareDnsRecord)
+			.values({
+				organizationId: input.organizationId,
+				cfZoneId: zone.cfZoneId,
+				cfRecordId: recordId,
+				type: "A",
+				name: normalizeHost(host),
+				content: desiredIp,
+				ttl: 1,
+				proxied: isCf ? proxied : false,
 				managedBy: "manual",
 				lastSyncedAt: now,
 				updatedAt: now,
-			},
-		})
+			})
+			.onConflictDoUpdate({
+				target: [cloudflareDnsRecord.organizationId, cloudflareDnsRecord.cfRecordId],
+				set: {
+					cfZoneId: zone.cfZoneId,
+					type: "A",
+					name: normalizeHost(host),
+					content: desiredIp,
+					ttl: 1,
+					proxied: isCf ? proxied : false,
+					managedBy: "manual",
+					lastSyncedAt: now,
+					updatedAt: now,
+				},
+			})
+	} catch {}
 
-	// Proxied hostnames need DNS-01 (letsencrypt-cloudflare); DNS-only can use HTTP-01
+	// Proxied hostnames on Cloudflare need DNS-01 (letsencrypt-cloudflare); DNS-only can use HTTP-01
 	if (settings?.https && settings.certificateType === "letsencrypt") {
 		updateServerTraefik(settings, host, {
-			certResolver: proxied ? "letsencrypt-cloudflare" : "letsencrypt",
+			certResolver: (isCf && proxied) ? "letsencrypt-cloudflare" : "letsencrypt",
 		})
 	}
 
 	return {
 		host,
 		zoneName: zone.name,
-		recordId: record.id,
+		recordId,
 		ip: desiredIp,
-		proxied,
+		proxied: isCf ? proxied : false,
 	}
 }
 

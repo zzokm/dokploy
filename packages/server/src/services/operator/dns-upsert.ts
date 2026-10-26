@@ -94,14 +94,10 @@ export const getDnsProviderCredentialStatus = async (organizationId: string) => 
 	}
 }
 
-/** Backward-compatible alias */
-export const getCloudflareCredentialStatus = getDnsProviderCredentialStatus
-
 export const listOperatorZones = async (organizationId: string) => {
 	const result: Array<{
 		id: string
 		dnsZoneId: string
-		cfZoneId: string
 		name: string
 		status: "active" | "pending" | "disabled"
 		paused: boolean
@@ -123,7 +119,6 @@ export const listOperatorZones = async (organizationId: string) => {
 					result.push({
 						id: z.id,
 						dnsZoneId: z.id,
-						cfZoneId: z.id,
 						name: z.name,
 						status: "active",
 						paused: false,
@@ -148,7 +143,7 @@ export const listOperatorZones = async (organizationId: string) => {
 	const mirrored = await db
 		.select({
 			id: dnsZone.id,
-			cfZoneId: dnsZone.externalId,
+			dnsZoneId: dnsZone.externalId,
 			name: dnsZone.name,
 			status: dnsZone.status,
 			paused: dnsZone.paused,
@@ -161,17 +156,14 @@ export const listOperatorZones = async (organizationId: string) => {
 		.orderBy(dnsZone.name)
 
 	if (mirrored.length > 0) {
-		return mirrored.map((z) => ({
-			...z,
-			dnsZoneId: z.cfZoneId,
-		}))
+		return mirrored
 	}
 
 	// 3. Fall back to legacy cloudflareZone table
 	const legacy = await db
 		.select({
 			id: cloudflareZone.id,
-			cfZoneId: cloudflareZone.cfZoneId,
+			dnsZoneId: cloudflareZone.cfZoneId,
 			name: cloudflareZone.name,
 			status: cloudflareZone.status,
 			paused: cloudflareZone.paused,
@@ -183,7 +175,6 @@ export const listOperatorZones = async (organizationId: string) => {
 
 	return legacy.map((z) => ({
 		...z,
-		dnsZoneId: z.cfZoneId,
 		credentialId: null,
 		provider: "cloudflare",
 	}))
@@ -191,9 +182,7 @@ export const listOperatorZones = async (organizationId: string) => {
 
 export type UpsertDnsByNameInput = {
 	organizationId: string
-	/** Generic zone id (also accepts legacy cfZoneId) */
 	dnsZoneId?: string
-	cfZoneId?: string
 	credentialId?: string
 	dnsProviderId?: string
 	name: string
@@ -212,10 +201,9 @@ export type UpsertDnsByNameInput = {
 export const upsertDnsRecordByName = async (input: UpsertDnsByNameInput) => {
 	const name = input.name.trim().toLowerCase()
 	const type = input.type
-	const targetZoneId = input.dnsZoneId ?? input.cfZoneId
+	const targetZoneId = input.dnsZoneId
 
 	let zone: {
-		cfZoneId: string
 		dnsZoneId: string
 		name: string
 		credentialId: string | null
@@ -225,7 +213,7 @@ export const upsertDnsRecordByName = async (input: UpsertDnsByNameInput) => {
 	if (targetZoneId != null) {
 		const [z] = await db
 			.select({
-				cfZoneId: dnsZone.externalId,
+				dnsZoneId: dnsZone.externalId,
 				name: dnsZone.name,
 				credentialId: dnsZone.credentialId,
 				provider: dnsZone.provider,
@@ -241,14 +229,14 @@ export const upsertDnsRecordByName = async (input: UpsertDnsByNameInput) => {
 			.limit(1)
 
 		if (z) {
-			zone = { ...z, dnsZoneId: z.cfZoneId }
+			zone = z
 		}
 	}
 
 	if (!zone && targetZoneId != null) {
 		const [legacy] = await db
 			.select({
-				cfZoneId: cloudflareZone.cfZoneId,
+				dnsZoneId: cloudflareZone.cfZoneId,
 				name: cloudflareZone.name,
 			})
 			.from(cloudflareZone)
@@ -261,7 +249,7 @@ export const upsertDnsRecordByName = async (input: UpsertDnsByNameInput) => {
 			.limit(1)
 
 		if (legacy) {
-			zone = { ...legacy, dnsZoneId: legacy.cfZoneId, credentialId: null, provider: "cloudflare" }
+			zone = { ...legacy, credentialId: null, provider: "cloudflare" }
 		}
 	}
 
@@ -275,7 +263,6 @@ export const upsertDnsRecordByName = async (input: UpsertDnsByNameInput) => {
 			)
 		}
 		zone = {
-			cfZoneId: matched.cfZoneId,
 			dnsZoneId: matched.cfZoneId,
 			name: matched.name,
 			credentialId: matched.credentialId,
@@ -351,10 +338,8 @@ export const upsertDnsRecordByName = async (input: UpsertDnsByNameInput) => {
 
 			return {
 				dnsZoneId: zone.dnsZoneId,
-				cfZoneId: zone.dnsZoneId,
 				zoneName: zone.name,
 				dnsRecordId: record.id,
-				cfRecordId: record.id,
 				credentialId: upstreamProvider.dnsProviderId,
 				type: type as any,
 				name,
@@ -425,10 +410,8 @@ export const upsertDnsRecordByName = async (input: UpsertDnsByNameInput) => {
 
 	return {
 		dnsZoneId: zone.dnsZoneId,
-		cfZoneId: zone.dnsZoneId,
 		zoneName: zone.name,
 		dnsRecordId: record.id,
-		cfRecordId: record.id,
 		credentialId,
 		type: record.type,
 		name: record.name,
@@ -441,19 +424,17 @@ export const upsertDnsRecordByName = async (input: UpsertDnsByNameInput) => {
 
 export const deleteDnsRecordById = async (input: {
 	organizationId: string
-	dnsZoneId?: string
-	cfZoneId?: string
-	dnsRecordId?: string
-	cfRecordId?: string
+	dnsZoneId: string
+	dnsRecordId: string
 	credentialId?: string
 	dnsProviderId?: string
 }) => {
-	const zoneId = input.dnsZoneId ?? input.cfZoneId
-	const recordId = input.dnsRecordId ?? input.cfRecordId
+	const zoneId = input.dnsZoneId
+	const recordId = input.dnsRecordId
 	if (!zoneId || !recordId) {
 		throw new OperatorError(
 			OperatorErrorCode.validation_error,
-			"zoneId and recordId are required",
+			"dnsZoneId and dnsRecordId are required",
 		)
 	}
 
@@ -484,7 +465,7 @@ export const deleteDnsRecordById = async (input: {
 				)
 				.catch(() => {})
 
-			return { deleted: true as const, dnsRecordId: recordId, cfRecordId: recordId }
+			return { deleted: true as const, dnsRecordId: recordId }
 		}
 	}
 
@@ -507,5 +488,5 @@ export const deleteDnsRecordById = async (input: {
 		)
 		.catch(() => {})
 
-	return { deleted: true as const, dnsRecordId: recordId, cfRecordId: recordId }
+	return { deleted: true as const, dnsRecordId: recordId }
 }

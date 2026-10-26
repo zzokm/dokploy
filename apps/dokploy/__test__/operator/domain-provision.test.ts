@@ -99,14 +99,15 @@ describe("provisionDomain ordering", () => {
 		vi.clearAllMocks()
 		getWebServerSettings.mockResolvedValue({ serverIp: "23.94.107.153" })
 		upsertDnsRecordByName.mockResolvedValue({
-			cfZoneId: "zone1",
+			dnsZoneId: "zone1",
 			zoneName: "example.com",
-			cfRecordId: "rec1",
+			dnsRecordId: "rec1",
 			type: "A",
 			name: "hydro.example.com",
 			content: "23.94.107.153",
 			proxied: false,
 			ttl: 1,
+			provider: "cloudflare",
 		})
 		waitForHostnameResolution.mockResolvedValue({
 			ok: true,
@@ -152,14 +153,15 @@ describe("provisionDomain ordering", () => {
 		upsertDnsRecordByName.mockImplementation(async () => {
 			order.push("dns")
 			return {
-				cfZoneId: "zone1",
+				dnsZoneId: "zone1",
 				zoneName: "example.com",
-				cfRecordId: "rec1",
+				dnsRecordId: "rec1",
 				type: "A",
 				name: "hydro.example.com",
 				content: "23.94.107.153",
 				proxied: false,
 				ttl: 1,
+				provider: "cloudflare",
 			}
 		})
 		waitForHostnameResolution.mockImplementation(async () => {

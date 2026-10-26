@@ -63,10 +63,8 @@ export type DomainProvisionResult = {
 	proxied: boolean
 	acmeChallenge: "http-01" | "dns-01"
 	dns: {
-		cfZoneId: string
 		dnsZoneId: string
 		zoneName: string
-		cfRecordId: string
 		dnsRecordId: string
 		content: string
 		proxied: boolean
@@ -253,8 +251,8 @@ export const provisionDomain = async (
 
 	const dns = {
 		...dnsRaw,
-		dnsZoneId: dnsRaw.dnsZoneId ?? dnsRaw.cfZoneId,
-		dnsRecordId: dnsRaw.dnsRecordId ?? dnsRaw.cfRecordId,
+		dnsZoneId: dnsRaw.dnsZoneId,
+		dnsRecordId: dnsRaw.dnsRecordId,
 		proxied,
 		provider,
 	}
@@ -305,14 +303,14 @@ export const provisionDomain = async (
 		})
 
 		// Dual write / mirror Cloudflare DNS record row for server domain
-		if (isCf && dns.cfZoneId && dns.cfRecordId) {
+		if (isCf && dns.dnsZoneId && dns.dnsRecordId) {
 			const now = new Date()
 			await db
 				.insert(cloudflareDnsRecord)
 				.values({
 					organizationId: input.organizationId,
-					cfZoneId: dns.cfZoneId,
-					cfRecordId: dns.cfRecordId,
+					cfZoneId: dns.dnsZoneId,
+					cfRecordId: dns.dnsRecordId,
 					type: "A",
 					name: host,
 					content: targetIp,
@@ -325,7 +323,7 @@ export const provisionDomain = async (
 				.onConflictDoUpdate({
 					target: [cloudflareDnsRecord.organizationId, cloudflareDnsRecord.cfRecordId],
 					set: {
-						cfZoneId: dns.cfZoneId,
+						cfZoneId: dns.dnsZoneId,
 						type: "A",
 						name: host,
 						content: targetIp,
@@ -485,7 +483,7 @@ export const provisionDomain = async (
 				certificateType: https ? (input.certificateType ?? "letsencrypt") : "none",
 				customCertResolver:
 					input.customCertResolver ??
-					(acmeChallenge === "dns-01" ? "letsencrypt-cloudflare" : null),
+					(acmeChallenge === "dns-01" && isCf ? "letsencrypt-cloudflare" : null),
 				dnsProvider: domainDnsProvider,
 				cfProxied: proxied,
 				dnsCredentialId: dns.credentialId ?? undefined,
@@ -509,12 +507,20 @@ export const provisionDomain = async (
 	const domainRow = await findDomainById(domainId)
 
 	// Sync CF mirror + Traefik labels (idempotent) — always proxied for CF
-	await ensureCloudflareAppDnsForDomain({
-		organizationId: input.organizationId,
-		domainId: domainRow.domainId,
-		proxiedDefault: true,
-	})
-	steps.push("cloudflare_domain_synced")
+	if (isCf) {
+		await ensureCloudflareAppDnsForDomain({
+			organizationId: input.organizationId,
+			domainId: domainRow.domainId,
+			proxiedDefault: true,
+		})
+		steps.push("cloudflare_domain_synced")
+	} else {
+		await db
+			.update(domains)
+			.set({ dnsStatus: "synced" })
+			.where(eq(domains.domainId, domainId))
+		steps.push("dns_status_synced")
+	}
 
 	if (domainRow.applicationId) {
 		const application = await findApplicationById(domainRow.applicationId)
@@ -523,7 +529,7 @@ export const provisionDomain = async (
 		steps.push("traefik_domain_applied")
 	}
 
-	if (acmeChallenge === "dns-01") {
+	if (acmeChallenge === "dns-01" && isCf) {
 		void ensureTraefikCloudflareDnsToken({
 			organizationId: input.organizationId,
 			credentialId: dns.credentialId ?? undefined,

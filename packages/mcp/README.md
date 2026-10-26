@@ -4,9 +4,9 @@ Operator-grade MCP server for this Dokploy fork. Prefer **`domain.provision`** o
 
 ## Core Capabilities
 
-- **Zero-Downtime Domain Provisioning (`domain.provision`)**: DNS upsert → propagation wait → Traefik routing → ACME cert observation → HTTPS health verification. Prevents NXDOMAIN and TLS failure races.
-- **Full Domain Routing (`domain.create` & `domain.update`)**: Supports `port`, `autoPort`, `path`, `internalPath`, `stripPath`, `customCertResolver`, `customEntrypoint`, `middlewares`, `certificateType`, and `syncDns`.
-- **Integrated Cloudflare DNS Provisioning (`dns.provision`)**: Automatically identifies parent zone from FQDN, creates/updates proxied DNS records, and confirms propagation.
+- **Zero-Downtime Domain Provisioning (`domain.provision`)**: DNS upsert → propagation wait → Traefik routing → ACME cert observation → HTTPS health verification. Prevents NXDOMAIN and TLS failure races across all supported DNS providers.
+- **Full Domain Routing (`domain.create` & `domain.update`)**: Supports `port`, `autoPort`, `path`, `internalPath`, `stripPath`, `customCertResolver`, `customEntrypoint`, `middlewares`, `certificateType`, `dnsProvider`, and `cfProxied`.
+- **Integrated Multi-Provider DNS Provisioning (`dns.provision`)**: Supports Cloudflare, AWS Route53, Porkbun, Infomaniak, and OVH. Automatically identifies parent zone from FQDN or accepts explicit zone, creates/updates DNS records, and confirms propagation.
 - **Main Dokploy Instance (Server Domain) Lifecycle**: Complete automation for the primary Dokploy dashboard domain via `serverDomain.get`, `serverDomain.set`, `serverDomain.previewDns`, `serverDomain.applyDns`, and `serverDomain.provision`.
 
 ## Auth

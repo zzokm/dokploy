@@ -21,20 +21,29 @@ import { checkPublicUrlHealth } from "./url-health"
 export type DomainProvisionInput = {
 	organizationId: string
 	host: string
-	/** application | compose */
-	domainType: "application" | "compose"
+	/** application | compose | server */
+	domainType: "application" | "compose" | "server"
 	applicationId?: string
 	composeId?: string
 	serviceName?: string
 	port?: number
+	autoPort?: boolean
 	path?: string
+	internalPath?: string
+	stripPath?: boolean
 	https?: boolean
+	certificateType?: "letsencrypt" | "none" | "custom"
+	customCertResolver?: string | null
+	useCustomEntrypoint?: boolean
+	customEntrypoint?: string | null
+	middlewares?: string[]
+	letsEncryptEmail?: string
 	/**
 	 * @deprecated Ignored for Cloudflare Auto DNS — adapter always forces proxied:true
 	 * and DNS-01 (`letsencrypt-cloudflare`). Kept for MCP input compat.
 	 */
 	proxied?: boolean
-	/** Override A-record target; otherwise resolved from the service's server IP */
+	/** Override A-record target; otherwise resolved from the service's server IP or web server IP */
 	targetIp?: string
 	/** Wait for public DNS before attaching the Dokploy/Traefik domain */
 	waitDnsTimeoutMs?: number
@@ -49,6 +58,7 @@ export type DomainProvisionInput = {
 export type DomainProvisionResult = {
 	ok: true
 	host: string
+	domainType: "application" | "compose" | "server"
 	/** Always true for Cloudflare Auto DNS (policy). */
 	proxied: boolean
 	acmeChallenge: "http-01" | "dns-01"
@@ -69,6 +79,12 @@ export type DomainProvisionResult = {
 		domainId: string
 		created: boolean
 	} | null
+	serverSettings?: {
+		host: string
+		serverIp: string | null
+		https: boolean
+		certificateType: string
+	} | null
 	certificate: Awaited<ReturnType<typeof getHostnameCertStatus>> | null
 	health: Awaited<ReturnType<typeof checkPublicUrlHealth>> | null
 	steps: string[]
@@ -76,6 +92,21 @@ export type DomainProvisionResult = {
 
 const resolveTargetIp = async (input: DomainProvisionInput): Promise<string> => {
 	if (input.targetIp?.trim()) return input.targetIp.trim()
+
+	const { getWebServerSettings } = await import("../web-server-settings")
+	const { findServerById } = await import("../server")
+
+	if (input.domainType === "server") {
+		const settings = await getWebServerSettings()
+		if (settings?.serverIp?.trim()) return settings.serverIp.trim()
+		const { getPublicIpWithFallback } = await import("../../wss/utils")
+		const fallbackIp = await getPublicIpWithFallback()
+		if (fallbackIp?.trim()) return fallbackIp.trim()
+		throw new OperatorError(
+			OperatorErrorCode.validation_error,
+			"Could not determine public IP for Dokploy server domain. Pass targetIp explicitly.",
+		)
+	}
 
 	// Prefer resolving via a temporary look-up of the service's server
 	if (input.applicationId) {
@@ -105,12 +136,6 @@ const resolveTargetIp = async (input: DomainProvisionInput): Promise<string> => 
 		}
 	}
 
-	// Create a stub probe via existing target resolution after we have a domain,
-	// or fall back to web-server settings through upsert path.
-	// For pre-domain IP we use resolveDomainTarget-compatible logic:
-	const { getWebServerSettings } = await import("../web-server-settings")
-	const { findServerById } = await import("../server")
-
 	let serverId: string | null = null
 	if (input.applicationId) {
 		const [app] = await db
@@ -136,6 +161,10 @@ const resolveTargetIp = async (input: DomainProvisionInput): Promise<string> => 
 	const settings = await getWebServerSettings()
 	if (settings?.serverIp?.trim()) return settings.serverIp.trim()
 
+	const { getPublicIpWithFallback } = await import("../../wss/utils")
+	const fallbackIp = await getPublicIpWithFallback()
+	if (fallbackIp?.trim()) return fallbackIp.trim()
+
 	throw new OperatorError(
 		OperatorErrorCode.validation_error,
 		"Could not determine target IP. Pass targetIp explicitly.",
@@ -159,7 +188,7 @@ const findExistingDomain = async (input: DomainProvisionInput) => {
  * Ordered domain provisioning that prevents the NXDOMAIN-before-DNS race:
  * 1. Upsert Cloudflare DNS (A → target IP)
  * 2. Wait until the hostname resolves
- * 3. Attach the Dokploy domain (Traefik router + ACME)
+ * 3. Attach the Dokploy domain (Traefik router + ACME) or configure server domain
  * 4. Observe certificate status
  * 5. HTTPS health check
  */
@@ -237,6 +266,7 @@ export const provisionDomain = async (
 		return {
 			ok: true,
 			host,
+			domainType: input.domainType,
 			proxied,
 			acmeChallenge,
 			dns,
@@ -251,7 +281,136 @@ export const provisionDomain = async (
 		}
 	}
 
-	// 3. Attach Dokploy domain only after DNS is live
+	// 3. Attach Dokploy domain or configure Main Dokploy server domain
+	if (input.domainType === "server") {
+		const { updateWebServerSettings } = await import("../web-server-settings")
+		const { updateServerTraefik, updateLetsEncryptEmail } = await import(
+			"../../utils/traefik/web-server"
+		)
+		const { cloudflareDnsRecord } = await import("../../db/schema")
+
+		const settings = await updateWebServerSettings({
+			host,
+			https,
+			certificateType: https ? (input.certificateType ?? "letsencrypt") : "none",
+			letsEncryptEmail: input.letsEncryptEmail,
+			serverIp: targetIp,
+		})
+
+		// Dual write / mirror Cloudflare DNS record row for server domain
+		if (provider === "cloudflare" && dns.cfZoneId && dns.cfRecordId) {
+			const now = new Date()
+			await db
+				.insert(cloudflareDnsRecord)
+				.values({
+					organizationId: input.organizationId,
+					cfZoneId: dns.cfZoneId,
+					cfRecordId: dns.cfRecordId,
+					type: "A",
+					name: host,
+					content: targetIp,
+					ttl: 1,
+					proxied,
+					managedBy: "manual",
+					lastSyncedAt: now,
+					updatedAt: now,
+				})
+				.onConflictDoUpdate({
+					target: [cloudflareDnsRecord.organizationId, cloudflareDnsRecord.cfRecordId],
+					set: {
+						cfZoneId: dns.cfZoneId,
+						type: "A",
+						name: host,
+						content: targetIp,
+						ttl: 1,
+						proxied,
+						managedBy: "manual",
+						lastSyncedAt: now,
+						updatedAt: now,
+					},
+				})
+			steps.push("server_domain_cf_mirror_synced")
+		}
+
+		const certResolver =
+			provider === "cloudflare" || proxied
+				? "letsencrypt-cloudflare"
+				: https
+					? "letsencrypt"
+					: undefined
+
+		updateServerTraefik(settings ?? null, host, certResolver ? { certResolver } : undefined)
+		steps.push("server_traefik_updated")
+
+		if (input.letsEncryptEmail) {
+			try {
+				updateLetsEncryptEmail(input.letsEncryptEmail)
+				steps.push("server_letsencrypt_email_updated")
+			} catch {
+				steps.push("warn_letsencrypt_email_update_failed")
+			}
+		}
+
+		if (acmeChallenge === "dns-01") {
+			void ensureTraefikCloudflareDnsToken({
+				organizationId: input.organizationId,
+				credentialId: dns.credentialId ?? undefined,
+			}).catch(() => {})
+			steps.push("traefik_dns01_token_ensured")
+		}
+
+		// Certificate observation
+		let certificate: Awaited<ReturnType<typeof getHostnameCertStatus>> | null = null
+		if (https) {
+			const deadline = Date.now() + 90_000
+			while (Date.now() < deadline) {
+				certificate = await getHostnameCertStatus(host)
+				if (certificate.status === "issued" || certificate.status === "failed") break
+				await new Promise((r) => setTimeout(r, 5_000))
+			}
+			steps.push(`cert_status:${certificate?.status ?? "unknown"}`)
+		}
+
+		// Health check
+		let health: Awaited<ReturnType<typeof checkPublicUrlHealth>> | null = null
+		if (!input.skipHealthCheck && https) {
+			health = await checkPublicUrlHealth({
+				host,
+				path: input.path ?? "/",
+				expectedIp: proxied ? null : targetIp,
+				timeoutMs: 15_000,
+			})
+			steps.push(`health:${health.overall}`)
+		}
+
+		return {
+			ok: true,
+			host,
+			domainType: "server",
+			proxied,
+			acmeChallenge,
+			dns,
+			resolution: {
+				addresses: resolution.addresses,
+				matchedExpected: resolution.matchedExpected,
+			},
+			domain: {
+				domainId: "server",
+				created: true,
+			},
+			serverSettings: {
+				host,
+				serverIp: targetIp,
+				https,
+				certificateType: https ? (input.certificateType ?? "letsencrypt") : "none",
+			},
+			certificate,
+			health,
+			steps,
+		}
+	}
+
+	// 3b. Application / Compose domain attaching
 	const existing = await findExistingDomain(input)
 	let created = false
 	let domainId: string
@@ -260,22 +419,29 @@ export const provisionDomain = async (
 		const createdDomain = await createDomain({
 			host,
 			path: input.path ?? "/",
+			internalPath: input.internalPath ?? "/",
+			stripPath: input.stripPath ?? false,
 			port: input.port ?? 3000,
+			autoPort: input.autoPort ?? false,
 			https,
-			certificateType: https ? "letsencrypt" : "none",
-			customCertResolver: acmeChallenge === "dns-01" ? "letsencrypt-cloudflare" : null,
+			certificateType: https ? (input.certificateType ?? "letsencrypt") : "none",
+			customCertResolver:
+				input.customCertResolver ??
+				(acmeChallenge === "dns-01" ? "letsencrypt-cloudflare" : null),
+			customEntrypoint: input.customEntrypoint ?? null,
+			middlewares: input.middlewares ?? [],
 			domainType: input.domainType,
 			applicationId: input.applicationId,
 			composeId: input.composeId,
 			serviceName: input.serviceName,
-			dnsProvider: "cloudflare",
-			cfProxied: true,
+			dnsProvider: provider,
+			cfProxied: proxied,
 			dnsCredentialId: dns.credentialId ?? undefined,
 			dnsZoneId: dns.dnsZoneId,
 			dnsZoneName: dns.zoneName,
 			dnsRecordId: dns.dnsRecordId,
 			dnsStatus: "pending",
-			dnsOptions: { proxied: true },
+			dnsOptions: { proxied },
 		})
 		created = true
 		domainId = createdDomain.domainId
@@ -287,18 +453,25 @@ export const provisionDomain = async (
 			.update(domains)
 			.set({
 				https,
-				certificateType: https ? "letsencrypt" : "none",
-				customCertResolver: acmeChallenge === "dns-01" ? "letsencrypt-cloudflare" : null,
-				dnsProvider: "cloudflare",
-				cfProxied: true,
+				certificateType: https ? (input.certificateType ?? "letsencrypt") : "none",
+				customCertResolver:
+					input.customCertResolver ??
+					(acmeChallenge === "dns-01" ? "letsencrypt-cloudflare" : null),
+				dnsProvider: provider,
+				cfProxied: proxied,
 				dnsCredentialId: dns.credentialId ?? undefined,
 				dnsZoneId: dns.dnsZoneId,
 				dnsZoneName: dns.zoneName,
 				dnsRecordId: dns.dnsRecordId,
 				dnsStatus: "pending",
-				dnsOptions: { proxied: true },
+				dnsOptions: { proxied },
 				port: input.port ?? existing.port,
+				autoPort: input.autoPort ?? existing.autoPort,
 				path: input.path ?? existing.path,
+				internalPath: input.internalPath ?? existing.internalPath,
+				stripPath: input.stripPath ?? existing.stripPath,
+				customEntrypoint: input.customEntrypoint ?? existing.customEntrypoint,
+				middlewares: input.middlewares ?? existing.middlewares,
 				serviceName: input.serviceName ?? existing.serviceName,
 			})
 			.where(eq(domains.domainId, domainId))
@@ -336,8 +509,7 @@ export const provisionDomain = async (
 		const deadline = Date.now() + 90_000
 		while (Date.now() < deadline) {
 			certificate = await getHostnameCertStatus(host)
-			if (certificate.status === "issued") break
-			if (certificate.status === "failed") break
+			if (certificate.status === "issued" || certificate.status === "failed") break
 			await new Promise((r) => setTimeout(r, 5_000))
 		}
 		steps.push(`cert_status:${certificate?.status ?? "unknown"}`)
@@ -370,6 +542,7 @@ export const provisionDomain = async (
 	return {
 		ok: true,
 		host,
+		domainType: input.domainType,
 		proxied,
 		acmeChallenge,
 		dns,

@@ -258,12 +258,38 @@ export const tools: ToolDef[] = [
 			formatToolResult(await apiPost("/operator.waitDns", input)),
 	},
 	{
+		name: "dns.provision",
+		description:
+			"Provision a DNS record with integrated Cloudflare (or specified provider) and wait for DNS resolution. Auto-detects zone from FQDN. Example: {\"name\":\"api.example.com\",\"content\":\"23.94.107.153\",\"type\":\"A\",\"proxied\":true}",
+		schema: z.object({
+			name: z.string().min(1).describe("FQDN e.g. api.example.com"),
+			type: z
+				.enum(["A", "AAAA", "CNAME", "TXT", "MX"])
+				.optional()
+				.default("A"),
+			content: z.string().min(1).describe("Target IP or CNAME target"),
+			proxied: z.boolean().optional().default(true),
+			ttl: z.union([z.literal(1), z.number().int()]).optional().default(1),
+			priority: z.number().int().optional(),
+			waitForResolution: z.boolean().optional().default(true),
+			waitDnsTimeoutMs: z.number().int().optional(),
+		}),
+		annotations: {
+			title: "Provision DNS Record",
+			idempotentHint: true,
+			openWorldHint: true,
+		},
+		handler: async (input) =>
+			formatToolResult(await apiPost("/operator.provisionDns", input)),
+	},
+	{
 		name: "domain.list",
 		description:
-			"List Dokploy domain bindings for an application or compose. Example: {\"applicationId\":\"...\"} or {\"composeId\":\"...\"}",
+			"List Dokploy domain bindings for an application, compose, or the main Dokploy server. Example: {\"applicationId\":\"...\"} or {\"includeServerDomain\":true}",
 		schema: z.object({
 			applicationId: z.string().optional(),
 			composeId: z.string().optional(),
+			includeServerDomain: z.boolean().optional(),
 		}),
 		annotations: {
 			title: "List Domains",
@@ -275,24 +301,61 @@ export const tools: ToolDef[] = [
 			formatToolResult(await apiGet("/operator.listDomains", input)),
 	},
 	{
+		name: "domain.get",
+		description:
+			"Get a specific domain by domainId (use 'server' for main Dokploy instance) or by hostname. Example: {\"domainId\":\"server\"} or {\"host\":\"app.example.com\"}",
+		schema: z.object({
+			domainId: z.string().optional(),
+			host: z.string().optional(),
+		}),
+		annotations: {
+			title: "Get Domain",
+			readOnlyHint: true,
+			idempotentHint: true,
+			openWorldHint: true,
+		},
+		handler: async (input) =>
+			formatToolResult(await apiGet("/operator.getDomain", input)),
+	},
+	{
 		name: "domain.create",
 		description:
-			"Low-level domain create (does NOT wait for DNS — prefer domain.provision). Example: {\"host\":\"app.example.com\",\"domainType\":\"application\",\"applicationId\":\"...\",\"https\":true}",
+			"Full domain create primitive for application, compose, or the main Dokploy server. Supports all routing, path stripping, custom cert resolvers, and middlewares. Example: {\"host\":\"app.example.com\",\"domainType\":\"application\",\"applicationId\":\"...\",\"https\":true,\"autoPort\":true}",
 		schema: z.object({
 			host: z.string().min(1),
-			domainType: z.enum(["application", "compose"]),
+			domainType: z.enum(["application", "compose", "server"]),
 			applicationId: z.string().optional(),
 			composeId: z.string().optional(),
 			serviceName: z.string().optional(),
 			port: z.number().int().optional(),
+			autoPort: z.boolean().optional(),
 			path: z.string().optional(),
+			internalPath: z.string().optional(),
+			stripPath: z.boolean().optional(),
 			https: z.boolean().optional(),
 			certificateType: z.enum(["letsencrypt", "none", "custom"]).optional(),
-			dnsProvider: z.enum(["none", "cloudflare"]).optional(),
+			customCertResolver: z.string().optional().nullable(),
+			useCustomEntrypoint: z.boolean().optional(),
+			customEntrypoint: z.string().optional().nullable(),
+			middlewares: z.array(z.string()).optional(),
+			dnsProvider: z
+				.enum([
+					"none",
+					"cloudflare",
+					"digitalocean",
+					"hetzner",
+					"route53",
+					"gcloud",
+				])
+				.optional(),
 			cfProxied: z.boolean().optional(),
+			letsEncryptEmail: z
+				.string()
+				.optional()
+				.describe("Used when domainType is server"),
 		}),
 		annotations: {
-			title: "Create Domain (primitive)",
+			title: "Create Domain (full)",
 			openWorldHint: true,
 		},
 		handler: async (input) =>
@@ -301,16 +364,27 @@ export const tools: ToolDef[] = [
 	{
 		name: "domain.update",
 		description:
-			"Update an existing domain binding. Example: {\"domainId\":\"...\",\"port\":8080,\"https\":true}",
+			"Update an existing domain binding (or 'server' for main Dokploy domain) with all advanced routing, port, and security settings. Example: {\"domainId\":\"...\",\"port\":8080,\"https\":true,\"stripPath\":true}",
 		schema: z.object({
-			domainId: z.string().min(1),
+			domainId: z
+				.string()
+				.min(1)
+				.describe("Domain id or 'server' for Dokploy instance domain"),
 			host: z.string().optional(),
 			port: z.number().int().optional(),
+			autoPort: z.boolean().optional(),
 			path: z.string().optional(),
+			internalPath: z.string().optional(),
+			stripPath: z.boolean().optional(),
 			https: z.boolean().optional(),
 			certificateType: z.enum(["letsencrypt", "none", "custom"]).optional(),
+			customCertResolver: z.string().optional().nullable(),
+			useCustomEntrypoint: z.boolean().optional(),
+			customEntrypoint: z.string().optional().nullable(),
+			middlewares: z.array(z.string()).optional(),
 			serviceName: z.string().optional(),
 			cfProxied: z.boolean().optional(),
+			enabled: z.boolean().optional(),
 		}),
 		annotations: {
 			title: "Update Domain",
@@ -323,7 +397,7 @@ export const tools: ToolDef[] = [
 	{
 		name: "domain.delete",
 		description:
-			"Remove a domain binding. Example: {\"domainId\":\"...\"}",
+			"Remove a domain binding (or reset server domain when domainId is 'server'). Example: {\"domainId\":\"...\"}",
 		schema: z.object({
 			domainId: z.string().min(1),
 		}),
@@ -338,22 +412,42 @@ export const tools: ToolDef[] = [
 	{
 		name: "domain.provision",
 		description:
-			"SAFE Auto DNS workflow: (1) upsert A record (2) wait until DNS resolves (3) attach Dokploy domain+HTTPS (4) observe ACME cert (5) HTTPS health. DNS-before-domain prevents NXDOMAIN races. Cloudflare Auto DNS always forces proxied=true + DNS-01 (letsencrypt-cloudflare); `proxied` input is ignored for CF. Example: {\"host\":\"app.example.com\",\"domainType\":\"compose\",\"composeId\":\"...\",\"serviceName\":\"web\",\"port\":3000}",
+			"SAFE Auto DNS workflow for applications, compose stacks, or the main Dokploy server: (1) upsert DNS A record (2) wait until public DNS resolves (3) attach Dokploy domain/server settings + HTTPS (4) observe ACME cert (5) HTTPS health check. Prevents NXDOMAIN / rate-limit races. Example: {\"host\":\"dokploy.example.com\",\"domainType\":\"server\",\"https\":true}",
 		schema: z.object({
 			host: z.string().min(1),
-			domainType: z.enum(["application", "compose"]),
+			domainType: z.enum(["application", "compose", "server"]),
 			applicationId: z.string().optional(),
 			composeId: z.string().optional(),
 			serviceName: z.string().optional(),
 			port: z.number().int().optional(),
+			autoPort: z.boolean().optional(),
 			path: z.string().optional(),
+			internalPath: z.string().optional(),
+			stripPath: z.boolean().optional(),
 			https: z.boolean().optional(),
-			/** Ignored for Cloudflare — always proxied+DNS-01. Kept for compat. */
-			proxied: z.boolean().optional(),
+			certificateType: z.enum(["letsencrypt", "none", "custom"]).optional(),
+			customCertResolver: z.string().optional().nullable(),
+			useCustomEntrypoint: z.boolean().optional(),
+			customEntrypoint: z.string().optional().nullable(),
+			middlewares: z.array(z.string()).optional(),
+			letsEncryptEmail: z.string().optional(),
 			targetIp: z.string().optional(),
+			proxied: z
+				.boolean()
+				.optional()
+				.describe("Always forced true for Cloudflare policy"),
 			waitDnsTimeoutMs: z.number().int().optional(),
 			skipHealthCheck: z.boolean().optional(),
 			dryRun: z.boolean().optional(),
+			provider: z
+				.enum([
+					"cloudflare",
+					"digitalocean",
+					"hetzner",
+					"route53",
+					"gcloud",
+				])
+				.optional(),
 		}),
 		annotations: {
 			title: "Provision Domain (ordered)",
@@ -362,6 +456,100 @@ export const tools: ToolDef[] = [
 		},
 		handler: async (input) =>
 			formatToolResult(await apiPost("/operator.domainProvision", input)),
+	},
+	{
+		name: "serverDomain.get",
+		description:
+			"Get current main Dokploy web server domain configuration (host, serverIp, https, certificateType, letsEncryptEmail) and Cloudflare DNS preview. Example: {}",
+		schema: z.object({}),
+		annotations: {
+			title: "Get Server Domain",
+			readOnlyHint: true,
+			idempotentHint: true,
+			openWorldHint: true,
+		},
+		handler: async () =>
+			formatToolResult(await apiGet("/operator.serverDomainStatus")),
+	},
+	{
+		name: "serverDomain.set",
+		description:
+			"Set or update the main Dokploy web server domain, configure HTTPS and certificate resolver, and update server Traefik router. Example: {\"host\":\"dokploy.example.com\",\"https\":true,\"certificateType\":\"letsencrypt\"}",
+		schema: z.object({
+			host: z.string().min(1),
+			https: z.boolean().optional().default(true),
+			certificateType: z
+				.enum(["letsencrypt", "none", "custom"])
+				.optional()
+				.default("letsencrypt"),
+			letsEncryptEmail: z.string().optional(),
+		}),
+		annotations: {
+			title: "Set Server Domain",
+			openWorldHint: true,
+		},
+		handler: async (input) =>
+			formatToolResult(await apiPost("/operator.assignServerDomain", input)),
+	},
+	{
+		name: "serverDomain.previewDns",
+		description:
+			"Preview Cloudflare DNS drift, target IP, zone match, and current record for the main Dokploy server domain. Example: {\"proxied\":true}",
+		schema: z.object({
+			proxied: z.boolean().optional().default(true),
+		}),
+		annotations: {
+			title: "Preview Server Domain DNS",
+			readOnlyHint: true,
+			idempotentHint: true,
+			openWorldHint: true,
+		},
+		handler: async (input) =>
+			formatToolResult(
+				await apiGet("/operator.previewServerDomainDns", input),
+			),
+	},
+	{
+		name: "serverDomain.applyDns",
+		description:
+			"Sync/apply Cloudflare DNS A-record for the main Dokploy server domain and configure Traefik DNS-01 certificate resolver. Example: {\"proxied\":true}",
+		schema: z.object({
+			proxied: z.boolean().optional().default(true),
+		}),
+		annotations: {
+			title: "Apply Server Domain DNS",
+			openWorldHint: true,
+		},
+		handler: async (input) =>
+			formatToolResult(await apiPost("/operator.applyServerDomainDns", input)),
+	},
+	{
+		name: "serverDomain.provision",
+		description:
+			"End-to-end automated zero-downtime provisioning of the main Dokploy server domain: upsert Cloudflare DNS -> wait resolution -> update server settings & Traefik -> observe ACME certificate -> verify HTTPS health. Example: {\"host\":\"dokploy.example.com\",\"https\":true}",
+		schema: z.object({
+			host: z.string().min(1),
+			https: z.boolean().optional().default(true),
+			certificateType: z
+				.enum(["letsencrypt", "none", "custom"])
+				.optional()
+				.default("letsencrypt"),
+			letsEncryptEmail: z.string().optional(),
+			targetIp: z.string().optional(),
+			proxied: z.boolean().optional(),
+			waitDnsTimeoutMs: z.number().int().optional(),
+			skipHealthCheck: z.boolean().optional(),
+			dryRun: z.boolean().optional(),
+		}),
+		annotations: {
+			title: "Provision Server Domain (ordered)",
+			idempotentHint: true,
+			openWorldHint: true,
+		},
+		handler: async (input) =>
+			formatToolResult(
+				await apiPost("/operator.provisionServerDomain", input),
+			),
 	},
 	{
 		name: "cert.status",

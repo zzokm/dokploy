@@ -56,6 +56,12 @@ import {
 } from "@/server/api/trpc"
 import { audit } from "@/server/api/utils/audit"
 
+import {
+	findDnsProviderInOrganization,
+	findDnsProvidersByOrganizationId,
+	listDnsProviderRecords,
+} from "@dokploy/server/services/dns-provider"
+
 const throwOperator = (e: unknown): never => {
 	if (isOperatorError(e)) {
 		const code =
@@ -101,11 +107,29 @@ export const operatorRouter = createTRPCRouter({
 		}
 	}),
 
+	dnsStatus: protectedProcedure.query(async ({ ctx }) => {
+		try {
+			return await getCloudflareCredentialStatus(
+				ctx.session.activeOrganizationId,
+			)
+		} catch (e) {
+			throwOperator(e)
+		}
+	}),
+
 	cloudflareStatus: protectedProcedure.query(async ({ ctx }) => {
 		try {
 			return await getCloudflareCredentialStatus(
 				ctx.session.activeOrganizationId,
 			)
+		} catch (e) {
+			throwOperator(e)
+		}
+	}),
+
+	listDnsZones: protectedProcedure.query(async ({ ctx }) => {
+		try {
+			return await listOperatorZones(ctx.session.activeOrganizationId)
 		} catch (e) {
 			throwOperator(e)
 		}
@@ -122,17 +146,184 @@ export const operatorRouter = createTRPCRouter({
 	listZoneDnsRecords: protectedProcedure
 		.input(
 			z.object({
-				cfZoneId: z.string().min(1),
+				cfZoneId: z.string().min(1).optional(),
+				dnsZoneId: z.string().min(1).optional(),
+				dnsProviderId: z.string().min(1).optional(),
 				credentialId: z.string().min(1).optional(),
 			}),
 		)
 		.query(async ({ ctx, input }) => {
 			try {
-				return await listZoneDnsRecordsService({
-					organizationId: ctx.session.activeOrganizationId,
-					cfZoneId: input.cfZoneId,
-					credentialId: input.credentialId,
-				})
+				const zoneId = input.dnsZoneId || input.cfZoneId
+				if (!zoneId) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "cfZoneId or dnsZoneId is required",
+					})
+				}
+				if (input.dnsProviderId) {
+					const provider = await findDnsProviderInOrganization(
+						input.dnsProviderId,
+						ctx.session.activeOrganizationId,
+					)
+					const rawRecords = await listDnsProviderRecords(
+						provider.config,
+						zoneId,
+					)
+					return {
+						dnsZoneId: zoneId,
+						cfZoneId: zoneId,
+						zoneName: "",
+						records: rawRecords.map((r) => ({
+							cfRecordId: r.id,
+							dnsRecordId: r.id,
+							type: r.type,
+							name: r.name,
+							content: r.content,
+							ttl: r.ttl ?? 1,
+							proxied: (r as unknown as { proxied?: boolean }).proxied ?? false,
+							priority:
+								(r as unknown as { priority?: number | null }).priority ?? null,
+							managedBy: "manual" as const,
+							lastSyncedAt: null,
+						})),
+					}
+				}
+				try {
+					return await listZoneDnsRecordsService({
+						organizationId: ctx.session.activeOrganizationId,
+						cfZoneId: zoneId,
+						credentialId: input.credentialId,
+					})
+				} catch (err) {
+					const providers = await findDnsProvidersByOrganizationId(
+						ctx.session.activeOrganizationId,
+					)
+					for (const p of providers) {
+						try {
+							const rawRecords = await listDnsProviderRecords(
+								p.config,
+								zoneId,
+							)
+							return {
+								dnsZoneId: zoneId,
+								cfZoneId: zoneId,
+								zoneName: "",
+								records: rawRecords.map((r) => ({
+									cfRecordId: r.id,
+									dnsRecordId: r.id,
+									type: r.type,
+									name: r.name,
+									content: r.content,
+									ttl: r.ttl ?? 1,
+									proxied:
+										(r as unknown as { proxied?: boolean }).proxied ?? false,
+									priority:
+										(r as unknown as { priority?: number | null }).priority ??
+										null,
+									managedBy: "manual" as const,
+									lastSyncedAt: null,
+								})),
+							}
+						} catch {
+							// Continue
+						}
+					}
+					throw err
+				}
+			} catch (e) {
+				throwOperator(e)
+			}
+		}),
+
+	listDnsRecords: protectedProcedure
+		.input(
+			z.object({
+				cfZoneId: z.string().min(1).optional(),
+				dnsZoneId: z.string().min(1).optional(),
+				dnsProviderId: z.string().min(1).optional(),
+				credentialId: z.string().min(1).optional(),
+			}),
+		)
+		.query(async ({ ctx, input }) => {
+			try {
+				const zoneId = input.dnsZoneId || input.cfZoneId
+				if (!zoneId) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "cfZoneId or dnsZoneId is required",
+					})
+				}
+				if (input.dnsProviderId) {
+					const provider = await findDnsProviderInOrganization(
+						input.dnsProviderId,
+						ctx.session.activeOrganizationId,
+					)
+					const rawRecords = await listDnsProviderRecords(
+						provider.config,
+						zoneId,
+					)
+					return {
+						dnsZoneId: zoneId,
+						cfZoneId: zoneId,
+						zoneName: "",
+						records: rawRecords.map((r) => ({
+							cfRecordId: r.id,
+							dnsRecordId: r.id,
+							type: r.type,
+							name: r.name,
+							content: r.content,
+							ttl: r.ttl ?? 1,
+							proxied: (r as unknown as { proxied?: boolean }).proxied ?? false,
+							priority:
+								(r as unknown as { priority?: number | null }).priority ?? null,
+							managedBy: "manual" as const,
+							lastSyncedAt: null,
+						})),
+					}
+				}
+				try {
+					return await listZoneDnsRecordsService({
+						organizationId: ctx.session.activeOrganizationId,
+						cfZoneId: zoneId,
+						credentialId: input.credentialId,
+					})
+				} catch (err) {
+					const providers = await findDnsProvidersByOrganizationId(
+						ctx.session.activeOrganizationId,
+					)
+					for (const p of providers) {
+						try {
+							const rawRecords = await listDnsProviderRecords(
+								p.config,
+								zoneId,
+							)
+							return {
+								dnsZoneId: zoneId,
+								cfZoneId: zoneId,
+								zoneName: "",
+								records: rawRecords.map((r) => ({
+									cfRecordId: r.id,
+									dnsRecordId: r.id,
+									type: r.type,
+									name: r.name,
+									content: r.content,
+									ttl: r.ttl ?? 1,
+									proxied:
+										(r as unknown as { proxied?: boolean }).proxied ?? false,
+									priority:
+										(r as unknown as { priority?: number | null }).priority ??
+										null,
+									managedBy: "manual" as const,
+									lastSyncedAt: null,
+								})),
+							}
+						} catch {
+							// Continue
+						}
+					}
+					throw err
+				}
 			} catch (e) {
 				throwOperator(e)
 			}
@@ -141,7 +332,9 @@ export const operatorRouter = createTRPCRouter({
 	upsertDnsRecord: protectedProcedure
 		.input(
 			z.object({
+				dnsZoneId: z.string().min(1).optional(),
 				cfZoneId: z.string().min(1).optional(),
+				dnsProviderId: z.string().min(1).optional(),
 				name: z
 					.string()
 					.min(1)
@@ -152,7 +345,7 @@ export const operatorRouter = createTRPCRouter({
 					.boolean()
 					.optional()
 					.describe(
-						"Default false (DNS-only). Use true only with DNS-01 ACME.",
+						"Default false (DNS-only). Set true for Cloudflare proxy.",
 					),
 				ttl: z.union([z.literal(1), z.number().int().min(60).max(86400)]).optional(),
 				priority: z.number().int().min(0).max(65535).optional(),
@@ -163,6 +356,8 @@ export const operatorRouter = createTRPCRouter({
 				const result = await upsertDnsRecordByName({
 					organizationId: ctx.session.activeOrganizationId,
 					...input,
+					cfZoneId: input.dnsZoneId || input.cfZoneId,
+					dnsZoneId: input.dnsZoneId || input.cfZoneId,
 				})
 				await audit(ctx, {
 					action: "update",
@@ -179,15 +374,30 @@ export const operatorRouter = createTRPCRouter({
 	deleteDnsRecord: protectedProcedure
 		.input(
 			z.object({
-				cfZoneId: z.string().min(1),
-				cfRecordId: z.string().min(1),
+				cfZoneId: z.string().min(1).optional(),
+				dnsZoneId: z.string().min(1).optional(),
+				cfRecordId: z.string().min(1).optional(),
+				dnsRecordId: z.string().min(1).optional(),
+				dnsProviderId: z.string().min(1).optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
 			try {
+				const zoneId = input.dnsZoneId || input.cfZoneId
+				const recordId = input.dnsRecordId || input.cfRecordId
+				if (!zoneId || !recordId) {
+					throw new TRPCError({
+						code: "BAD_REQUEST",
+						message: "Zone ID and Record ID are required",
+					})
+				}
 				return await deleteDnsRecordById({
 					organizationId: ctx.session.activeOrganizationId,
-					...input,
+					dnsZoneId: zoneId,
+					cfZoneId: zoneId,
+					dnsRecordId: recordId,
+					cfRecordId: recordId,
+					dnsProviderId: input.dnsProviderId,
 				})
 			} catch (e) {
 				throwOperator(e)
@@ -345,6 +555,9 @@ export const operatorRouter = createTRPCRouter({
 						"digitalocean",
 						"hetzner",
 						"route53",
+						"porkbun",
+						"infomaniak",
+						"ovh",
 						"gcloud",
 					])
 					.optional(),
@@ -405,6 +618,25 @@ export const operatorRouter = createTRPCRouter({
 					domain: ["create"],
 				})
 			}
+			const supportedDomainDnsProviders = [
+				"akamai",
+				"cloudflare",
+				"digitalocean",
+				"gcloud",
+				"hetzner",
+				"none",
+				"ns1",
+				"route53",
+			] as const
+			type DomainDnsProviderType = (typeof supportedDomainDnsProviders)[number]
+			const dbDnsProvider: DomainDnsProviderType =
+				input.dnsProvider &&
+				(supportedDomainDnsProviders as readonly string[]).includes(
+					input.dnsProvider,
+				)
+					? (input.dnsProvider as DomainDnsProviderType)
+					: "none"
+
 			const domain = await createDomain({
 				host: input.host,
 				domainType: input.domainType,
@@ -421,7 +653,7 @@ export const operatorRouter = createTRPCRouter({
 				customCertResolver: input.customCertResolver ?? null,
 				customEntrypoint: input.customEntrypoint ?? null,
 				middlewares: input.middlewares ?? [],
-				dnsProvider: input.dnsProvider ?? "none",
+				dnsProvider: dbDnsProvider,
 				cfProxied: input.cfProxied ?? false,
 			})
 			await audit(ctx, {
@@ -431,7 +663,7 @@ export const operatorRouter = createTRPCRouter({
 				resourceName: domain.host,
 			})
 
-			if (input.dnsProvider === "cloudflare") {
+			if (input.dnsProvider && input.dnsProvider !== "none") {
 				try {
 					await ensureCloudflareAppDnsForDomain({
 						organizationId: ctx.session.activeOrganizationId,
@@ -442,7 +674,7 @@ export const operatorRouter = createTRPCRouter({
 						organizationId: ctx.session.activeOrganizationId,
 					}).catch(() => {})
 				} catch (err) {
-					console.error("Cloudflare domain auto DNS error:", err)
+					console.error("DNS provider domain auto DNS error:", err)
 				}
 			}
 
@@ -584,6 +816,8 @@ export const operatorRouter = createTRPCRouter({
 				waitDnsTimeoutMs: z.number().int().optional(),
 				skipHealthCheck: z.boolean().optional(),
 				dryRun: z.boolean().optional(),
+				provider: z.string().optional(),
+				dnsProviderId: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -739,6 +973,8 @@ export const operatorRouter = createTRPCRouter({
 				waitDnsTimeoutMs: z.number().int().optional(),
 				skipHealthCheck: z.boolean().optional(),
 				dryRun: z.boolean().optional(),
+				provider: z.string().optional(),
+				dnsProviderId: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -773,6 +1009,10 @@ export const operatorRouter = createTRPCRouter({
 				priority: z.number().int().min(0).max(65535).optional(),
 				waitForResolution: z.boolean().optional().default(true),
 				waitDnsTimeoutMs: z.number().int().optional(),
+				provider: z.string().optional(),
+				dnsProviderId: z.string().optional(),
+				dnsZoneId: z.string().optional(),
+				cfZoneId: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -785,6 +1025,9 @@ export const operatorRouter = createTRPCRouter({
 					proxied: input.proxied,
 					ttl: input.ttl,
 					priority: input.priority,
+					dnsZoneId: input.dnsZoneId || input.cfZoneId,
+					cfZoneId: input.dnsZoneId || input.cfZoneId,
+					dnsProviderId: input.dnsProviderId,
 				})
 				await audit(ctx, {
 					action: "update",

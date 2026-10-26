@@ -47,7 +47,7 @@ export const tools: ToolDef[] = [
 	{
 		name: "dns.status",
 		description:
-			"Show whether Auto DNS / DNS provider credentials are configured for the org. Returns last4 only — never the token. Alias of cloudflare.status. Example: {}",
+			"Show whether DNS provider credentials (Cloudflare, Route53, Porkbun, Infomaniak, OVH) are configured for the active organization. Returns safe summary with last4 only. Alias of cloudflare.status. Example: {}",
 		schema: empty,
 		annotations: {
 			title: "DNS Provider Status",
@@ -56,12 +56,12 @@ export const tools: ToolDef[] = [
 			openWorldHint: true,
 		},
 		handler: async () =>
-			formatToolResult(await apiGet("/operator.cloudflareStatus")),
+			formatToolResult(await apiGet("/operator.dnsStatus")),
 	},
 	{
 		name: "cloudflare.status",
 		description:
-			"Deprecated alias of dns.status. Show Cloudflare/DNS credential status (last4 only). Example: {}",
+			"Deprecated alias of dns.status. Show DNS provider credential status (last4 only). Example: {}",
 		schema: empty,
 		annotations: {
 			title: "Cloudflare Status (alias)",
@@ -70,12 +70,12 @@ export const tools: ToolDef[] = [
 			openWorldHint: true,
 		},
 		handler: async () =>
-			formatToolResult(await apiGet("/operator.cloudflareStatus")),
+			formatToolResult(await apiGet("/operator.dnsStatus")),
 	},
 	{
 		name: "dns.listZones",
 		description:
-			"List DNS zones accessible via the configured provider credential. Alias of cloudflare.listZones. Example: {}",
+			"List all DNS zones accessible across configured DNS providers (Cloudflare, Route53, Porkbun, Infomaniak, OVH). Alias of cloudflare.listZones. Example: {}",
 		schema: empty,
 		annotations: {
 			title: "List DNS Zones",
@@ -83,12 +83,12 @@ export const tools: ToolDef[] = [
 			idempotentHint: true,
 			openWorldHint: true,
 		},
-		handler: async () => formatToolResult(await apiGet("/operator.listZones")),
+		handler: async () => formatToolResult(await apiGet("/operator.listDnsZones")),
 	},
 	{
 		name: "cloudflare.listZones",
 		description:
-			"Deprecated alias of dns.listZones. List Cloudflare zones. Example: {}",
+			"Deprecated alias of dns.listZones. List accessible DNS zones. Example: {}",
 		schema: empty,
 		annotations: {
 			title: "List Cloudflare Zones (alias)",
@@ -96,15 +96,21 @@ export const tools: ToolDef[] = [
 			idempotentHint: true,
 			openWorldHint: true,
 		},
-		handler: async () => formatToolResult(await apiGet("/operator.listZones")),
+		handler: async () => formatToolResult(await apiGet("/operator.listDnsZones")),
 	},
 	{
 		name: "dns.listRecords",
 		description:
-			"List DNS records in a zone. Params: cfZoneId or dnsZoneId. Example: {\"dnsZoneId\":\"abc123\"}",
+			"List DNS records in a zone across configured DNS providers. Params: dnsZoneId or cfZoneId, optional dnsProviderId. Example: {\"dnsZoneId\":\"abc123\"}",
 		schema: z.object({
-			dnsZoneId: z.string().min(1).optional().describe("Provider zone id"),
+			dnsZoneId: z.string().min(1).optional().describe("DNS Zone id"),
 			cfZoneId: z.string().min(1).optional().describe("Alias of dnsZoneId"),
+			dnsProviderId: z
+				.string()
+				.min(1)
+				.optional()
+				.describe("Optional upstream DNS provider ID"),
+			credentialId: z.string().min(1).optional(),
 		}),
 		annotations: {
 			title: "List Zone DNS Records",
@@ -113,11 +119,16 @@ export const tools: ToolDef[] = [
 			openWorldHint: true,
 		},
 		handler: async (input) => {
-			const cfZoneId =
+			const dnsZoneId =
 				(input.dnsZoneId as string | undefined) ||
 				(input.cfZoneId as string | undefined);
 			return formatToolResult(
-				await apiGet("/operator.listZoneDnsRecords", { cfZoneId }),
+				await apiGet("/operator.listDnsRecords", {
+					dnsZoneId,
+					cfZoneId: dnsZoneId,
+					dnsProviderId: input.dnsProviderId,
+					credentialId: input.credentialId,
+				}),
 			);
 		},
 	},
@@ -127,6 +138,7 @@ export const tools: ToolDef[] = [
 			"Deprecated alias of dns.listRecords. Params: cfZoneId. Example: {\"cfZoneId\":\"abc123\"}",
 		schema: z.object({
 			cfZoneId: z.string().min(1).describe("Cloudflare zone id"),
+			credentialId: z.string().min(1).optional(),
 		}),
 		annotations: {
 			title: "List Zone DNS Records (alias)",
@@ -136,20 +148,29 @@ export const tools: ToolDef[] = [
 		},
 		handler: async (input) =>
 			formatToolResult(
-				await apiGet("/operator.listZoneDnsRecords", input),
+				await apiGet("/operator.listDnsRecords", input),
 			),
 	},
 	{
 		name: "dns.upsertRecord",
 		description:
-			"Idempotent create/update of A/AAAA/CNAME/TXT/MX by zone+name. Cloudflare Auto DNS forces proxied=true (ignore proxied:false). Example: {\"name\":\"app.example.com\",\"type\":\"A\",\"content\":\"23.94.107.153\"}",
+			"Idempotent create/update of A/AAAA/CNAME/TXT/MX across any configured DNS provider. Proxied supported on Cloudflare. Example: {\"name\":\"app.example.com\",\"type\":\"A\",\"content\":\"23.94.107.153\"}",
 		schema: z.object({
-			dnsZoneId: z.string().optional(),
-			cfZoneId: z.string().optional(),
-			name: z.string().min(1),
+			dnsZoneId: z.string().optional().describe("DNS Zone ID"),
+			cfZoneId: z.string().optional().describe("Alias of dnsZoneId"),
+			dnsProviderId: z
+				.string()
+				.optional()
+				.describe("Optional upstream DNS provider ID"),
+			name: z.string().min(1).describe("FQDN e.g. app.example.com"),
 			type: z.enum(["A", "AAAA", "CNAME", "TXT", "MX"]),
-			content: z.string().min(1),
-			proxied: z.boolean().optional(),
+			content: z.string().min(1).describe("IP address or host target"),
+			proxied: z
+				.boolean()
+				.optional()
+				.describe(
+					"Proxy traffic through CDN (supported on Cloudflare; ignored on DNS-only providers)",
+				),
 			ttl: z.union([z.literal(1), z.number().int()]).optional(),
 			priority: z.number().int().optional(),
 		}),
@@ -159,13 +180,13 @@ export const tools: ToolDef[] = [
 			openWorldHint: true,
 		},
 		handler: async (input) => {
-			const { dnsZoneId, ...rest } = input;
+			const { dnsZoneId, cfZoneId, ...rest } = input;
+			const zoneId = (dnsZoneId as string | undefined) || (cfZoneId as string | undefined);
 			return formatToolResult(
 				await apiPost("/operator.upsertDnsRecord", {
 					...rest,
-					cfZoneId: (dnsZoneId as string | undefined) || rest.cfZoneId,
-					// CF policy: always proxied
-					proxied: true,
+					dnsZoneId: zoneId,
+					cfZoneId: zoneId,
 				}),
 			);
 		},
@@ -173,7 +194,7 @@ export const tools: ToolDef[] = [
 	{
 		name: "cloudflare.upsertDnsRecord",
 		description:
-			"Deprecated alias of dns.upsertRecord. Cloudflare always forces proxied=true.",
+			"Deprecated alias of dns.upsertRecord. Cloudflare policy defaults to proxied=true.",
 		schema: z.object({
 			cfZoneId: z.string().optional(),
 			name: z.string().min(1),
@@ -192,19 +213,20 @@ export const tools: ToolDef[] = [
 			formatToolResult(
 				await apiPost("/operator.upsertDnsRecord", {
 					...input,
-					proxied: true,
+					proxied: input.proxied ?? true,
 				}),
 			),
 	},
 	{
 		name: "dns.deleteRecord",
 		description:
-			"Delete a DNS record by zone+record ids. Example: {\"dnsZoneId\":\"z\",\"dnsRecordId\":\"r\"}",
+			"Delete a DNS record by zone and record ids across any configured provider. Example: {\"dnsZoneId\":\"z\",\"dnsRecordId\":\"r\"}",
 		schema: z.object({
-			dnsZoneId: z.string().min(1).optional(),
-			cfZoneId: z.string().min(1).optional(),
-			dnsRecordId: z.string().min(1).optional(),
-			cfRecordId: z.string().min(1).optional(),
+			dnsZoneId: z.string().min(1).optional().describe("DNS Zone ID"),
+			cfZoneId: z.string().min(1).optional().describe("Alias of dnsZoneId"),
+			dnsRecordId: z.string().min(1).optional().describe("DNS Record ID"),
+			cfRecordId: z.string().min(1).optional().describe("Alias of dnsRecordId"),
+			dnsProviderId: z.string().min(1).optional(),
 		}),
 		annotations: {
 			title: "Delete DNS Record",
@@ -214,12 +236,19 @@ export const tools: ToolDef[] = [
 		handler: async (input) =>
 			formatToolResult(
 				await apiPost("/operator.deleteDnsRecord", {
+					dnsZoneId:
+						(input.dnsZoneId as string | undefined) ||
+						(input.cfZoneId as string | undefined),
 					cfZoneId:
 						(input.dnsZoneId as string | undefined) ||
 						(input.cfZoneId as string | undefined),
+					dnsRecordId:
+						(input.dnsRecordId as string | undefined) ||
+						(input.cfRecordId as string | undefined),
 					cfRecordId:
 						(input.dnsRecordId as string | undefined) ||
 						(input.cfRecordId as string | undefined),
+					dnsProviderId: input.dnsProviderId,
 				}),
 			),
 	},
@@ -260,7 +289,7 @@ export const tools: ToolDef[] = [
 	{
 		name: "dns.provision",
 		description:
-			"Provision a DNS record with integrated Cloudflare (or specified provider) and wait for DNS resolution. Auto-detects zone from FQDN. Example: {\"name\":\"api.example.com\",\"content\":\"23.94.107.153\",\"type\":\"A\",\"proxied\":true}",
+			"Provision a DNS record across configured DNS providers (Cloudflare, Route53, Porkbun, Infomaniak, OVH) and wait for DNS resolution. Auto-detects zone from FQDN or accepts explicit zone/provider. Example: {\"name\":\"api.example.com\",\"content\":\"23.94.107.153\",\"type\":\"A\"}",
 		schema: z.object({
 			name: z.string().min(1).describe("FQDN e.g. api.example.com"),
 			type: z
@@ -273,6 +302,10 @@ export const tools: ToolDef[] = [
 			priority: z.number().int().optional(),
 			waitForResolution: z.boolean().optional().default(true),
 			waitDnsTimeoutMs: z.number().int().optional(),
+			provider: z.string().optional().describe("DNS provider name e.g. cloudflare, route53, porkbun, infomaniak, ovh"),
+			dnsProviderId: z.string().optional().describe("DNS provider id from Settings -> DNS Providers"),
+			dnsZoneId: z.string().optional().describe("DNS Zone id"),
+			cfZoneId: z.string().optional().describe("Alias of dnsZoneId"),
 		}),
 		annotations: {
 			title: "Provision DNS Record",
@@ -345,6 +378,9 @@ export const tools: ToolDef[] = [
 					"digitalocean",
 					"hetzner",
 					"route53",
+					"porkbun",
+					"infomaniak",
+					"ovh",
 					"gcloud",
 				])
 				.optional(),
@@ -412,7 +448,7 @@ export const tools: ToolDef[] = [
 	{
 		name: "domain.provision",
 		description:
-			"SAFE Auto DNS workflow for applications, compose stacks, or the main Dokploy server: (1) upsert DNS A record (2) wait until public DNS resolves (3) attach Dokploy domain/server settings + HTTPS (4) observe ACME cert (5) HTTPS health check. Prevents NXDOMAIN / rate-limit races. Example: {\"host\":\"dokploy.example.com\",\"domainType\":\"server\",\"https\":true}",
+			"SAFE Auto DNS workflow for applications, compose stacks, or the main Dokploy server: (1) upsert DNS A record (2) wait until public DNS resolves (3) attach Dokploy domain/server settings + HTTPS (4) observe ACME cert (5) HTTPS health check. Prevents NXDOMAIN / rate-limit races across any configured DNS provider.",
 		schema: z.object({
 			host: z.string().min(1),
 			domainType: z.enum(["application", "compose", "server"]),
@@ -435,7 +471,7 @@ export const tools: ToolDef[] = [
 			proxied: z
 				.boolean()
 				.optional()
-				.describe("Always forced true for Cloudflare policy"),
+				.describe("Proxy through Cloudflare CDN when using Cloudflare"),
 			waitDnsTimeoutMs: z.number().int().optional(),
 			skipHealthCheck: z.boolean().optional(),
 			dryRun: z.boolean().optional(),
@@ -445,9 +481,16 @@ export const tools: ToolDef[] = [
 					"digitalocean",
 					"hetzner",
 					"route53",
+					"porkbun",
+					"infomaniak",
+					"ovh",
 					"gcloud",
 				])
 				.optional(),
+			dnsProviderId: z
+				.string()
+				.optional()
+				.describe("DNS provider id from Settings -> DNS Providers"),
 		}),
 		annotations: {
 			title: "Provision Domain (ordered)",
@@ -460,7 +503,7 @@ export const tools: ToolDef[] = [
 	{
 		name: "serverDomain.get",
 		description:
-			"Get current main Dokploy web server domain configuration (host, serverIp, https, certificateType, letsEncryptEmail) and Cloudflare DNS preview. Example: {}",
+			"Get current main Dokploy web server domain configuration (host, serverIp, https, certificateType, letsEncryptEmail) and DNS preview across configured DNS providers. Example: {}",
 		schema: z.object({}),
 		annotations: {
 			title: "Get Server Domain",
@@ -494,7 +537,7 @@ export const tools: ToolDef[] = [
 	{
 		name: "serverDomain.previewDns",
 		description:
-			"Preview Cloudflare DNS drift, target IP, zone match, and current record for the main Dokploy server domain. Example: {\"proxied\":true}",
+			"Preview DNS drift, target IP, zone match, and current record for the main Dokploy server domain across configured DNS providers. Example: {\"proxied\":true}",
 		schema: z.object({
 			proxied: z.boolean().optional().default(true),
 		}),
@@ -512,7 +555,7 @@ export const tools: ToolDef[] = [
 	{
 		name: "serverDomain.applyDns",
 		description:
-			"Sync/apply Cloudflare DNS A-record for the main Dokploy server domain and configure Traefik DNS-01 certificate resolver. Example: {\"proxied\":true}",
+			"Sync/apply DNS A-record for the main Dokploy server domain with configured DNS provider and configure Traefik certificate resolver. Example: {\"proxied\":true}",
 		schema: z.object({
 			proxied: z.boolean().optional().default(true),
 		}),
@@ -526,7 +569,7 @@ export const tools: ToolDef[] = [
 	{
 		name: "serverDomain.provision",
 		description:
-			"End-to-end automated zero-downtime provisioning of the main Dokploy server domain: upsert Cloudflare DNS -> wait resolution -> update server settings & Traefik -> observe ACME certificate -> verify HTTPS health. Example: {\"host\":\"dokploy.example.com\",\"https\":true}",
+			"End-to-end automated zero-downtime provisioning of the main Dokploy server domain: upsert DNS -> wait resolution -> update server settings & Traefik -> observe ACME certificate -> verify HTTPS health across configured DNS providers. Example: {\"host\":\"dokploy.example.com\",\"https\":true}",
 		schema: z.object({
 			host: z.string().min(1),
 			https: z.boolean().optional().default(true),
@@ -540,6 +583,8 @@ export const tools: ToolDef[] = [
 			waitDnsTimeoutMs: z.number().int().optional(),
 			skipHealthCheck: z.boolean().optional(),
 			dryRun: z.boolean().optional(),
+			provider: z.string().optional(),
+			dnsProviderId: z.string().optional(),
 		}),
 		annotations: {
 			title: "Provision Server Domain (ordered)",

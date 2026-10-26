@@ -25,6 +25,7 @@ export default defineConfig({
 	],
 	resolve: {
 		alias: {
+			"@": path.resolve(__dirname, ".."),
 			"@dokploy/server": path.resolve(
 				__dirname,
 				"../../../packages/server/src",

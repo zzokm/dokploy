@@ -161,10 +161,10 @@ const ServerDomainCloudflareManageContent = ({
 				<p>
 					Connect a DNS provider on the{" "}
 					<Link
-						href="/dashboard/domains"
+						href="/dashboard/settings/dns"
 						className="text-foreground underline underline-offset-2"
 					>
-						Domains
+						DNS Providers
 					</Link>{" "}
 					page first.
 				</p>

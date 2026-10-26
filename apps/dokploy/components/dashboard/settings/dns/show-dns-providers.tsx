@@ -1,5 +1,6 @@
-import { EyeIcon, Globe, Loader2, Trash2 } from "lucide-react";
+import { EyeIcon, Globe, Globe2, Loader2, Network, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { dnsProviderIcons } from "@/components/icons/dns-provider-icons";
@@ -13,12 +14,19 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import {
+	Tabs,
+	TabsContent,
+	TabsList,
+	TabsTrigger,
+} from "@/components/ui/tabs";
+import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { api } from "@/utils/api";
 import { HandleDnsProvider } from "./handle-dns-provider";
+import { DomainsInventoryTable } from "@/components/dashboard/domains/domains-inventory-table";
 
 const providerLabels: Record<string, string> = {
 	cloudflare: "Cloudflare",
@@ -29,30 +37,56 @@ const providerLabels: Record<string, string> = {
 };
 
 export const ShowDnsProviders = () => {
+	const router = useRouter();
+	const activeTab = (router.query.tab as string) === "domains" ? "domains" : "providers";
 	const [removingId, setRemovingId] = useState<string | null>(null);
 	const { mutateAsync } = api.dnsProvider.remove.useMutation();
 	const { data, isPending, refetch } = api.dnsProvider.all.useQuery();
 	const { data: permissions } = api.user.getPermissions.useQuery();
 
+	const handleTabChange = (value: string) => {
+		void router.push(
+			{
+				pathname: router.pathname,
+				query: { ...router.query, tab: value },
+			},
+			undefined,
+			{ shallow: true },
+		);
+	};
+
 	return (
 		<div className="w-full">
 			<Card className="h-full bg-sidebar p-2.5 rounded-xl">
 				<div className="rounded-xl bg-background shadow-md">
-					<div className="flex flex-wrap items-center justify-between gap-4 p-6">
-						<CardHeader className="flex-1 p-0">
-							<CardTitle className="text-xl flex flex-row gap-2">
-								<Globe className="size-6 text-muted-foreground self-center" />
-								DNS Providers
-							</CardTitle>
-							<CardDescription>
-								Connect a DNS provider so Dokploy can create the A/CNAME record
-								for a domain instead of you setting it up by hand.
-							</CardDescription>
-						</CardHeader>
-						{permissions?.dnsProvider.create && <HandleDnsProvider />}
-					</div>
+					<Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+						<div className="flex flex-wrap items-center justify-between gap-4 p-6">
+							<CardHeader className="flex-1 p-0">
+								<CardTitle className="text-xl flex flex-row gap-2">
+									<Globe className="size-6 text-muted-foreground self-center" />
+									DNS Providers & Domains
+								</CardTitle>
+								<CardDescription>
+									Connect and manage DNS providers to automate domain records, and monitor all hostnames across your infrastructure.
+								</CardDescription>
+							</CardHeader>
+							<div className="flex items-center gap-3">
+								<TabsList>
+									<TabsTrigger value="providers" className="gap-1.5">
+										<Network className="size-4" />
+										DNS Providers
+									</TabsTrigger>
+									<TabsTrigger value="domains" className="gap-1.5">
+										<Globe2 className="size-4" />
+										All Domains
+									</TabsTrigger>
+								</TabsList>
+								{permissions?.dnsProvider.create && activeTab === "providers" && <HandleDnsProvider />}
+							</div>
+						</div>
 
-					<CardContent className="flex min-h-[60vh] flex-col gap-4 border-t py-8">
+						<TabsContent value="providers" className="m-0">
+							<CardContent className="flex min-h-[60vh] flex-col gap-4 border-t py-8">
 						{isPending ? (
 							<div className="flex flex-1 flex-row items-center justify-center gap-2 text-sm text-muted-foreground">
 								<span>Loading...</span>
@@ -166,7 +200,15 @@ export const ShowDnsProviders = () => {
 								})}
 							</ul>
 						)}
-					</CardContent>
+							</CardContent>
+						</TabsContent>
+
+						<TabsContent value="domains" className="m-0">
+							<CardContent className="border-t py-6">
+								<DomainsInventoryTable />
+							</CardContent>
+						</TabsContent>
+					</Tabs>
 				</div>
 			</Card>
 		</div>

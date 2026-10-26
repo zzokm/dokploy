@@ -222,14 +222,6 @@ const MENU: Menu = {
 		},
 		{
 			isSingle: true,
-			title: "Domains",
-			url: "/dashboard/domains",
-			icon: Globe,
-			isEnabled: ({ permissions, isCloud }) =>
-				!!(permissions?.organization.update && !isCloud),
-		},
-		{
-			isSingle: true,
 			title: "Swarm",
 			url: "/dashboard/swarm",
 			icon: PieChart,

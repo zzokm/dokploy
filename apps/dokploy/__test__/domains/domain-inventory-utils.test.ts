@@ -255,7 +255,7 @@ describe("buildDomainEditHref", () => {
 				composeId: null,
 				domainId: "dns:cloudflare:r1",
 			}),
-		).toBe("/dashboard/domains");
+		).toBe("/dashboard/settings/dns");
 	});
 });
 

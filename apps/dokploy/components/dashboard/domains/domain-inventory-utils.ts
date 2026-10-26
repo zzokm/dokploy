@@ -176,7 +176,7 @@ export const buildDomainEditHref = (input: {
 				return `/dashboard/project/${input.projectId}/environment/${input.environmentId}/services/application/${input.applicationId}?${qs}`;
 			}
 		}
-		return "/dashboard/domains";
+		return "/dashboard/settings/dns";
 	}
 	if (!input.projectId || !input.environmentId) {
 		return null;

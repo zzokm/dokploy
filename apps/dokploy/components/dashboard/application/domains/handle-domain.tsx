@@ -211,7 +211,10 @@ export const AddDomain = ({
 		undefined,
 		{
 			enabled:
-				isOpen && !!cfSettings?.connected && (hostInputMode === "cloudflare" || (!domainId && !!initialHost.trim() && !prefillProcessed)),
+				isOpen &&
+				!!cfSettings?.connected &&
+				(hostInputMode === "cloudflare" ||
+					(!domainId && !!initialHost.trim() && !prefillProcessed)),
 		},
 	);
 	const { data, refetch } = api.domain.one.useQuery(
@@ -401,9 +404,7 @@ export const AddDomain = ({
 			if (zone) {
 				const zoneName = zone.name.toLowerCase();
 				const label =
-					prefill === zoneName
-						? "@"
-						: prefill.slice(0, -(zoneName.length + 1));
+					prefill === zoneName ? "@" : prefill.slice(0, -(zoneName.length + 1));
 				setHostInputMode("cloudflare");
 				setSelectedCfZoneId(zone.cfZoneId);
 				setSubdomainLabel(label);
@@ -417,7 +418,7 @@ export const AddDomain = ({
 				return;
 			}
 		}
-		
+
 		setHostInputMode("manual");
 		setSelectedCfZoneId("");
 		setSubdomainLabel("");
@@ -441,7 +442,7 @@ export const AddDomain = ({
 
 	useEffect(() => {
 		if (!domainId || !data || data.dnsProvider === "none" || !cfZones) return;
-		
+
 		const zones = cfZones.filter((z) => z.status !== "disabled" && !z.paused);
 		const zone = zones
 			.slice()
@@ -451,7 +452,7 @@ export const AddDomain = ({
 					data.host === z.name.toLowerCase() ||
 					data.host.endsWith(`.${z.name.toLowerCase()}`),
 			);
-			
+
 		if (zone && !selectedCfZoneId) {
 			const zoneName = zone.name.toLowerCase();
 			const label =
@@ -572,8 +573,7 @@ export const AddDomain = ({
 
 		const traefikMeHost = finalHost.includes("traefik.me");
 		// Managed DNS is opt-in via the toggle (hostInputMode), not merely CF connected.
-		const wantsManagedDns =
-			!traefikMeHost && hostInputMode === "cloudflare";
+		const wantsManagedDns = !traefikMeHost && hostInputMode === "cloudflare";
 
 		await mutateAsync({
 			domainId,
@@ -864,8 +864,7 @@ export const AddDomain = ({
 										</div>
 									)}
 								</div>
-								{hostInputMode === "cloudflare" &&
-								cfSettings?.connected ? (
+								{hostInputMode === "cloudflare" && cfSettings?.connected ? (
 									<div className="animate-in fade-in-0 slide-in-from-bottom-1 space-y-4 duration-300">
 										<div className="space-y-2">
 											<p className="text-sm font-medium">Domain</p>
@@ -1064,7 +1063,8 @@ export const AddDomain = ({
 											<div className="space-y-0.5">
 												<FormLabel>Automatic Port</FormLabel>
 												<FormDescription>
-													Allow Traefik to automatically detect the port your application listens on.
+													Allow Traefik to automatically detect the port your
+													application listens on.
 												</FormDescription>
 												<FormMessage />
 											</div>
@@ -1093,8 +1093,9 @@ export const AddDomain = ({
 													<FormLabel>Container Port</FormLabel>
 													<FormDescription>
 														The port your app listens on <em>inside</em> the
-														container â€” not a host publish port. Traefik reaches
-														the container over <code>dokploy-network</code>.
+														container â€” not a host publish port. Traefik
+														reaches the container over{" "}
+														<code>dokploy-network</code>.
 													</FormDescription>
 													<FormControl>
 														<NumberInput placeholder={"3000"} {...field} />
@@ -1183,7 +1184,19 @@ export const AddDomain = ({
 													<FormControl>
 														<Switch
 															checked={field.value}
-															onCheckedChange={field.onChange}
+															onCheckedChange={(checked) => {
+																field.onChange(checked);
+																if (checked) {
+																	const currentCert =
+																		form.getValues("certificateType");
+																	if (!currentCert || currentCert === "none") {
+																		form.setValue(
+																			"certificateType",
+																			"letsencrypt",
+																		);
+																	}
+																}
+															}}
 														/>
 													</FormControl>
 												</FormItem>
@@ -1274,9 +1287,9 @@ export const AddDomain = ({
 															<FormDescription>
 																Enter the <strong>name</strong> of a Traefik
 																cert resolver defined in your static
-																configuration (e.g. <code>letsencrypt</code>) â€”
-																not certificate or private key content. To use a
-																certificate you pasted in the Certificates
+																configuration (e.g. <code>letsencrypt</code>)
+																â€” not certificate or private key content. To
+																use a certificate you pasted in the Certificates
 																section, choose <strong>None</strong> instead
 																and Traefik will match it by SNI.
 															</FormDescription>

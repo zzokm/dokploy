@@ -99,6 +99,10 @@ export const updateLetsEncryptEmail = (newEmail: string | null) => {
 		} else {
 			throw new Error("Invalid Let's Encrypt configuration structure.");
 		}
+		if (config?.certificatesResolvers?.["letsencrypt-cloudflare"]?.acme) {
+			config.certificatesResolvers["letsencrypt-cloudflare"].acme.email =
+				newEmail;
+		}
 		const newYamlContent = stringify(config);
 		writeFileSync(configPath, newYamlContent, "utf8");
 	} catch (error) {

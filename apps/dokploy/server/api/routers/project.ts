@@ -32,6 +32,7 @@ import {
 	updateUser,
 } from "@dokploy/server";
 import { db } from "@dokploy/server/db";
+import { deleteCloudflareAppDnsForDomain } from "@dokploy/server/services/cloudflare/app-domain-automation";
 import {
 	addNewEnvironment,
 	addNewProject,
@@ -39,8 +40,6 @@ import {
 	checkProjectAccess,
 	findMemberByUserId,
 } from "@dokploy/server/services/permission";
-import { deleteCloudflareAppDnsForDomain } from "@dokploy/server/services/cloudflare/app-domain-automation";
-import { serviceColumns } from "@dokploy/server/services/project";
 import { TRPCError } from "@trpc/server";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
@@ -61,6 +60,7 @@ import {
 	environments,
 	libsql,
 	mariadb,
+	member,
 	mongo,
 	mysql,
 	postgres,
@@ -825,6 +825,31 @@ export const projectRouter = createTRPCRouter({
 				}
 
 				const deletedProject = await deleteProject(input.projectId);
+
+				// Clean up member permissions for this project and its environments
+				const envIds = envs.map((e) => e.environmentId);
+				const orgMembers = await db.query.member.findMany({
+					where: eq(member.organizationId, ctx.session.activeOrganizationId),
+				});
+				for (const m of orgMembers) {
+					const hasProj = m.accessedProjects.includes(input.projectId);
+					const hasEnv = m.accessedEnvironments.some((eid: string) =>
+						envIds.includes(eid),
+					);
+					if (hasProj || hasEnv) {
+						await db
+							.update(member)
+							.set({
+								accessedProjects: m.accessedProjects.filter(
+									(id: string) => id !== input.projectId,
+								),
+								accessedEnvironments: m.accessedEnvironments.filter(
+									(id: string) => !envIds.includes(id),
+								),
+							})
+							.where(eq(member.id, m.id));
+					}
+				}
 
 				await audit(ctx, {
 					action: "delete",

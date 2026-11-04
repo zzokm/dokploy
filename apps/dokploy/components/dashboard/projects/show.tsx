@@ -26,7 +26,6 @@ import {
 	AlertDialogFooter,
 	AlertDialogHeader,
 	AlertDialogTitle,
-	AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -65,6 +64,13 @@ export const ShowProjects = () => {
 	const { data: permissions } = api.user.getPermissions.useQuery();
 	const { mutateAsync } = api.project.remove.useMutation();
 	const { data: availableTags } = api.tag.all.useQuery();
+
+	const [projectToDelete, setProjectToDelete] = useState<{
+		projectId: string;
+		name: string;
+		hasServices: boolean;
+	} | null>(null);
+	const [isDeletingProject, setIsDeletingProject] = useState(false);
 
 	const [searchQuery, setSearchQuery] = useState(
 		router.isReady && typeof router.query.q === "string" ? router.query.q : "",
@@ -419,71 +425,20 @@ export const ShowProjects = () => {
 																					onClick={(e) => e.stopPropagation()}
 																				>
 																					{permissions?.project.delete && (
-																						<AlertDialog>
-																							<AlertDialogTrigger className="w-full">
-																								<DropdownMenuItem
-																									className="w-full cursor-pointer  space-x-3"
-																									onSelect={(e) =>
-																										e.preventDefault()
-																									}
-																								>
-																									<TrashIcon className="size-4" />
-																									<span>Delete</span>
-																								</DropdownMenuItem>
-																							</AlertDialogTrigger>
-																							<AlertDialogContent>
-																								<AlertDialogHeader>
-																									<AlertDialogTitle>
-																										Are you sure to delete this
-																										project?
-																									</AlertDialogTitle>
-																									{!emptyServices ? (
-																										<div className="flex flex-row gap-4 rounded-lg bg-yellow-50 p-2 dark:bg-yellow-950">
-																											<AlertTriangle className="text-yellow-600 dark:text-yellow-400" />
-																											<span className="text-sm text-yellow-600 dark:text-yellow-400">
-																												You have active
-																												services, please delete
-																												them first
-																											</span>
-																										</div>
-																									) : (
-																										<AlertDialogDescription>
-																											This action cannot be
-																											undone
-																										</AlertDialogDescription>
-																									)}
-																								</AlertDialogHeader>
-																								<AlertDialogFooter>
-																									<AlertDialogCancel>
-																										Cancel
-																									</AlertDialogCancel>
-																									<AlertDialogAction
-																										disabled={!emptyServices}
-																										onClick={async () => {
-																											await mutateAsync({
-																												projectId:
-																													project.projectId,
-																											})
-																												.then(() => {
-																													toast.success(
-																														"Project deleted successfully",
-																													);
-																												})
-																												.catch(() => {
-																													toast.error(
-																														"Error deleting this project",
-																													);
-																												})
-																												.finally(() => {
-																													utils.project.all.invalidate();
-																												});
-																										}}
-																									>
-																										Delete
-																									</AlertDialogAction>
-																								</AlertDialogFooter>
-																							</AlertDialogContent>
-																						</AlertDialog>
+																						<DropdownMenuItem
+																							className="w-full cursor-pointer space-x-3 text-destructive focus:text-destructive"
+																							onSelect={(e) => {
+																								e.preventDefault();
+																								setProjectToDelete({
+																									projectId: project.projectId,
+																									name: project.name,
+																									hasServices: !emptyServices,
+																								});
+																							}}
+																						>
+																							<TrashIcon className="size-4" />
+																							<span>Delete</span>
+																						</DropdownMenuItem>
 																					)}
 																				</div>
 																			</DropdownMenuContent>
@@ -516,6 +471,72 @@ export const ShowProjects = () => {
 					</div>
 				</Card>
 			</div>
+			<AlertDialog
+				open={!!projectToDelete}
+				onOpenChange={(open) => {
+					if (!open && !isDeletingProject) {
+						setProjectToDelete(null);
+					}
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>
+							Are you sure to delete this project?
+						</AlertDialogTitle>
+						{projectToDelete?.hasServices ? (
+							<div className="flex flex-row gap-4 rounded-lg bg-yellow-50 p-2 dark:bg-yellow-950">
+								<AlertTriangle className="text-yellow-600 dark:text-yellow-400" />
+								<span className="text-sm text-yellow-600 dark:text-yellow-400">
+									You have active services, please delete them first
+								</span>
+							</div>
+						) : (
+							<AlertDialogDescription>
+								This action cannot be undone. Are you sure you want to delete{" "}
+								<span className="font-semibold text-foreground">
+									{projectToDelete?.name}
+								</span>
+								?
+							</AlertDialogDescription>
+						)}
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel disabled={isDeletingProject}>
+							Cancel
+						</AlertDialogCancel>
+						<AlertDialogAction
+							disabled={projectToDelete?.hasServices || isDeletingProject}
+							onClick={async (e) => {
+								e.preventDefault();
+								if (!projectToDelete) return;
+								setIsDeletingProject(true);
+								try {
+									await mutateAsync({
+										projectId: projectToDelete.projectId,
+									});
+									toast.success("Project deleted successfully");
+									setProjectToDelete(null);
+									await utils.project.all.invalidate();
+								} catch (error: any) {
+									toast.error(error?.message || "Error deleting this project");
+								} finally {
+									setIsDeletingProject(false);
+								}
+							}}
+						>
+							{isDeletingProject ? (
+								<div className="flex items-center gap-2">
+									<Loader2 className="animate-spin size-4" />
+									<span>Deleting...</span>
+								</div>
+							) : (
+								"Delete"
+							)}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</>
 	);
 };

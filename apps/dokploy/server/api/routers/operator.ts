@@ -1,4 +1,28 @@
 import {
+	createDomain,
+	deployCompose,
+	findApplicationById,
+	findDomainById,
+	findDomainsByApplicationId,
+	findDomainsByComposeId,
+	removeDomain,
+	removeDomainById,
+	updateDomainById,
+} from "@dokploy/server";
+import { ensureCloudflareAppDnsForDomain } from "@dokploy/server/services/cloudflare/app-domain-automation";
+import {
+	applyServerDomainDns,
+	previewServerDomainDns,
+	resolveServerDomainCertResolver,
+} from "@dokploy/server/services/cloudflare/server-domain-dns";
+import { ensureTraefikCloudflareDnsToken } from "@dokploy/server/services/cloudflare/traefik-dns-token";
+import { listZoneDnsRecords as listZoneDnsRecordsService } from "@dokploy/server/services/cloudflare/zone-dns-records";
+import {
+	findDnsProviderInOrganization,
+	findDnsProvidersByOrganizationId,
+	listDnsProviderRecords,
+} from "@dokploy/server/services/dns-provider";
+import {
 	checkPublicUrlHealth,
 	deleteDnsRecordById,
 	getDnsProviderCredentialStatus,
@@ -19,48 +43,21 @@ import {
 	upsertDnsRecordByName,
 	waitForHostnameResolution,
 	zoneDnsRecordTypeSchema,
-} from "@dokploy/server/services/operator"
-import {
-	createDomain,
-	findDomainById,
-	findDomainsByApplicationId,
-	findDomainsByComposeId,
-	removeDomain,
-	removeDomainById,
-	updateDomainById,
-	findApplicationById,
-} from "@dokploy/server"
+} from "@dokploy/server/services/operator";
+import { checkServicePermissionAndAccess } from "@dokploy/server/services/permission";
 import {
 	getWebServerSettings,
 	updateWebServerSettings,
-} from "@dokploy/server/services/web-server-settings"
+} from "@dokploy/server/services/web-server-settings";
+import { manageDomain } from "@dokploy/server/utils/traefik/domain";
 import {
-	updateServerTraefik,
 	updateLetsEncryptEmail,
-} from "@dokploy/server/utils/traefik/web-server"
-import {
-	previewServerDomainDns,
-	applyServerDomainDns,
-	resolveServerDomainCertResolver,
-} from "@dokploy/server/services/cloudflare/server-domain-dns"
-import { ensureCloudflareAppDnsForDomain } from "@dokploy/server/services/cloudflare/app-domain-automation"
-import { ensureTraefikCloudflareDnsToken } from "@dokploy/server/services/cloudflare/traefik-dns-token"
-import { manageDomain } from "@dokploy/server/utils/traefik/domain"
-import { checkServicePermissionAndAccess } from "@dokploy/server/services/permission"
-import { listZoneDnsRecords as listZoneDnsRecordsService } from "@dokploy/server/services/cloudflare/zone-dns-records"
-import { TRPCError } from "@trpc/server"
-import { z } from "zod"
-import {
-	createTRPCRouter,
-	protectedProcedure,
-} from "@/server/api/trpc"
-import { audit } from "@/server/api/utils/audit"
-
-import {
-	findDnsProviderInOrganization,
-	findDnsProvidersByOrganizationId,
-	listDnsProviderRecords,
-} from "@dokploy/server/services/dns-provider"
+	updateServerTraefik,
+} from "@dokploy/server/utils/traefik/web-server";
+import { TRPCError } from "@trpc/server";
+import { z } from "zod";
+import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
+import { audit } from "@/server/api/utils/audit";
 
 const throwOperator = (e: unknown): never => {
 	if (isOperatorError(e)) {
@@ -69,19 +66,19 @@ const throwOperator = (e: unknown): never => {
 				? "UNAUTHORIZED"
 				: e.code === OperatorErrorCode.not_found
 					? "NOT_FOUND"
-					: "BAD_REQUEST"
+					: "BAD_REQUEST";
 		throw new TRPCError({
 			code,
 			message: JSON.stringify(e.toJSON()),
 			cause: e,
-		})
+		});
 	}
 	throw new TRPCError({
 		code: "INTERNAL_SERVER_ERROR",
 		message: e instanceof Error ? e.message : "Operator error",
 		cause: e,
-	})
-}
+	});
+};
 
 /**
  * Operator-grade MCP surface: DNS → domain → cert → health, with stable error codes.
@@ -93,7 +90,7 @@ export const operatorRouter = createTRPCRouter({
 			ok: true as const,
 			service: "dokploy-operator",
 			ts: new Date().toISOString(),
-		}
+		};
 	}),
 
 	whoami: protectedProcedure.query(async ({ ctx }) => {
@@ -104,24 +101,24 @@ export const operatorRouter = createTRPCRouter({
 			role: ctx.user.role,
 			organizationId: ctx.session.activeOrganizationId,
 			// Never expose tokens
-		}
+		};
 	}),
 
 	dnsStatus: protectedProcedure.query(async ({ ctx }) => {
 		try {
 			return await getDnsProviderCredentialStatus(
 				ctx.session.activeOrganizationId,
-			)
+			);
 		} catch (e) {
-			throwOperator(e)
+			throwOperator(e);
 		}
 	}),
 
 	listDnsZones: protectedProcedure.query(async ({ ctx }) => {
 		try {
-			return await listOperatorZones(ctx.session.activeOrganizationId)
+			return await listOperatorZones(ctx.session.activeOrganizationId);
 		} catch (e) {
-			throwOperator(e)
+			throwOperator(e);
 		}
 	}),
 
@@ -135,16 +132,16 @@ export const operatorRouter = createTRPCRouter({
 		)
 		.query(async ({ ctx, input }) => {
 			try {
-				const zoneId = input.dnsZoneId
+				const zoneId = input.dnsZoneId;
 				if (input.dnsProviderId) {
 					const provider = await findDnsProviderInOrganization(
 						input.dnsProviderId,
 						ctx.session.activeOrganizationId,
-					)
+					);
 					const rawRecords = await listDnsProviderRecords(
 						provider.config,
 						zoneId,
-					)
+					);
 					return {
 						dnsZoneId: zoneId,
 						zoneName: "",
@@ -160,14 +157,14 @@ export const operatorRouter = createTRPCRouter({
 							managedBy: "manual" as const,
 							lastSyncedAt: null,
 						})),
-					}
+					};
 				}
 				try {
 					const result = await listZoneDnsRecordsService({
 						organizationId: ctx.session.activeOrganizationId,
 						cfZoneId: zoneId,
 						credentialId: input.credentialId,
-					})
+					});
 					return {
 						dnsZoneId: result.cfZoneId,
 						zoneName: result.zoneName,
@@ -182,17 +179,14 @@ export const operatorRouter = createTRPCRouter({
 							managedBy: r.managedBy,
 							lastSyncedAt: r.lastSyncedAt,
 						})),
-					}
+					};
 				} catch (err) {
 					const providers = await findDnsProvidersByOrganizationId(
 						ctx.session.activeOrganizationId,
-					)
+					);
 					for (const p of providers) {
 						try {
-							const rawRecords = await listDnsProviderRecords(
-								p.config,
-								zoneId,
-							)
+							const rawRecords = await listDnsProviderRecords(p.config, zoneId);
 							return {
 								dnsZoneId: zoneId,
 								zoneName: "",
@@ -210,15 +204,15 @@ export const operatorRouter = createTRPCRouter({
 									managedBy: "manual" as const,
 									lastSyncedAt: null,
 								})),
-							}
+							};
 						} catch {
 							// Continue
 						}
 					}
-					throw err
+					throw err;
 				}
 			} catch (e) {
-				throwOperator(e)
+				throwOperator(e);
 			}
 		}),
 
@@ -227,19 +221,16 @@ export const operatorRouter = createTRPCRouter({
 			z.object({
 				dnsZoneId: z.string().min(1).optional().describe("DNS Zone ID"),
 				dnsProviderId: z.string().min(1).optional(),
-				name: z
-					.string()
-					.min(1)
-					.describe("FQDN e.g. app.example.com"),
+				name: z.string().min(1).describe("FQDN e.g. app.example.com"),
 				type: zoneDnsRecordTypeSchema,
 				content: z.string().min(1).describe("IP, hostname, or TXT value"),
 				proxied: z
 					.boolean()
 					.optional()
-					.describe(
-						"Default false (DNS-only). Set true for Cloudflare proxy.",
-					),
-				ttl: z.union([z.literal(1), z.number().int().min(60).max(86400)]).optional(),
+					.describe("Default false (DNS-only). Set true for Cloudflare proxy."),
+				ttl: z
+					.union([z.literal(1), z.number().int().min(60).max(86400)])
+					.optional(),
 				priority: z.number().int().min(0).max(65535).optional(),
 			}),
 		)
@@ -248,16 +239,16 @@ export const operatorRouter = createTRPCRouter({
 				const result = await upsertDnsRecordByName({
 					organizationId: ctx.session.activeOrganizationId,
 					...input,
-				})
+				});
 				await audit(ctx, {
 					action: "update",
 					resourceType: "domain",
 					resourceId: result.dnsRecordId,
 					resourceName: result.name,
-				})
-				return result
+				});
+				return result;
 			} catch (e) {
-				throwOperator(e)
+				throwOperator(e);
 			}
 		}),
 
@@ -276,9 +267,9 @@ export const operatorRouter = createTRPCRouter({
 					dnsZoneId: input.dnsZoneId,
 					dnsRecordId: input.dnsRecordId,
 					dnsProviderId: input.dnsProviderId,
-				})
+				});
 			} catch (e) {
-				throwOperator(e)
+				throwOperator(e);
 			}
 		}),
 
@@ -293,9 +284,9 @@ export const operatorRouter = createTRPCRouter({
 		)
 		.mutation(async ({ input }) => {
 			try {
-				return await waitForHostnameResolution(input)
+				return await waitForHostnameResolution(input);
 			} catch (e) {
-				throwOperator(e)
+				throwOperator(e);
 			}
 		}),
 
@@ -308,22 +299,24 @@ export const operatorRouter = createTRPCRouter({
 			}),
 		)
 		.query(async ({ ctx, input }) => {
-			const list: Array<Record<string, unknown>> = []
+			const list: Array<Record<string, unknown>> = [];
 			if (input.applicationId) {
 				await checkServicePermissionAndAccess(ctx, input.applicationId, {
 					domain: ["read"],
-				})
-				const appDomains = await findDomainsByApplicationId(input.applicationId)
-				list.push(...appDomains)
+				});
+				const appDomains = await findDomainsByApplicationId(
+					input.applicationId,
+				);
+				list.push(...appDomains);
 			} else if (input.composeId) {
 				await checkServicePermissionAndAccess(ctx, input.composeId, {
 					domain: ["read"],
-				})
-				const composeDomains = await findDomainsByComposeId(input.composeId)
-				list.push(...composeDomains)
+				});
+				const composeDomains = await findDomainsByComposeId(input.composeId);
+				list.push(...composeDomains);
 			}
 			if (input.includeServerDomain) {
-				const settings = await getWebServerSettings()
+				const settings = await getWebServerSettings();
 				if (settings?.host) {
 					list.unshift({
 						domainId: "server",
@@ -334,20 +327,25 @@ export const operatorRouter = createTRPCRouter({
 						path: "/",
 						certificateType: settings.certificateType,
 						serverIp: settings.serverIp,
-					})
+					});
 				}
 			}
-			if (!input.applicationId && !input.composeId && !input.includeServerDomain) {
+			if (
+				!input.applicationId &&
+				!input.composeId &&
+				!input.includeServerDomain
+			) {
 				throw new TRPCError({
 					code: "BAD_REQUEST",
 					message: JSON.stringify({
 						ok: false,
 						code: OperatorErrorCode.validation_error,
-						message: "applicationId, composeId, or includeServerDomain is required",
+						message:
+							"applicationId, composeId, or includeServerDomain is required",
 					}),
-				})
+				});
 			}
-			return list
+			return list;
 		}),
 
 	getDomain: protectedProcedure
@@ -359,7 +357,7 @@ export const operatorRouter = createTRPCRouter({
 		)
 		.query(async ({ input }) => {
 			if (input.domainId === "server") {
-				const settings = await getWebServerSettings()
+				const settings = await getWebServerSettings();
 				return {
 					domainId: "server",
 					domainType: "server" as const,
@@ -368,14 +366,14 @@ export const operatorRouter = createTRPCRouter({
 					https: settings?.https ?? false,
 					certificateType: settings?.certificateType ?? "none",
 					letsEncryptEmail: settings?.letsEncryptEmail ?? null,
-				}
+				};
 			}
 			if (input.domainId) {
-				return await findDomainById(input.domainId)
+				return await findDomainById(input.domainId);
 			}
 			if (input.host) {
-				const norm = input.host.trim().toLowerCase()
-				const settings = await getWebServerSettings()
+				const norm = input.host.trim().toLowerCase();
+				const settings = await getWebServerSettings();
 				if (settings?.host?.trim().toLowerCase() === norm) {
 					return {
 						domainId: "server",
@@ -385,26 +383,26 @@ export const operatorRouter = createTRPCRouter({
 						https: settings.https,
 						certificateType: settings.certificateType,
 						letsEncryptEmail: settings.letsEncryptEmail ?? null,
-					}
+					};
 				}
-				const { db } = await import("@dokploy/server/db")
-				const { domains } = await import("@dokploy/server/db/schema")
-				const { eq } = await import("drizzle-orm")
+				const { db } = await import("@dokploy/server/db");
+				const { domains } = await import("@dokploy/server/db/schema");
+				const { eq } = await import("drizzle-orm");
 				const [row] = await db
 					.select()
 					.from(domains)
 					.where(eq(domains.host, norm))
-					.limit(1)
-				if (row) return row
+					.limit(1);
+				if (row) return row;
 				throw new TRPCError({
 					code: "NOT_FOUND",
 					message: `Domain with host ${input.host} not found`,
-				})
+				});
 			}
 			throw new TRPCError({
 				code: "BAD_REQUEST",
 				message: "domainId or host is required",
-			})
+			});
 		}),
 
 	createDomain: protectedProcedure
@@ -451,34 +449,34 @@ export const operatorRouter = createTRPCRouter({
 					certificateType:
 						input.certificateType ?? (input.https ? "letsencrypt" : "none"),
 					https: input.https ?? true,
-				})
+				});
 
 				if (!settings) {
 					throw new TRPCError({
 						code: "NOT_FOUND",
 						message: "Web server settings not found",
-					})
+					});
 				}
 
 				const certResolver = await resolveServerDomainCertResolver(
 					ctx.session.activeOrganizationId,
 					input.host,
-				)
+				);
 
 				updateServerTraefik(
 					settings,
 					input.host,
 					certResolver ? { certResolver } : undefined,
-				)
+				);
 				if (input.letsEncryptEmail) {
-					updateLetsEncryptEmail(input.letsEncryptEmail)
+					updateLetsEncryptEmail(input.letsEncryptEmail);
 				}
 
 				await audit(ctx, {
 					action: "update",
 					resourceType: "settings",
 					resourceName: "assign-domain-server",
-				})
+				});
 
 				return {
 					domainId: "server",
@@ -487,14 +485,14 @@ export const operatorRouter = createTRPCRouter({
 					https: settings.https,
 					certificateType: settings.certificateType,
 					serverIp: settings.serverIp,
-				}
+				};
 			}
 
-			const serviceId = input.applicationId || input.composeId
+			const serviceId = input.applicationId || input.composeId;
 			if (serviceId) {
 				await checkServicePermissionAndAccess(ctx, serviceId, {
 					domain: ["create"],
-				})
+				});
 			}
 			const supportedDomainDnsProviders = [
 				"akamai",
@@ -505,15 +503,15 @@ export const operatorRouter = createTRPCRouter({
 				"none",
 				"ns1",
 				"route53",
-			] as const
-			type DomainDnsProviderType = (typeof supportedDomainDnsProviders)[number]
+			] as const;
+			type DomainDnsProviderType = (typeof supportedDomainDnsProviders)[number];
 			const dbDnsProvider: DomainDnsProviderType =
 				input.dnsProvider &&
 				(supportedDomainDnsProviders as readonly string[]).includes(
 					input.dnsProvider,
 				)
 					? (input.dnsProvider as DomainDnsProviderType)
-					: "none"
+					: "none";
 
 			const domain = await createDomain({
 				host: input.host,
@@ -533,13 +531,23 @@ export const operatorRouter = createTRPCRouter({
 				middlewares: input.middlewares ?? [],
 				dnsProvider: dbDnsProvider,
 				cfProxied: input.cfProxied ?? false,
-			})
+			});
 			await audit(ctx, {
 				action: "create",
 				resourceType: "domain",
 				resourceId: domain.domainId,
 				resourceName: domain.host,
-			})
+			});
+
+			if (domain.composeId) {
+				await deployCompose({
+					composeId: domain.composeId,
+					titleLog: "Domain provision",
+					descriptionLog: `Provisioned domain ${domain.host}`,
+				}).catch((err) => {
+					console.error("Failed to redeploy compose after domain create:", err);
+				});
+			}
 
 			if (input.dnsProvider && input.dnsProvider !== "none") {
 				try {
@@ -547,16 +555,16 @@ export const operatorRouter = createTRPCRouter({
 						organizationId: ctx.session.activeOrganizationId,
 						domainId: domain.domainId,
 						proxiedDefault: input.cfProxied ?? true,
-					})
+					});
 					void ensureTraefikCloudflareDnsToken({
 						organizationId: ctx.session.activeOrganizationId,
-					}).catch(() => {})
+					}).catch(() => {});
 				} catch (err) {
-					console.error("DNS provider domain auto DNS error:", err)
+					console.error("DNS provider domain auto DNS error:", err);
 				}
 			}
 
-			return domain
+			return domain;
 		}),
 
 	updateDomain: protectedProcedure
@@ -586,33 +594,41 @@ export const operatorRouter = createTRPCRouter({
 					host: input.host?.trim().toLowerCase(),
 					https: input.https,
 					certificateType: input.certificateType,
-				})
+				});
 				const certResolver = await resolveServerDomainCertResolver(
 					ctx.session.activeOrganizationId,
 					settings?.host,
-				)
+				);
 				updateServerTraefik(
 					settings ?? null,
 					settings?.host ?? null,
 					certResolver ? { certResolver } : undefined,
-				)
-				return { domainId: "server", ...settings }
+				);
+				return { domainId: "server", ...settings };
 			}
-			const current = await findDomainById(input.domainId)
-			const serviceId = current.applicationId || current.composeId
+			const current = await findDomainById(input.domainId);
+			const serviceId = current.applicationId || current.composeId;
 			if (serviceId) {
 				await checkServicePermissionAndAccess(ctx, serviceId, {
 					domain: ["create"],
-				})
+				});
 			}
-			const { domainId, useCustomEntrypoint: _unused, ...patch } = input
-			await updateDomainById(domainId, patch)
-			const domain = await findDomainById(domainId)
+			const { domainId, useCustomEntrypoint: _unused, ...patch } = input;
+			await updateDomainById(domainId, patch);
+			const domain = await findDomainById(domainId);
 			if (domain.applicationId) {
-				const application = await findApplicationById(domain.applicationId)
-				await manageDomain(application, domain)
+				const application = await findApplicationById(domain.applicationId);
+				await manageDomain(application, domain);
+			} else if (domain.composeId) {
+				await deployCompose({
+					composeId: domain.composeId,
+					titleLog: "Domain update",
+					descriptionLog: `Updated domain ${domain.host}`,
+				}).catch((err) => {
+					console.error("Failed to redeploy compose after domain update:", err);
+				});
 			}
-			return domain
+			return domain;
 		}),
 
 	deleteDomain: protectedProcedure
@@ -623,34 +639,42 @@ export const operatorRouter = createTRPCRouter({
 					host: null,
 					https: false,
 					certificateType: "none",
-				})
-				updateServerTraefik(settings ?? null, null)
+				});
+				updateServerTraefik(settings ?? null, null);
 				await audit(ctx, {
 					action: "delete",
 					resourceType: "settings",
 					resourceName: "server-domain",
-				})
-				return { domainId: "server", deleted: true }
+				});
+				return { domainId: "server", deleted: true };
 			}
-			const domain = await findDomainById(input.domainId)
-			const serviceId = domain.applicationId || domain.composeId
+			const domain = await findDomainById(input.domainId);
+			const serviceId = domain.applicationId || domain.composeId;
 			if (serviceId) {
 				await checkServicePermissionAndAccess(ctx, serviceId, {
 					domain: ["delete"],
-				})
+				});
 			}
-			const result = await removeDomainById(input.domainId)
+			const result = await removeDomainById(input.domainId);
 			if (domain.applicationId) {
-				const application = await findApplicationById(domain.applicationId)
-				await removeDomain(application, domain.uniqueConfigKey)
+				const application = await findApplicationById(domain.applicationId);
+				await removeDomain(application, domain.uniqueConfigKey);
+			} else if (domain.composeId) {
+				await deployCompose({
+					composeId: domain.composeId,
+					titleLog: "Domain removed",
+					descriptionLog: `Removed domain ${domain.host}`,
+				}).catch((err) => {
+					console.error("Failed to redeploy compose after domain delete:", err);
+				});
 			}
 			await audit(ctx, {
 				action: "delete",
 				resourceType: "domain",
 				resourceId: domain.domainId,
 				resourceName: domain.host,
-			})
-			return result
+			});
+			return result;
 		}),
 
 	/**
@@ -700,38 +724,38 @@ export const operatorRouter = createTRPCRouter({
 		)
 		.mutation(async ({ ctx, input }) => {
 			if (input.domainType !== "server") {
-				const serviceId = input.applicationId || input.composeId
+				const serviceId = input.applicationId || input.composeId;
 				if (serviceId) {
 					await checkServicePermissionAndAccess(ctx, serviceId, {
 						domain: ["create"],
-					})
+					});
 				}
 			}
 			try {
 				const result = await provisionDomain({
 					organizationId: ctx.session.activeOrganizationId,
 					...input,
-				})
+				});
 				if (result.domain?.domainId) {
 					await audit(ctx, {
 						action: "create",
 						resourceType: "domain",
 						resourceId: result.domain.domainId,
 						resourceName: result.host,
-					})
+					});
 				}
-				return result
+				return result;
 			} catch (e) {
-				throwOperator(e)
+				throwOperator(e);
 			}
 		}),
 
 	serverDomainStatus: protectedProcedure.query(async ({ ctx }) => {
 		try {
-			const settings = await getWebServerSettings()
+			const settings = await getWebServerSettings();
 			const dnsPreview = await previewServerDomainDns(
 				ctx.session.activeOrganizationId,
-			)
+			);
 			return {
 				ok: true as const,
 				host: settings?.host ?? null,
@@ -740,9 +764,9 @@ export const operatorRouter = createTRPCRouter({
 				certificateType: settings?.certificateType ?? "none",
 				letsEncryptEmail: settings?.letsEncryptEmail ?? null,
 				dns: dnsPreview,
-			}
+			};
 		} catch (e) {
-			throwOperator(e)
+			throwOperator(e);
 		}
 	}),
 
@@ -765,38 +789,38 @@ export const operatorRouter = createTRPCRouter({
 					letsEncryptEmail: input.letsEncryptEmail,
 					certificateType: input.certificateType,
 					https: input.https,
-				})
+				});
 
 				if (!settings) {
 					throw new TRPCError({
 						code: "NOT_FOUND",
 						message: "Web server settings not found",
-					})
+					});
 				}
 
 				const certResolver = await resolveServerDomainCertResolver(
 					ctx.session.activeOrganizationId,
 					input.host,
-				)
+				);
 
 				updateServerTraefik(
 					settings,
 					input.host,
 					certResolver ? { certResolver } : undefined,
-				)
+				);
 				if (input.letsEncryptEmail) {
-					updateLetsEncryptEmail(input.letsEncryptEmail)
+					updateLetsEncryptEmail(input.letsEncryptEmail);
 				}
 
 				await audit(ctx, {
 					action: "update",
 					resourceType: "settings",
 					resourceName: "assign-domain-server",
-				})
+				});
 
-				return settings
+				return settings;
 			} catch (e) {
-				throwOperator(e)
+				throwOperator(e);
 			}
 		}),
 
@@ -809,9 +833,9 @@ export const operatorRouter = createTRPCRouter({
 				return await previewServerDomainDns(
 					ctx.session.activeOrganizationId,
 					input?.proxied ?? true,
-				)
+				);
 			} catch (e) {
-				throwOperator(e)
+				throwOperator(e);
 			}
 		}),
 
@@ -824,15 +848,15 @@ export const operatorRouter = createTRPCRouter({
 				const result = await applyServerDomainDns({
 					organizationId: ctx.session.activeOrganizationId,
 					proxied: input?.proxied ?? true,
-				})
+				});
 				await audit(ctx, {
 					action: "update",
 					resourceType: "settings",
 					resourceName: "apply-server-domain-dns",
-				})
-				return result
+				});
+				return result;
 			} catch (e) {
-				throwOperator(e)
+				throwOperator(e);
 			}
 		}),
 
@@ -861,15 +885,15 @@ export const operatorRouter = createTRPCRouter({
 					organizationId: ctx.session.activeOrganizationId,
 					...input,
 					domainType: "server",
-				})
+				});
 				await audit(ctx, {
 					action: "update",
 					resourceType: "settings",
 					resourceName: "provision-server-domain",
-				})
-				return result
+				});
+				return result;
 			} catch (e) {
-				throwOperator(e)
+				throwOperator(e);
 			}
 		}),
 
@@ -904,31 +928,31 @@ export const operatorRouter = createTRPCRouter({
 					priority: input.priority,
 					dnsZoneId: input.dnsZoneId,
 					dnsProviderId: input.dnsProviderId,
-				})
+				});
 				await audit(ctx, {
 					action: "update",
 					resourceType: "domain",
 					resourceId: dnsRaw.dnsRecordId,
 					resourceName: dnsRaw.name,
-				})
+				});
 
-				let resolution = null
+				let resolution = null;
 				if (input.waitForResolution) {
 					resolution = await waitForHostnameResolution({
 						host: input.name,
 						expectedIp: input.proxied ? null : input.content,
 						timeoutMs: input.waitDnsTimeoutMs ?? 180_000,
 						intervalMs: 4_000,
-					})
+					});
 				}
 
 				return {
 					ok: true as const,
 					record: dnsRaw,
 					resolution,
-				}
+				};
 			} catch (e) {
-				throwOperator(e)
+				throwOperator(e);
 			}
 		}),
 
@@ -936,9 +960,9 @@ export const operatorRouter = createTRPCRouter({
 		.input(z.object({ host: z.string().min(1) }))
 		.query(async ({ input }) => {
 			try {
-				return await getHostnameCertStatus(input.host)
+				return await getHostnameCertStatus(input.host);
 			} catch (e) {
-				throwOperator(e)
+				throwOperator(e);
 			}
 		}),
 
@@ -946,9 +970,9 @@ export const operatorRouter = createTRPCRouter({
 		.input(z.object({ host: z.string().min(1) }))
 		.mutation(async ({ input }) => {
 			try {
-				return await retryHostnameCertificate(input.host)
+				return await retryHostnameCertificate(input.host);
 			} catch (e) {
-				throwOperator(e)
+				throwOperator(e);
 			}
 		}),
 
@@ -961,14 +985,14 @@ export const operatorRouter = createTRPCRouter({
 		)
 		.query(async ({ input }) => {
 			try {
-				return await getRecentTraefikAcmeErrors(input.host, input.tail)
+				return await getRecentTraefikAcmeErrors(input.host, input.tail);
 			} catch (e) {
-				throwOperator(e)
+				throwOperator(e);
 			}
 		}),
 
 	listProjects: protectedProcedure.query(async ({ ctx }) => {
-		return await listOperatorProjects(ctx.session.activeOrganizationId)
+		return await listOperatorProjects(ctx.session.activeOrganizationId);
 	}),
 
 	listEnvironments: protectedProcedure
@@ -977,7 +1001,7 @@ export const operatorRouter = createTRPCRouter({
 			return await listOperatorEnvironments(
 				ctx.session.activeOrganizationId,
 				input?.projectId,
-			)
+			);
 		}),
 
 	listApplications: protectedProcedure
@@ -986,7 +1010,7 @@ export const operatorRouter = createTRPCRouter({
 			return await listOperatorApplications(
 				ctx.session.activeOrganizationId,
 				input?.environmentId,
-			)
+			);
 		}),
 
 	listCompose: protectedProcedure
@@ -995,7 +1019,7 @@ export const operatorRouter = createTRPCRouter({
 			return await listOperatorComposeServices(
 				ctx.session.activeOrganizationId,
 				input?.environmentId,
-			)
+			);
 		}),
 
 	serviceStatus: protectedProcedure
@@ -1010,9 +1034,9 @@ export const operatorRouter = createTRPCRouter({
 				return await getOperatorServiceStatus({
 					organizationId: ctx.session.activeOrganizationId,
 					...input,
-				})
+				});
 			} catch (e) {
-				throwOperator(e)
+				throwOperator(e);
 			}
 		}),
 
@@ -1027,10 +1051,10 @@ export const operatorRouter = createTRPCRouter({
 		)
 		.query(async ({ input }) => {
 			try {
-				const logs = await getOperatorServiceLogs(input)
-				return { logs: redactSecrets(logs) }
+				const logs = await getOperatorServiceLogs(input);
+				return { logs: redactSecrets(logs) };
 			} catch (e) {
-				throwOperator(e)
+				throwOperator(e);
 			}
 		}),
 
@@ -1045,9 +1069,9 @@ export const operatorRouter = createTRPCRouter({
 		)
 		.query(async ({ input }) => {
 			try {
-				return await checkPublicUrlHealth(input)
+				return await checkPublicUrlHealth(input);
 			} catch (e) {
-				throwOperator(e)
+				throwOperator(e);
 			}
 		}),
-})
+});

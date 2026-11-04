@@ -1,5 +1,6 @@
 import {
 	createDomain,
+	deployCompose,
 	dumpDomainCreateDebug,
 	findApplicationById,
 	findDomainById,
@@ -127,6 +128,19 @@ export const domainRouter = createTRPCRouter({
 					);
 				}
 
+				if (domain.composeId) {
+					await deployCompose({
+						composeId: domain.composeId,
+						titleLog: "Domain provision",
+						descriptionLog: `Provisioned domain ${domain.host}`,
+					}).catch((err) => {
+						console.error(
+							"Failed to redeploy compose after domain create:",
+							err,
+						);
+					});
+				}
+
 				return await findDomainById(domain.domainId);
 			} catch (error) {
 				const { termbinUrl } = await dumpDomainCreateDebug({
@@ -252,6 +266,14 @@ export const domainRouter = createTRPCRouter({
 				);
 				application.appName = previewDeployment.appName;
 				await manageDomain(application, domain);
+			} else if (domain.composeId) {
+				await deployCompose({
+					composeId: domain.composeId,
+					titleLog: "Domain update",
+					descriptionLog: `Updated domain ${domain.host}`,
+				}).catch((err) => {
+					console.error("Failed to redeploy compose after domain update:", err);
+				});
 			}
 
 			if (domain.dnsProvider === "cloudflare") {
@@ -308,6 +330,14 @@ export const domainRouter = createTRPCRouter({
 				);
 				application.appName = previewDeployment.appName;
 				await manageDomain(application, domain);
+			} else if (domain.composeId) {
+				await deployCompose({
+					composeId: domain.composeId,
+					titleLog: "Domain update",
+					descriptionLog: `Updated domain ${domain.host}`,
+				}).catch((err) => {
+					console.error("Failed to redeploy compose after domain update:", err);
+				});
 			}
 
 			return {
@@ -368,6 +398,14 @@ export const domainRouter = createTRPCRouter({
 			if (domain.applicationId) {
 				const application = await findApplicationById(domain.applicationId);
 				await removeDomain(application, domain.uniqueConfigKey);
+			} else if (domain.composeId) {
+				await deployCompose({
+					composeId: domain.composeId,
+					titleLog: "Domain removed",
+					descriptionLog: `Removed domain ${domain.host}`,
+				}).catch((err) => {
+					console.error("Failed to redeploy compose after domain delete:", err);
+				});
 			}
 
 			return result;

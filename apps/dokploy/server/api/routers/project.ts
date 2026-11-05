@@ -41,7 +41,7 @@ import {
 	findMemberByUserId,
 } from "@dokploy/server/services/permission";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import {
@@ -57,6 +57,7 @@ import {
 	apiUpdateProject,
 	applications,
 	compose,
+	domains,
 	environments,
 	libsql,
 	mariadb,
@@ -789,37 +790,49 @@ export const projectRouter = createTRPCRouter({
 				}
 				await checkProjectAccess(ctx, "delete", input.projectId);
 
-				const envs = await db.query.environments.findMany({
-					where: eq(environments.projectId, input.projectId),
-					with: {
-						applications: {
-							with: { domains: true },
-						},
-						compose: {
-							with: { domains: true },
-						},
-					},
-				});
+				const envList = await db
+					.select({ environmentId: environments.environmentId })
+					.from(environments)
+					.where(eq(environments.projectId, input.projectId));
+				const envIds = envList.map((e) => e.environmentId);
 
-				for (const env of envs) {
-					for (const app of env.applications) {
-						for (const d of app.domains) {
-							if (d.dnsProvider === "cloudflare") {
-								await deleteCloudflareAppDnsForDomain({
-									organizationId: ctx.session.activeOrganizationId,
-									domainId: d.domainId,
-								}).catch(() => {});
-							}
-						}
+				if (envIds.length > 0) {
+					const appList = await db
+						.select({ applicationId: applications.applicationId })
+						.from(applications)
+						.where(inArray(applications.environmentId, envIds));
+					const appIds = appList.map((a) => a.applicationId);
+
+					const composeList = await db
+						.select({ composeId: compose.composeId })
+						.from(compose)
+						.where(inArray(compose.environmentId, envIds));
+					const composeIds = composeList.map((c) => c.composeId);
+
+					const domainConditions = [];
+					if (appIds.length > 0) {
+						domainConditions.push(inArray(domains.applicationId, appIds));
 					}
-					for (const comp of env.compose) {
-						for (const d of comp.domains) {
-							if (d.dnsProvider === "cloudflare") {
-								await deleteCloudflareAppDnsForDomain({
-									organizationId: ctx.session.activeOrganizationId,
-									domainId: d.domainId,
-								}).catch(() => {});
-							}
+					if (composeIds.length > 0) {
+						domainConditions.push(inArray(domains.composeId, composeIds));
+					}
+
+					if (domainConditions.length > 0) {
+						const cfDomains = await db
+							.select({ domainId: domains.domainId })
+							.from(domains)
+							.where(
+								and(
+									eq(domains.dnsProvider, "cloudflare"),
+									or(...domainConditions),
+								),
+							);
+
+						for (const d of cfDomains) {
+							await deleteCloudflareAppDnsForDomain({
+								organizationId: ctx.session.activeOrganizationId,
+								domainId: d.domainId,
+							}).catch(() => {});
 						}
 					}
 				}
@@ -827,7 +840,6 @@ export const projectRouter = createTRPCRouter({
 				const deletedProject = await deleteProject(input.projectId);
 
 				// Clean up member permissions for this project and its environments
-				const envIds = envs.map((e) => e.environmentId);
 				const orgMembers = await db.query.member.findMany({
 					where: eq(member.organizationId, ctx.session.activeOrganizationId),
 				});

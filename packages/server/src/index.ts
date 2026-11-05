@@ -82,7 +82,25 @@ export * from "./setup/server-setup";
 export * from "./setup/server-validate";
 export * from "./setup/setup";
 export * from "./setup/traefik-setup";
-export * from "./setup/vector-setup";
+export {
+	VECTOR_IMAGE,
+	CADVISOR_IMAGE,
+	CADVISOR_SERVICE_NAME,
+	CADVISOR_PORT,
+	METRICS_SCRAPE_INTERVAL_SECS,
+	LOCAL_SERVER_NAME,
+	buildMetricsScopeTransformSource,
+	buildVectorConfigYaml,
+	collectSecretValues,
+	redactSecrets as redactVectorSecrets,
+	deployCadvisorService,
+	removeCadvisorService,
+	withVectorTargetLock,
+	getVectorTargetState,
+	reconcileVectorAgent,
+	removeVectorAgent,
+	getVectorAgentTargets,
+} from "./setup/vector-setup";
 export * from "./templates/processors";
 export * from "./utils/access-log/handler";
 export {

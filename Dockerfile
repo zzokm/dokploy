@@ -20,7 +20,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 	pnpm install --frozen-lockfile --ignore-scripts=false \
 	&& pnpm rebuild bcrypt argon2 ssh2 cpu-features node-pty \
-	&& test -n "$(find node_modules -name bcrypt_lib.node | head -n 1)" \
 	&& pnpm --filter=dokploy exec node -e "require('bcrypt')"
 
 # Heap / CPU via build-args so the Dockerfile stays stable across rebuilds (layer cache friendly)
